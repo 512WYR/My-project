@@ -54,9 +54,25 @@ namespace Ruin.Runtime
 
         private IEnumerator RunChecks()
         {
+            // A run opens on the node page: the opening floor offers three rooms to pick from.
+            Require(app.AwaitingNode && app.Map != null && app.Map.Current != null, "Run opens on the node selection page");
+            Require(app.Map.Current.Nodes.Count == 3, "Opening floor offers three rooms");
+            Require(app.Map.Current.Nodes[0].Type == NodeType.Battle, "Opening floor keeps a playable battle on the spine");
+            Require(app.Map.Current.Nodes.Count >= 1 && app.Map.Current.Nodes.Count <= 3, "Branch count stays between one and three");
+            app.View.InterfaceFont.RequestCharactersInTexture("界限之间护卫侦察者弩手医师理智凝神躁动濒死商人营地工坊首领", 24, FontStyle.Normal);
+            Require("界限之间护卫理智濒死商人营地工坊首领".All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
+            yield return Capture("map-1080.png", 1920, 1080);
+            yield return Capture("map-720.png", 1280, 720);
+
+            // 已经展示的节点保持固定：重新渲染既不改动房间，也不消耗随机序列。
+            var shownTypes = app.Map.Current.Nodes.Select(n => n.Type).ToArray();
+            uint shownState = app.Run.Random.State;
+            app.Refresh(); yield return null; app.Refresh(); yield return null;
+            Require(app.Map.Current.Nodes.Select(n => n.Type).SequenceEqual(shownTypes) && app.Run.Random.State == shownState,
+                "A shown floor never re-rolls and consumes no draws");
+
+            yield return EnterBattle();
             Require(app.Battle != null && app.Run.Heroes.Count == 4, "Four-hero battle loaded");
-            app.View.InterfaceFont.RequestCharactersInTexture("界限之间护卫侦察者弩手医师理智凝神躁动濒死", 24, FontStyle.Normal);
-            Require("界限之间护卫理智濒死".All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
             yield return Capture("battle-1080.png", 1920, 1080);
             yield return Capture("battle-720.png", 1280, 720);
             Click("Action_Primary"); yield return null;
@@ -67,6 +83,7 @@ namespace Ruin.Runtime
             Require(app.Battle.Events.Any(e => e.Kind == "action" || e.Kind == "miss"), "Target click resolves action and enemy response");
 
             Click("Laboratory"); yield return null; Click("Preset85"); yield return null;
+            yield return EnterBattle();
             Require(app.Run.Heroes.All(h => h.Sanity == 85), "Sanity 85 preset available through UI");
             yield return Capture("high-sanity-1080.png", 1920, 1080);
             string selected = app.InspectedId;
@@ -74,6 +91,8 @@ namespace Ruin.Runtime
             Require(app.Battle.Find(selected).Mental == MentalState.Composed && app.Battle.Find(selected).Sanity == 50, "Persistent mental state survives leaving high-sanity range");
             Require(app.Battle.FormProbabilities(app.Battle.Find(selected))[0] == 0, "Persistent mental state cannot bypass activation gate");
             Click("EndBattleDebug"); yield return null; Click("ContinueBattle"); yield return null;
+            Require(app.AwaitingNode, "Settlement continue returns to the node page");
+            yield return EnterBattle();
             Require(app.Battle.Find(selected).Mental == MentalState.Composed && app.Battle.Find(selected).Sanity == 50, "Next battle preserves personal sanity and mental state");
 
             Click("Laboratory"); yield return null; Click("FeedbackExample"); yield return null;
@@ -88,6 +107,7 @@ namespace Ruin.Runtime
             yield return Capture("help-720.png", 1280, 720);
             Click("CloseHelp"); yield return null;
             Click("NewRun"); yield return null;
+            yield return EnterBattle();
 
             int actions = 0;
             while (app.Battle.Outcome == BattleOutcome.Active && actions++ < 150)
@@ -113,6 +133,35 @@ namespace Ruin.Runtime
             Require(app.Battle.Outcome == BattleOutcome.Victory, "Full battle completed to victory using UI buttons");
             Require(app.Battle.Settlement != null, "Victory produces sanity settlement");
             yield return Capture("victory-1080.png", 1920, 1080);
+
+            // 结算 → 下一层 → 占位房间跳过 → 首领层结束本局。
+            Click("ContinueBattle"); yield return null;
+            Require(app.AwaitingNode && app.Map.Floor == 2, "Victory advances to the next floor");
+            var floorTwoTypes = app.Map.Current.Nodes.Select(n => n.Type).ToArray();
+            int placeholder = Array.FindIndex(app.Map.Current.Nodes.ToArray(), n => n.Placeholder);
+            if (placeholder >= 0)
+            {
+                Click("Node_" + placeholder); yield return null;
+                Require(app.Map.Floor > 2, "A placeholder room skips straight to the next floor");
+            }
+            Require(app.Map.FloorAt(2).Nodes.Select(n => n.Type).SequenceEqual(floorTwoTypes), "A shown floor is never re-rolled after advancing");
+
+            while (app.Map.Floor < app.Catalog.MapRules().Floors && !app.Map.Finished) { app.DebugResolveFloor(); yield return null; }
+            Require(app.Map.Current != null && app.Map.Current.Nodes.Count == 1 && app.Map.Current.Nodes[0].Type == NodeType.Boss,
+                "The final floor holds a single boss room");
+            Click("Node_0"); yield return null;
+            Require(app.Map.Finished, "The boss room ends the run");
+            yield return Capture("map-end-1080.png", 1920, 1080);
+            Click("MapNewRun"); yield return null;
+            Require(!app.Map.Finished && app.Map.Floor == 1 && app.Map.Current.Nodes.Count == 3, "New run restarts at the opening floor");
+        }
+
+        // Battle rooms are entered through the node page now, so every battle step goes through here.
+        private IEnumerator EnterBattle()
+        {
+            Click("Node_0");
+            yield return WaitReady();
+            if (app.Battle == null) throw new Exception("Battle room did not open a battle");
         }
 
         private IEnumerator WaitReady()

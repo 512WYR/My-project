@@ -117,10 +117,11 @@ namespace Ruin.Core
         public RunRandom Random;
         public int Battles;
         public List<ActorState> Heroes = new List<ActorState>();
+        public MapState Map = new MapState();
 
         public static RunState Create(ActorSpec[] heroes, uint seed, double? sanityPreset = null)
         {
-            var run = new RunState { Seed = seed, Random = new RunRandom(seed) };
+            var run = new RunState { Seed = seed, Random = new RunRandom(seed), Map = new MapState() };
             for (int i = 0; i < heroes.Length; i++)
             {
                 var spec = heroes[i];

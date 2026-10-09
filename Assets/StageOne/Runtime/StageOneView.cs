@@ -41,13 +41,20 @@ namespace Ruin.Runtime
             var root = page.GetComponent<RectTransform>(); root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
             var bg = page.AddComponent<Image>(); bg.color = Bg;
             Header(root);
-            Battlefield(root);
-            Inspector(root);
-            Actions(root);
-            Journal(root);
-            Label(root, "Footer", "第一阶段  /  战斗基础验收     ·     F1 操作说明     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1280, 22, 13, Muted);
+            // The node page replaces the battle widgets in place. It stays inline rather than using a
+            // modal so the header buttons keep taking clicks, which the smoke run relies on.
+            bool nodePage = app.AwaitingNode;
+            if (nodePage) NodeSelect(root);
+            else
+            {
+                Battlefield(root);
+                Inspector(root);
+                Actions(root);
+                Journal(root);
+            }
+            Label(root, "Footer", "第一阶段  /  战斗与节点选择     ·     F1 操作说明     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1280, 22, 13, Muted);
             Label(root, "Version", "STAGE 01   /   0.3", 1370, 868, 195, 22, 13, Muted, TextAnchor.MiddleRight);
-            if (app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
+            if (!nodePage && app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
             if (app.HelpOpen) Help(root);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (app.LabOpen) Laboratory(root);
@@ -57,7 +64,7 @@ namespace Ruin.Runtime
         private void Header(RectTransform root)
         {
             Label(root, "Title", "界限之间", 34, 22, 420, 43, 31, Ink);
-            Label(root, "Subtitle", "战斗演练  /  理智与队伍的第一场试炼", 35, 66, 700, 26, 15, Muted);
+            Label(root, "Subtitle", app.AwaitingNode ? "节点选择  /  玩家理智决定下一层的房间与分支" : "战斗演练  /  理智与队伍的第一场试炼", 35, 66, 700, 26, 15, Muted);
             Button(root, "Help", "操作说明", "F1", 1138, 27, 130, 53, app.ToggleHelp, false, true, 15);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             Button(root, "Laboratory", "验收工具", "F3", 1280, 27, 130, 53, app.ToggleLab, false, !app.Busy, 15);
@@ -67,9 +74,14 @@ namespace Ruin.Runtime
             Label(strip, "PlayerLabel", "玩家理智", 18, 10, 100, 22, 14, Muted);
             Label(strip, "PlayerSanity", app.Run.PlayerSanity.ToString("0.0"), 112, 7, 110, 42, 29, Gold);
             Meter(strip, "PlayerMeter", 220, 25, 200, 7, (float)app.Run.PlayerSanity / 100, Gold);
-            Label(strip, "BattleIndex", "第 " + app.Run.Battles + " 场演练   /   第 " + app.Battle.Round + " 回合", 458, 18, 300, 27, 17, Ink);
-            string next = app.Battle.Current == null ? "本场已结束" : (app.Battle.Current.Player ? "我方行动 · " : "敌方行动 · ") + app.Battle.Current.Name;
-            Label(strip, "CurrentTurn", next, 778, 18, 360, 27, 17, app.Battle.Current != null && app.Battle.Current.Player ? Cyan : Rust);
+            Label(strip, "BattleIndex", app.Battle == null
+                ? "第 " + app.Map.Floor + " 层   /   共 " + app.Catalog.MapRules().Floors + " 层"
+                : "第 " + app.Run.Battles + " 场演练   /   第 " + app.Battle.Round + " 回合", 458, 18, 300, 27, 17, Ink);
+            string next = app.Battle == null
+                ? (app.Map.Finished ? "本局已结束" : "等待选择房间")
+                : app.Battle.Current == null ? "本场已结束" : (app.Battle.Current.Player ? "我方行动 · " : "敌方行动 · ") + app.Battle.Current.Name;
+            bool waiting = app.Battle == null || (app.Battle.Current != null && app.Battle.Current.Player);
+            Label(strip, "CurrentTurn", next, 778, 18, 360, 27, 17, waiting ? Cyan : Rust);
             Label(strip, "Seed", "固定种子  " + app.Run.Seed, 1210, 18, 300, 27, 14, Muted, TextAnchor.MiddleRight);
         }
 
@@ -169,11 +181,84 @@ namespace Ruin.Runtime
                 + "\n闪避 " + (d.Dodge * 100).ToString("0.#") + "%   防御 " + (d.Defense * 100).ToString("0.#") + "%";
         }
 
-        private void ProbabilityRow(RectTransform parent, string name, double value, float y, Color color)
+        private void ProbabilityRow(RectTransform parent, string name, double value, float y, Color color, float x = 20)
         {
-            Label(parent, name, name, 20, y, 82, 21, 13, Ink);
-            Meter(parent, name + "Bar", 112, y + 9, 131, 5, (float)value, color);
-            Label(parent, name + "Percent", (value * 100).ToString("0.0") + "%", 247, y, 70, 21, 13, color, TextAnchor.MiddleRight);
+            Label(parent, name, name, x, y, 82, 21, 13, Ink);
+            Meter(parent, name + "Bar", x + 92, y + 9, 131, 5, (float)value, color);
+            Label(parent, name + "Percent", (value * 100).ToString("0.0") + "%", x + 227, y, 70, 21, 13, color, TextAnchor.MiddleRight);
+        }
+
+        // Inline page: the header stays clickable, so Help, the acceptance tool and 新开演练 keep working.
+        private void NodeSelect(RectTransform root)
+        {
+            if (app.Map.Finished) { RunEnd(root); return; }
+            var floor = app.Map.Current;
+            var rules = app.Catalog.MapRules();
+            Label(root, "MapHeading", "第 " + floor.Floor + " 层  /  共 " + rules.Floors + " 层", 34, 192, 900, 40, 29, Ink);
+            Label(root, "MapSanityNote", "已推进 " + app.Map.ResolvedFloors + " 层 · 玩家理智决定本层的房间类型与分支数量（不受角色30/70门槛限制）",
+                36, 234, 1240, 24, 15, Muted);
+            Label(root, "MapOddsHeading", "本层可能出现房间的概率", 34, 266, 600, 24, 17, Gold);
+            var panel = Box(root, "MapOddsPanel", 34, 296, 900, 130, Panel);
+            double[] odds = MapGenerator.TypeOdds(rules, app.Run.PlayerSanity);
+            var specs = MapGenerator.Resolve(rules).NodeOdds;
+            for (int i = 0; i < specs.Length; i++)
+                ProbabilityRow(panel, MapGenerator.Name(specs[i].Type), odds[i], 14 + (i % 3) * 36, NodeColor(specs[i].Type), 20 + (i / 3) * 440);
+            Label(root, "MapCardsHeading", "本层的房间  ·  " + floor.Nodes.Count + " 个分支", 34, 444, 900, 24, 17, Gold);
+            int count = floor.Nodes.Count;
+            float start = (1600 - (count * 220 + (count - 1) * 40)) / 2;
+            for (int i = 0; i < count; i++)
+            {
+                var node = floor.Nodes[i];
+                // Captured per iteration: the loop variable itself is shared, so every card would
+                // otherwise call SelectNode with the value the loop ended on.
+                int index = i;
+                var card = Button(root, "Node_" + i, node.Name, node.Placeholder ? "待实现 · 点击跳过" : "可进入战斗",
+                    start + i * 260, 476, 220, 150, () => app.SelectNode(index), false, true, 22);
+                var rect = (RectTransform)card.transform;
+                Outline(rect, node.Placeholder ? LineColor : Gold, 1);
+                Label(rect, "NodeDesc" + i, NodeDescription(node.Type), 13, 48, 194, 68, 12, Muted);
+            }
+            Label(root, "MapHint", app.Hint ?? "", 34, 782, 1532, 42, 15, Ink);
+            Label(root, "MapRule", "点击一个房间进入；标记「待实现」的房间点击即跳过。已经展示的房间不会重抽。", 34, 828, 1532, 22, 12, Muted);
+        }
+
+        private void RunEnd(RectTransform root)
+        {
+            var panel = Box(root, "MapRunEnd", 34, 260, 1532, 400, Panel);
+            Label(panel, "MapRunEndTitle", "本局结束", 40, 34, 1452, 60, 40, Ink);
+            Label(panel, "MapRunEndNote", app.RunEndNote ?? "冒险已经结束。", 40, 112, 1452, 56, 18, Muted);
+            Label(panel, "MapRunEndSummary", "到达第 " + app.Map.Floor + " 层  ·  已完成 " + app.Map.ResolvedFloors + " 层  ·  玩家理智 " + app.Run.PlayerSanity.ToString("0.0"),
+                40, 186, 1452, 40, 20, Gold);
+            Button(panel, "MapNewRun", "新开一局", "重置全部队员与地图", 40, 268, 520, 66, () => app.NewRun(), true, true, 20);
+        }
+
+        private static string NodeDescription(NodeType type)
+        {
+            switch (type)
+            {
+                case NodeType.Battle: return "普通敌人。胜利后结算理智反馈。";
+                case NodeType.EliteBattle: return "更强的敌人与更好的收获。";
+                case NodeType.Event: return "面对情境并做出选择。";
+                case NodeType.Merchant: return "商议补给与交易。";
+                case NodeType.Camp: return "整备生命与持续状态。";
+                case NodeType.Workshop: return "安装与修复义肢。";
+                case NodeType.Boss: return "本层的终点，尚未实装。";
+                default: return "";
+            }
+        }
+
+        private static Color NodeColor(NodeType type)
+        {
+            switch (type)
+            {
+                case NodeType.Battle:
+                case NodeType.EliteBattle:
+                case NodeType.Boss: return Rust;
+                case NodeType.Merchant:
+                case NodeType.Camp:
+                case NodeType.Workshop: return Cyan;
+                default: return Gold;
+            }
         }
 
         private void Actions(RectTransform root)
@@ -268,8 +353,10 @@ namespace Ruin.Runtime
             double average = result.Entries.Count == 0 ? 0 : result.Entries.Average(e => e.Delta);
             Label(p, "Formula", "平均净变化 " + average.ToString("+0.0;-0.0;0.0") + "  ×  " + app.Battle.Rules.FeedbackFactor.ToString("0.0") + "  =  " + result.RawDelta.ToString("+0.0;-0.0;0.0"), 40, 376, 820, 30, 17, Muted);
             Label(p, "PlayerResult", "玩家理智    " + result.Before.ToString("0.0") + "  →  " + result.After.ToString("0.0"), 40, 420, 820, 48, 29, Gold);
-            Label(p, "Continuity", "继续演练会整备存活队员的生命；个人理智与精神状态保留，死亡队员不复活。", 40, 478, 820, 33, 13, Muted);
-            Button(p, "ContinueBattle", "继续演练", "保留理智与持续状态", 40, 532, 394, 56, app.ContinueBattle, true, app.Run.Heroes.Any(a => !a.Dead), 18);
+            bool wiped = app.Run.Heroes.All(a => a.Dead);
+            Label(p, "Continuity", "进入下一层不会整备生命；个人理智与精神状态保留，死亡队员不复活。", 40, 478, 820, 33, 13, Muted);
+            Button(p, "ContinueBattle", wiped ? "结束本局" : "进入下一层", wiped ? "查看本局结果" : "选择下一个房间",
+                40, 532, 394, 56, app.ContinueBattle, true, true, 18);
             Button(p, "ResultNewRun", "新开演练", "重置全部队员", 450, 532, 410, 56, () => app.NewRun(), false, true, 18);
         }
 
@@ -282,7 +369,7 @@ namespace Ruin.Runtime
                 "03  理智低于30才可能原始化，高于70才可能出现技术灵感。\n      30至70只用基础形态；抽出的技能在本回合内固定。\n\n" +
                 "04  稳定心神和直视深渊分别改变15点个人理智，每场各限两次。\n      它们与敌方低语可能产生凝神或躁动；持续状态跨战斗保留。\n\n" +
                 "05  敌人卡片下方显示下一次攻击。用掩护、换位或打断应对。\n      医师可治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
-                "06  胜利和撤退都会反馈玩家理智：队员平均净变化 × 0.5。\n      当前为第一阶段演练版，尚未加入探索、断肢、图鉴和存档。\n\n" +
+                "06  胜利和撤退都会反馈玩家理智：队员平均净变化 × 0.5。\n      结算后进入下一层，玩家理智决定房间类型与分支数量。\n\n" +
                 "07  命中、暴击与闪避由角色属性直接决定，不随理智变化。\n      技能伤害 = 基础攻击力 × 技能倍率；受伤按目标防御比例减少。";
             Label(p, "HelpBody", text, 38, 92, 904, 470, 18, Ink);
             Button(p, "CloseHelp", "返回战斗", "Esc / F1", 38, 579, 904, 52, app.ToggleHelp, true, true, 18);
@@ -291,14 +378,14 @@ namespace Ruin.Runtime
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private void Laboratory(RectTransform root)
         {
-            var p = Modal(root, "LabModal", 1040, 638);
+            var p = Modal(root, "LabModal", 1040, 704);
             Label(p, "LabTitle", "第一阶段验收工具", 34, 23, 960, 44, 28, Ink);
             Label(p, "LabCaption", "仅开发版提供。新建队伍会重置演练；单人调整会计入本场理智净变化。", 36, 76, 968, 28, 15, Muted);
             Label(p, "PresetHeading", "新建固定理智队伍", 36, 128, 920, 26, 17, Gold);
             Button(p, "Preset15", "理智 15", "只可能触发原始形态", 36, 171, 310, 66, () => app.NewRun(15), false, true, 20);
             Button(p, "Preset50", "理智 50", "稳定区 · 仅基础形态", 365, 171, 310, 66, () => app.NewRun(50), false, true, 20);
             Button(p, "Preset85", "理智 85", "只可能触发技术扩展", 694, 171, 310, 66, () => app.NewRun(85), false, true, 20);
-            var actor = app.Battle.Find(app.InspectedId);
+            var actor = app.Battle == null ? null : app.Battle.Find(app.InspectedId);
             string selected = actor != null && actor.Player ? actor.Name : "第一位存活队员";
             Label(p, "ChangeHeading", "调整选中队员 / " + selected + "    （不会重抽本回合技能）", 36, 262, 968, 27, 16, Ink);
             Button(p, "Set15", "设为15", "实际理智变化", 36, 304, 151, 54, () => app.DebugSetSanity(15), false, true, 16);
@@ -311,7 +398,11 @@ namespace Ruin.Runtime
             Button(p, "FeedbackExample", "反馈 −2.5", "变化 −20 / −10 / 0 / +10", 36, 432, 310, 67, app.DebugFeedbackExample, false, true, 18);
             Button(p, "DeathDoorExample", "濒死演练", "护卫0生命 · 尝试救治", 365, 432, 310, 67, app.DebugDeathDoor, false, true, 18);
             Button(p, "EndBattleDebug", "结束当前演练", "查看反馈与状态延续", 694, 432, 310, 67, app.DebugSettle, false, true, 18);
-            Button(p, "CloseLab", "返回战斗", "F3 / Esc", 36, 549, 968, 56, app.ToggleLab, true, true, 18);
+            Label(p, "MapLabHeading", "地图与整备", 36, 508, 920, 26, 17, Gold);
+            Button(p, "RestParty", "整备全队生命", "验收便利 · 不改理智", 36, 548, 310, 54, app.DebugRestParty, false, true, 18);
+            Button(p, "SkipFloor", "跳过本层", "推进到下一层房间", 365, 548, 310, 54, app.DebugResolveFloor, false, true, 18);
+            Button(p, "JumpBoss", "跳到首领层", "查看结束流程", 694, 548, 310, 54, () => app.DebugEnterFloor(app.Catalog.MapRules().Floors), false, true, 18);
+            Button(p, "CloseLab", "返回", "F3 / Esc", 36, 620, 968, 56, app.ToggleLab, true, true, 18);
         }
 #endif
 
