@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: suppress
     Name: "\u538B\u5236\u5C04\u51FB"
-    Description: "\u4F24\u5BB35 \xB7 \u6253\u65AD"
+    Description: "\u6253\u65AD \u00B7 \u4F24\u5BB3\u8F83\u4F4E"
     Effect: 0
     Target: 0
-    Power: 5
+    Multiplier: 0.5
     ActorRanks: 15
     TargetRanks: 15
     Uses: 3

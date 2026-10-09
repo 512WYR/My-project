@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: cut
     Name: "\u5272\u88C2"
-    Description: "\u4F24\u5BB34 \xB7 \u6D41\u88402\xD72"
+    Description: "\u653B\u51FB\u524D\u4E09\u6392 \u00B7 \u9644\u52A0\u6D41\u8840"
     Effect: 0
     Target: 0
-    Power: 4
+    Multiplier: 0.4
     ActorRanks: 7
     TargetRanks: 7
     Uses: 0

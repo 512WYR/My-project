@@ -146,18 +146,27 @@ namespace Ruin.Runtime
                 Box(box, "HighTick", 20 + 298 * 0.70f, 151, 2, 12, Gold);
                 Label(box, "RangeLabels", "0          30          稳定区          70       100", 20, 169, 300, 19, 11, Muted);
                 double[] p = app.Battle.FormProbabilities(actor);
-                ProbabilityRow(box, "技术扩展", p[0], 199, Cyan);
-                ProbabilityRow(box, "基础形态", p[1], 229, Gold);
-                ProbabilityRow(box, "原始形态", p[2], 259, Rust);
-                Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 296, 300, 18, 11, Muted);
+                ProbabilityRow(box, "技术扩展", p[0], 197, Cyan);
+                ProbabilityRow(box, "基础形态", p[1], 223, Gold);
+                ProbabilityRow(box, "原始形态", p[2], 249, Rust);
+                Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 274, 300, 18, 11, Muted);
+                Label(box, "Attributes", AttributeText(actor), 20, 294, 300, 30, 11, Muted);
             }
             else
             {
                 Label(box, "EnemyStats", "生命 " + actor.Hp + " / " + actor.Definition.MaxHp + "     速度 " + actor.Speed, 20, 124, 300, 27, 17, Rust);
-                Label(box, "EnemyIntentHeading", "下一次行动预告", 20, 171, 300, 23, 13, Muted);
-                Label(box, "EnemyIntentDetail", app.Battle.Intent(actor), 20, 207, 295, 70, 20, Rust);
+                Label(box, "EnemyAttr", AttributeText(actor), 20, 152, 300, 30, 11, Muted);
+                Label(box, "EnemyIntentHeading", "下一次行动预告", 20, 185, 300, 23, 13, Muted);
+                Label(box, "EnemyIntentDetail", app.Battle.Intent(actor), 20, 214, 295, 66, 20, Rust);
                 Label(box, "EnemyHint", "换位、掩护或打断可改变受到的威胁。", 20, 287, 300, 25, 12, Muted);
             }
+        }
+
+        private string AttributeText(ActorState actor)
+        {
+            var d = actor.Definition;
+            return "命中 " + (d.Accuracy * 100).ToString("0.#") + "%   暴击 " + (d.CritChance * 100).ToString("0.#") + "%   攻击 " + d.Attack
+                + "\n闪避 " + (d.Dodge * 100).ToString("0.#") + "%   防御 " + (d.Defense * 100).ToString("0.#") + "%";
         }
 
         private void ProbabilityRow(RectTransform parent, string name, double value, float y, Color color)
@@ -209,7 +218,9 @@ namespace Ruin.Runtime
             if (skill != null)
             {
                 string count = kind == ActionKind.Support && skill.Uses > 0 ? " · 剩" + actor.SupportUses + "次" : "";
-                return skill.Description + count;
+                string value = skill.Effect == SkillEffect.Attack ? "伤害 " + app.Battle.SkillValue(actor, skill) + " · "
+                    : skill.Effect == SkillEffect.Heal ? "恢复 " + app.Battle.SkillValue(actor, skill) + " · " : "";
+                return value + skill.Description + count;
             }
             switch (kind)
             {
@@ -271,7 +282,8 @@ namespace Ruin.Runtime
                 "03  理智低于30才可能原始化，高于70才可能出现技术灵感。\n      30至70只用基础形态；抽出的技能在本回合内固定。\n\n" +
                 "04  稳定心神和直视深渊分别改变15点个人理智，每场各限两次。\n      它们与敌方低语可能产生凝神或躁动；持续状态跨战斗保留。\n\n" +
                 "05  敌人卡片下方显示下一次攻击。用掩护、换位或打断应对。\n      医师可治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
-                "06  胜利和撤退都会反馈玩家理智：队员平均净变化 × 0.5。\n      当前为第一阶段演练版，尚未加入探索、断肢、图鉴和存档。";
+                "06  胜利和撤退都会反馈玩家理智：队员平均净变化 × 0.5。\n      当前为第一阶段演练版，尚未加入探索、断肢、图鉴和存档。\n\n" +
+                "07  命中、暴击与闪避由角色属性直接决定，不随理智变化。\n      技能伤害 = 基础攻击力 × 技能倍率；受伤按目标防御比例减少。";
             Label(p, "HelpBody", text, 38, 92, 904, 470, 18, Ink);
             Button(p, "CloseHelp", "返回战斗", "Esc / F1", 38, 579, 904, 52, app.ToggleHelp, true, true, 18);
         }

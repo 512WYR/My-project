@@ -179,7 +179,7 @@ namespace Ruin.Core
         {
             if (skill.Effect == SkillEffect.Heal)
             {
-                int restored = Math.Min(skill.Power, target.Definition.MaxHp - target.Hp);
+                int restored = Math.Max(0, Math.Min(SkillValue(actor, skill), target.Definition.MaxHp - target.Hp));
                 target.Hp += restored;
                 if (skill.Cleanse) target.BleedTurns = 0;
                 Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 恢复 " + restored + (skill.Cleanse ? "，清除流血。" : "。"), "heal", actor.Id, target.Id, restored);
@@ -191,18 +191,57 @@ namespace Ruin.Core
                 Log(actor.Name + " 掩护 " + target.Name + "，拦截下一次攻击并减半伤害。", "guard", actor.Id, target.Id);
                 return;
             }
-            double accuracy = skill.Accuracy + Rules.Mental(actor.Mental).AccuracyModifier;
-            if (!SanityProbability.Check(accuracy, 0.3, actor.Sanity, Run.Random, Rules.ProbabilityStrength))
+            if (!Roll(EffectiveAccuracy(actor, skill)))
             { Log(actor.Name + " · " + skill.Name + " 未命中。", "miss", actor.Id, target.Id); return; }
-            bool critical = SanityProbability.Check(0.10, 0.4, actor.Sanity, Run.Random, Rules.ProbabilityStrength);
-            int power = critical ? (int)Math.Ceiling(skill.Power * 1.5) : skill.Power;
+            if (target.Definition.Dodge > 0 && Roll(target.Definition.Dodge))
+            { Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 被闪避。", "dodge", actor.Id, target.Id); return; }
+            bool critical = Roll(actor.Definition.CritChance);
             Log(actor.Name + " · " + skill.Name + (critical ? " 暴击！" : ""), "action", actor.Id, target.Id);
-            Damage(target, power, actor.Id);
+            Damage(target, critical ? CritValue(actor, skill) : SkillValue(actor, skill), actor.Id);
             if (!target.Dead)
             {
                 if (skill.Bleed > 0) { target.BleedDamage = skill.Bleed; target.BleedTurns = 2; Log(target.Name + " 流血 " + skill.Bleed + " × 2次行动。", "bleed", actor.Id, target.Id); }
                 if (skill.Interrupt) { target.Interrupted = Math.Max(1, target.Interrupted); Log(target.Name + " 下一次行动被打断。", "control", actor.Id, target.Id); }
             }
+        }
+
+        // Character attribute helpers. Judgements use the attribute values directly and are never shifted by sanity.
+        public double EffectiveAccuracy(ActorState actor, SkillSpec skill)
+        {
+            if (actor == null || skill == null) return 0;
+            return SanityProbability.Clamp(actor.Definition.Accuracy + (skill.Accuracy - Rules.SkillAccuracyBaseline)
+                + Rules.Mental(actor.Mental).AccuracyModifier, 0, 1);
+        }
+
+        public int SkillValue(ActorState actor, SkillSpec skill)
+        {
+            return Scale(actor.Definition.Attack, skill.Multiplier);
+        }
+
+        public int CritValue(ActorState actor, SkillSpec skill)
+        {
+            return (int)Math.Ceiling(SkillValue(actor, skill) * Rules.CritMultiplier - 1e-9);
+        }
+
+        public int EnemyDamage(ActorState enemy)
+        {
+            double multiplier = enemy.Definition.Pattern == EnemyPattern.Whisperer ? 0.3
+                : enemy.Definition.Pattern == EnemyPattern.Hunter ? 0.5
+                : Round % 2 == 0 ? 1.1 : 0.7;
+            return Scale(enemy.Definition.Attack, multiplier);
+        }
+
+        private static int Scale(int attack, double multiplier)
+        {
+            if (attack <= 0 || multiplier <= 0) return 0;
+            return (int)Math.Ceiling(attack * multiplier - 1e-9); // Epsilon guards against float representation error.
+        }
+
+        private bool Roll(double chance)
+        {
+            if (chance <= 0) return false;
+            if (chance >= 1) return true;
+            return Run.Random.NextUnit() < chance;
         }
 
         public string Intent(ActorState enemy)
@@ -213,9 +252,9 @@ namespace Ruin.Core
             if (target == null) return "—";
             switch (enemy.Definition.Pattern)
             {
-                case EnemyPattern.Whisperer: return "低语 → " + target.Name + "\n伤害3 · 理智−14";
-                case EnemyPattern.Hunter: return "追猎 → " + target.Name + "\n伤害5 · 流血2×2";
-                default: return (Round % 2 == 0 ? "重劈" : "斩击") + " → " + target.Name + "\n伤害" + (Round % 2 == 0 ? "11" : "7") + " · 前排";
+                case EnemyPattern.Whisperer: return "低语 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 理智−14";
+                case EnemyPattern.Hunter: return "追猎 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 流血2×2";
+                default: return (Round % 2 == 0 ? "重劈" : "斩击") + " → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 前排";
             }
         }
 
@@ -239,17 +278,19 @@ namespace Ruin.Core
                 Log(protector.Name + " 为 " + target.Name + " 拦下攻击。", "guard", protector.Id, target.Id);
                 target.ProtectorId = null; target = protector;
             }
-            if (SanityProbability.Check(0.86, -0.25, target.Sanity, Run.Random, Rules.ProbabilityStrength))
+            if (!Roll(SanityProbability.Clamp(enemy.Definition.Accuracy, 0, 1)))
+                Log(target.Name + " 避开了 " + enemy.Name + " 的攻击。", "miss", enemy.Id, target.Id);
+            else if (target.Definition.Dodge > 0 && Roll(target.Definition.Dodge))
+                Log(target.Name + " 闪避了 " + enemy.Name + " 的攻击。", "dodge", enemy.Id, target.Id);
+            else
             {
-                int damage = enemy.Definition.Pattern == EnemyPattern.Whisperer ? 3 : enemy.Definition.Pattern == EnemyPattern.Hunter ? 5 : Round % 2 == 0 ? 11 : 7;
                 Log(enemy.Name + " 发动" + (enemy.Definition.Pattern == EnemyPattern.Whisperer ? "低语。" : "攻击。"), "action", enemy.Id, target.Id);
-                Damage(target, damage, enemy.Id);
+                Damage(target, EnemyDamage(enemy), enemy.Id);
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Whisperer)
                 { ChangeSanity(target, -14, "受到低语侵蚀"); TryMentalState(target); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
                 { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id); }
             }
-            else Log(target.Name + " 避开了 " + enemy.Name + " 的攻击。", "miss", enemy.Id, target.Id);
             if (!CheckEnd()) Advance();
         }
 
@@ -275,7 +316,13 @@ namespace Ruin.Core
         public void Damage(ActorState actor, int amount, string sourceId = null, bool bleeding = false)
         {
             if (actor.Dead || amount <= 0) return;
-            int actual = actor.Defending && !bleeding ? Math.Max(1, (int)Math.Ceiling(amount * 0.5)) : amount;
+            int actual = amount;
+            if (!bleeding)
+            {
+                double reduced = amount * (1 - actor.Definition.Defense);
+                if (actor.Defending) reduced *= 0.5;
+                actual = Math.Max(1, (int)Math.Ceiling(reduced - 1e-9));
+            }
             bool alreadyDying = actor.DeathDoor;
             actor.Hp = Math.Max(0, actor.Hp - actual);
             Log(actor.Name + " 受到 " + actual + (bleeding ? " 点流血伤害。" : " 点伤害。"), "damage", sourceId, actor.Id, actual);

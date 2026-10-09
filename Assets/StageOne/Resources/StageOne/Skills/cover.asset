@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: cover
     Name: "\u63A9\u62A4"
-    Description: "\u62E6\u622A\u4E00\u6B21\u653B\u51FB \xB7 \u51CF\u534A\u4F24\u5BB3"
+    Description: "\u62E6\u622A\u4E00\u6B21\u653B\u51FB \u00B7 \u51CF\u534A\u4F24\u5BB3"
     Effect: 2
     Target: 1
-    Power: 0
+    Multiplier: 0
     ActorRanks: 15
     TargetRanks: 15
     Uses: 0

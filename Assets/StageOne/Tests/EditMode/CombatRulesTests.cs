@@ -154,6 +154,99 @@ namespace Ruin.Tests
             battle.Damage(hero, 2, bleeding: true); Assert.AreEqual(35, hero.Hp);
         }
 
+        [Test] public void BaseAttackAndSkillMultiplierProduceDamage()
+        {
+            var run = Run(); var battle = Battle(run); var actor = run.Heroes[0];
+            actor.Definition.Attack = 10;
+            var skill = new SkillSpec { Multiplier = 0.4 };
+            Assert.AreEqual(4, battle.SkillValue(actor, skill));
+            skill.Multiplier = 1.3; Assert.AreEqual(13, battle.SkillValue(actor, skill));
+            actor.Definition.Attack = 15; Assert.AreEqual(20, battle.SkillValue(actor, skill)); // 19.5 rounds up, never truncates
+            Assert.AreEqual(30, battle.CritValue(actor, skill)); // 20 × 1.5
+        }
+
+        [Test] public void DefenseReducesDamagePercentuallyWithFloorOne()
+        {
+            var run = Run(); var battle = Battle(run); var hero = run.Heroes[0]; // guard, 42 HP
+            hero.Definition.Defense = 0.25;
+            battle.Damage(hero, 8); Assert.AreEqual(36, hero.Hp);
+            hero.Definition.Defense = 0.5; hero.Defending = true;
+            battle.Damage(hero, 10); Assert.AreEqual(33, hero.Hp); // 10 → 5 → 2.5 → 3
+            hero.Definition.Defense = 0.9;
+            battle.Damage(hero, 5); Assert.AreEqual(32, hero.Hp); // reduction never drops below 1
+        }
+
+        [Test] public void BleedingIgnoresDefenseAndBrace()
+        {
+            var run = Run(); var battle = Battle(run); var hero = run.Heroes[0];
+            hero.Definition.Defense = 0.5; hero.Defending = true;
+            battle.Damage(hero, 6, bleeding: true); Assert.AreEqual(36, hero.Hp);
+        }
+
+        [Test] public void EnemyDamageFollowsCharacterAttackAndPattern()
+        {
+            var run = Run(); var battle = Battle(run); var cleaver = battle.Enemies[0];
+            cleaver.Definition.Attack = 10; cleaver.Definition.Pattern = EnemyPattern.Cleaver;
+            Assert.AreEqual(battle.Round % 2 == 0 ? 11 : 7, battle.EnemyDamage(cleaver));
+            cleaver.Definition.Pattern = EnemyPattern.Whisperer; Assert.AreEqual(3, battle.EnemyDamage(cleaver));
+            cleaver.Definition.Pattern = EnemyPattern.Hunter; Assert.AreEqual(5, battle.EnemyDamage(cleaver));
+            cleaver.Definition.Attack = 20; Assert.AreEqual(10, battle.EnemyDamage(cleaver));
+        }
+
+        [Test] public void CertainHitAndZeroDodgeConsumeNoRandomDraw()
+        {
+            var run = Run(); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
+            specs[0].MaxHp = 1; specs[0].Speed = 1; specs[0].Dodge = 0; specs[0].Defense = 0;
+            var battle = new BattleEngine(run, specs, catalog.Rules());
+            var actor = battle.Current; actor.Definition.Accuracy = 1; actor.Definition.CritChance = 0;
+            var target = battle.Targets(ActionKind.Primary).First();
+            uint state = run.Random.State; string error;
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Primary, target.Id), out error), error);
+            Assert.AreEqual(BattleOutcome.Victory, battle.Outcome); // killing blow ends the battle, so no further draws
+            Assert.AreEqual(state, run.Random.State);
+        }
+
+        [Test] public void DodgeOneNegatesHitWithoutDamage()
+        {
+            var run = Run(); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
+            specs[0].Speed = 1; specs[0].Dodge = 1;
+            var battle = new BattleEngine(run, specs, catalog.Rules());
+            var actor = battle.Current; actor.Definition.Accuracy = 1; actor.Definition.CritChance = 0;
+            var target = battle.Targets(ActionKind.Primary).First();
+            int hp = target.Hp; string error;
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Primary, target.Id), out error), error);
+            Assert.AreEqual(hp, target.Hp); Assert.IsTrue(battle.Events.Any(e => e.Kind == "dodge"));
+        }
+
+        [Test] public void HitAndCritUseFlatProbabilityIgnoringSanity()
+        {
+            var low = Run(15); var high = Run(85);
+            var a = Battle(low); var b = Battle(high);
+            var actorA = a.Current; var actorB = b.Current;
+            Assert.IsTrue(actorA.Player); Assert.AreEqual(actorA.Id, actorB.Id);
+            actorA.Form = SkillForm.Basic; actorB.Form = SkillForm.Basic;
+            var skillA = a.SkillFor(actorA, ActionKind.Primary); var skillB = b.SkillFor(actorB, ActionKind.Primary);
+            Assert.AreEqual(skillA.Id, skillB.Id);
+            actorA.Sanity = 15; double atLow = a.EffectiveAccuracy(actorA, skillA);
+            actorA.Sanity = 85; double atHigh = a.EffectiveAccuracy(actorA, skillA);
+            Assert.AreEqual(atLow, atHigh); Assert.AreEqual(actorA.Definition.Accuracy, atHigh);
+            var targetA = a.Targets(ActionKind.Primary).First(); var targetB = b.Targets(ActionKind.Primary).First();
+            Assert.AreEqual(targetA.Id, targetB.Id);
+            string error;
+            Assert.IsTrue(a.Execute(new ActionRequest(ActionKind.Primary, targetA.Id), out error), error);
+            Assert.IsTrue(b.Execute(new ActionRequest(ActionKind.Primary, targetB.Id), out error), error);
+            Assert.AreEqual(targetA.Hp, targetB.Hp);
+        }
+
+        [Test] public void HealScalesWithBaseAttack()
+        {
+            var run = Run(); var medic = run.Heroes[3]; medic.Definition.Speed = 100; medic.Definition.Attack = 20;
+            run.Heroes[0].Hp = 0;
+            var battle = Battle(run); string error; Assert.AreSame(medic, battle.Current);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Support, "guard"), out error), error);
+            Assert.AreEqual(18, run.Heroes[0].Hp); // 20 × 0.9
+        }
+
         [Test] public void InterceptProtectsTargetAndUsesGuardReduction()
         {
             var run = Run(50, 1); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray(); specs[0].Speed = 100;

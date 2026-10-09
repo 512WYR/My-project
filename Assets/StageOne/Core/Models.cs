@@ -21,7 +21,7 @@ namespace Ruin.Core
         public string Description;
         public SkillEffect Effect;
         public TargetSide Target;
-        public int Power;
+        public double Multiplier = 1.0; // Damage or healing is BaseAttack * Multiplier.
         public int ActorRanks = 15;
         public int TargetRanks = 15;
         public int Uses; // 0 means unlimited
@@ -40,6 +40,12 @@ namespace Ruin.Core
         public HeroRole Role;
         public int MaxHp;
         public int Speed;
+        // Character combat attributes. They are static per character and never derived from sanity.
+        public int Attack = 10;
+        public double Accuracy = 0.9;
+        public double CritChance = 0.1;
+        public double Dodge;
+        public double Defense;
         public double SanityOffset;
         public EnemyPattern Pattern;
         public SkillSpec Primary;
@@ -68,6 +74,8 @@ namespace Ruin.Core
         public double TechnicalWeight = 0.2;
         public double BasicWeight = 0.6;
         public double PrimalWeight = 0.2;
+        public double CritMultiplier = 1.5;
+        public double SkillAccuracyBaseline = 0.9; // Skill accuracy is expressed relative to this baseline.
         public MentalSpec[] MentalStates = {
             new MentalSpec { State = MentalState.None, Name = "平稳" },
             new MentalSpec { State = MentalState.Composed, Name = "凝神", TechnicalMultiplier = 1.25 },

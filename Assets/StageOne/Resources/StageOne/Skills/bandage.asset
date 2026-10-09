@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: bandage
     Name: "\u6218\u5730\u5305\u624E"
-    Description: "\u6062\u590D9 \xB7 \u53EF\u6551\u6CBB\u6FD2\u6B7B"
+    Description: "\u6062\u590D\u751F\u547D \u00B7 \u53EF\u6551\u6CBB\u6FD2\u6B7B"
     Effect: 1
     Target: 1
-    Power: 9
+    Multiplier: 0.9
     ActorRanks: 15
     TargetRanks: 15
     Uses: 3

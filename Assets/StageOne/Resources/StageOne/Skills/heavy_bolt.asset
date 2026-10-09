@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: heavy_bolt
     Name: "\u5F3A\u5F29\u5C04\u51FB"
-    Description: "\u4F24\u5BB312 \xB7 \u6253\u65AD \xB7 \u5168\u76EE\u6807"
+    Description: "\u6253\u65AD \u00B7 \u653B\u51FB\u4EFB\u610F\u654C\u4EBA"
     Effect: 0
     Target: 0
-    Power: 12
+    Multiplier: 1.2
     ActorRanks: 14
     TargetRanks: 15
     Uses: 0

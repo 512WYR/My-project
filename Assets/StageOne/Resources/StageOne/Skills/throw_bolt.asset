@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: throw_bolt
     Name: "\u6295\u63B7\u5F29\u77E2"
-    Description: "\u4F24\u5BB315 \xB7 \u9650\u524D\u4E24\u4F4D\u76EE\u6807"
+    Description: "\u91CD\u51FB\u524D\u6392 \u00B7 \u547D\u4E2D\u8F83\u4F4E"
     Effect: 0
     Target: 0
-    Power: 15
+    Multiplier: 1.5
     ActorRanks: 15
     TargetRanks: 3
     Uses: 0

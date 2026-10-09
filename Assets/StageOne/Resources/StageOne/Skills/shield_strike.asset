@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: shield_strike
     Name: "\u76FE\u51FB"
-    Description: "\u4F24\u5BB38 \xB7 \u524D\u6392\u653B\u51FB"
+    Description: "\u8FD1\u6218\u653B\u51FB\u524D\u6392"
     Effect: 0
     Target: 0
-    Power: 8
+    Multiplier: 0.8
     ActorRanks: 3
     TargetRanks: 3
     Uses: 0

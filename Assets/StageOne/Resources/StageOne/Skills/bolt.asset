@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: bolt
     Name: "\u5C04\u51FB"
-    Description: "\u4F24\u5BB39 \xB7 \u76EE\u6807\u4F4D\u7F6E2\u81F34"
+    Description: "\u653B\u51FB\u4E2D\u540E\u6392"
     Effect: 0
     Target: 0
-    Power: 9
+    Multiplier: 0.9
     ActorRanks: 14
     TargetRanks: 14
     Uses: 0

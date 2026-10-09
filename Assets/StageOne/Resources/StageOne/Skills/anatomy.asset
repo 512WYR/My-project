@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: anatomy
     Name: "\u89E3\u5256\u6253\u51FB"
-    Description: "\u4F24\u5BB310 \xB7 \u6D41\u88403\xD72"
+    Description: "\u653B\u51FB\u524D\u4E09\u6392 \u00B7 \u6D41\u8840\u66F4\u5F3A"
     Effect: 0
     Target: 0
-    Power: 10
+    Multiplier: 1
     ActorRanks: 7
     TargetRanks: 15
     Uses: 0

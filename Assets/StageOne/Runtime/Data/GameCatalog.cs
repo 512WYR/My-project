@@ -12,11 +12,12 @@ namespace Ruin.Runtime
         [Range(0, 3)] public float ProbabilityStrength = 1.5f;
         [Range(0, 1)] public float FeedbackFactor = 0.5f;
         [Range(0, 1)] public float DeathChance = 0.25f;
+        [Range(1, 3)] public float CritMultiplier = 1.5f;
         public int MindStep = 15;
         public CombatRules Rules()
         {
             return new CombatRules { ProbabilityStrength = ProbabilityStrength, FeedbackFactor = FeedbackFactor,
-                DeathChance = DeathChance, MindStep = MindStep, MentalStates = MentalStates.Select(m => m.Spec).ToArray() };
+                DeathChance = DeathChance, CritMultiplier = CritMultiplier, MindStep = MindStep, MentalStates = MentalStates.Select(m => m.Spec).ToArray() };
         }
     }
 }

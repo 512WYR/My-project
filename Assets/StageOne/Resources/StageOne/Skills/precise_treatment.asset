@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: precise_treatment
     Name: "\u7CBE\u5BC6\u6551\u6CBB"
-    Description: "\u6062\u590D13 \xB7 \u6E05\u9664\u6D41\u8840"
+    Description: "\u6062\u590D\u66F4\u9AD8\u751F\u547D \u00B7 \u6E05\u9664\u6D41\u8840"
     Effect: 1
     Target: 1
-    Power: 13
+    Multiplier: 1.3
     ActorRanks: 15
     TargetRanks: 15
     Uses: 0

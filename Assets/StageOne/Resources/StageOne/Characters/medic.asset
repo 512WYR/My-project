@@ -20,6 +20,11 @@ MonoBehaviour:
   Speed: 5
   SanityOffset: 15
   EnemyPattern: 0
+  Attack: 10
+  Accuracy: 0.9
+  CritChance: 0.1
+  Dodge: 0
+  Defense: 0
   Primary: {fileID: 11400000, guid: a5b58c8fe13037048b508b42f7c90e7a, type: 2}
   Support: {fileID: 11400000, guid: 79f6565b5308e044e8fa6a969c20f0f4, type: 2}
   Technical: {fileID: 11400000, guid: e0073ab3f5cf0a648b31701d23c1eff5, type: 2}

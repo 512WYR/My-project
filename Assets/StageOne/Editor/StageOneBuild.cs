@@ -25,25 +25,25 @@ namespace Ruin.Editor
             Directory.CreateDirectory("Assets/StageOne/Scenes");
             AssetDatabase.Refresh();
             var guard = Character("guard", "护卫", "守住队伍的第一道防线", HeroRole.Guard, 42, 4, 0,
-                Skill("shield_strike", "盾击", "伤害8 · 前排攻击", 8, 3, 3),
+                Skill("shield_strike", "盾击", "近战攻击前排", 0.8, 3, 3),
                 Skill("cover", "掩护", "拦截一次攻击 · 减半伤害", 0, 15, 15, SkillEffect.Protect, TargetSide.Ally),
-                Skill("tactical_bash", "战术盾击", "伤害8 · 打断下一次行动", 8, 3, 3, interrupt: true),
-                Skill("body_slam", "扑撞", "伤害13 · 限前两位目标", 13, 15, 3, accuracy: 0.82));
+                Skill("tactical_bash", "战术盾击", "攻击前排 · 打断下一次行动", 0.8, 3, 3, interrupt: true),
+                Skill("body_slam", "扑撞", "重击前排 · 命中较低", 1.3, 15, 3, accuracy: 0.82));
             var scout = Character("scout", "侦察者", "在危险之前找到破绽", HeroRole.Scout, 32, 8, -10,
-                Skill("dagger", "短刃突刺", "伤害7 · 前三位目标", 7, 7, 7),
-                Skill("cut", "割裂", "伤害4 · 流血2×2", 4, 7, 7, bleed: 2),
-                Skill("anatomy", "解剖打击", "伤害10 · 流血3×2", 10, 7, 15, bleed: 3),
-                Skill("rend", "撕扯", "伤害12 · 限前两位目标", 12, 15, 3, accuracy: 0.82));
+                Skill("dagger", "短刃突刺", "攻击前三排", 0.7, 7, 7),
+                Skill("cut", "割裂", "攻击前三排 · 附加流血", 0.4, 7, 7, bleed: 2),
+                Skill("anatomy", "解剖打击", "攻击前三排 · 流血更强", 1.0, 7, 15, bleed: 3),
+                Skill("rend", "撕扯", "重击前排 · 命中较低", 1.2, 15, 3, accuracy: 0.82));
             var arbalist = Character("arbalist", "弩手", "距离、准星与一次呼吸", HeroRole.Arbalist, 30, 6, 10,
-                Skill("bolt", "射击", "伤害9 · 目标位置2至4", 9, 14, 14),
-                Skill("suppress", "压制射击", "伤害5 · 打断", 5, 15, 15, uses: 3, interrupt: true),
-                Skill("heavy_bolt", "强弩射击", "伤害12 · 打断 · 全目标", 12, 14, 15, interrupt: true),
-                Skill("throw_bolt", "投掷弩矢", "伤害15 · 限前两位目标", 15, 15, 3, accuracy: 0.80));
+                Skill("bolt", "射击", "攻击中后排", 0.9, 14, 14),
+                Skill("suppress", "压制射击", "打断 · 伤害较低", 0.5, 15, 15, uses: 3, interrupt: true),
+                Skill("heavy_bolt", "强弩射击", "打断 · 攻击任意敌人", 1.2, 14, 15, interrupt: true),
+                Skill("throw_bolt", "投掷弩矢", "重击前排 · 命中较低", 1.5, 15, 3, accuracy: 0.80));
             var medic = Character("medic", "医师", "让同伴撑过下一次心跳", HeroRole.Medic, 28, 5, 15,
-                Skill("scalpel", "手术刀投掷", "伤害5 · 全目标", 5, 14, 15),
-                Skill("bandage", "战地包扎", "恢复9 · 可救治濒死", 9, 15, 15, SkillEffect.Heal, TargetSide.Ally, uses: 3),
-                Skill("precise_treatment", "精密救治", "恢复13 · 清除流血", 13, 15, 15, SkillEffect.Heal, TargetSide.Ally, cleanse: true),
-                Skill("desperate_cut", "本能切割", "伤害9 · 限前两位目标", 9, 15, 3, accuracy: 0.84));
+                Skill("scalpel", "手术刀投掷", "攻击任意敌人", 0.5, 14, 15),
+                Skill("bandage", "战地包扎", "恢复生命 · 可救治濒死", 0.9, 15, 15, SkillEffect.Heal, TargetSide.Ally, uses: 3),
+                Skill("precise_treatment", "精密救治", "恢复更高生命 · 清除流血", 1.3, 15, 15, SkillEffect.Heal, TargetSide.Ally, cleanse: true),
+                Skill("desperate_cut", "本能切割", "重击前排 · 命中较低", 0.9, 15, 3, accuracy: 0.84));
             var cleaver = Enemy("cleaver", "执斧者", "重劈前排的废墟守卫", 32, 3, EnemyPattern.Cleaver);
             var whisperer = Enemy("whisperer", "低语者", "侵蚀最清醒者的心智", 24, 2, EnemyPattern.Whisperer);
             var hunter = Enemy("hunter", "追猎者", "追击虚弱者并造成流血", 24, 7, EnemyPattern.Hunter);
@@ -99,11 +99,11 @@ namespace Ruin.Editor
             if (existing) return existing; // Preserve subsequent designer edits.
             var item = ScriptableObject.CreateInstance<T>(); setup(item); AssetDatabase.CreateAsset(item, path); return item;
         }
-        private static SkillDefinition Skill(string id, string name, string description, int power, int actors, int targets,
+        private static SkillDefinition Skill(string id, string name, string description, double multiplier, int actors, int targets,
             SkillEffect effect = SkillEffect.Attack, TargetSide target = TargetSide.Enemy, int uses = 0, int bleed = 0, bool interrupt = false, bool cleanse = false, double accuracy = 0.9)
         {
             return Asset<SkillDefinition>(Data + "/Skills/" + id + ".asset", x => x.Spec = new SkillSpec {
-                Id = id, Name = name, Description = description, Power = power, ActorRanks = actors, TargetRanks = targets,
+                Id = id, Name = name, Description = description, Multiplier = multiplier, ActorRanks = actors, TargetRanks = targets,
                 Effect = effect, Target = target, Uses = uses, Bleed = bleed, Interrupt = interrupt, Cleanse = cleanse, Accuracy = accuracy
             });
         }
@@ -112,6 +112,7 @@ namespace Ruin.Editor
         {
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x => {
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Role = role; x.MaxHp = hp; x.Speed = speed; x.SanityOffset = sanity;
+                x.Attack = 10; x.Accuracy = 0.9; x.CritChance = 0.1; x.Dodge = 0; x.Defense = 0;
                 x.Primary = primary; x.Support = support; x.Technical = technical; x.Primal = primal;
             });
         }
@@ -119,6 +120,7 @@ namespace Ruin.Editor
         {
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x => {
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Role = HeroRole.Enemy; x.MaxHp = hp; x.Speed = speed; x.EnemyPattern = pattern;
+                x.Attack = 10; x.Accuracy = 0.86; x.CritChance = 0.1; x.Dodge = 0; x.Defense = 0;
             });
         }
     }

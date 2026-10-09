@@ -15,10 +15,10 @@ MonoBehaviour:
   Spec:
     Id: scalpel
     Name: "\u624B\u672F\u5200\u6295\u63B7"
-    Description: "\u4F24\u5BB35 \xB7 \u5168\u76EE\u6807"
+    Description: "\u653B\u51FB\u4EFB\u610F\u654C\u4EBA"
     Effect: 0
     Target: 0
-    Power: 5
+    Multiplier: 0.5
     ActorRanks: 14
     TargetRanks: 15
     Uses: 0
