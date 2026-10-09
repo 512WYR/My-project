@@ -1,0 +1,7 @@
+{
+  "name": "Ruin.Core",
+  "rootNamespace": "Ruin.Core",
+  "references": [],
+  "noEngineReferences": true,
+  "autoReferenced": true
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Ruin.PlayModeTests",
+  "references": ["Ruin.Core", "Ruin.Runtime", "UnityEngine.UI"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

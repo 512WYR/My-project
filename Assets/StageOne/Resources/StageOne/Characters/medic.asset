@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: medic
+  m_EditorClassIdentifier: 
+  Id: medic
+  DisplayName: "\u533B\u5E08"
+  Subtitle: "\u8BA9\u540C\u4F34\u6491\u8FC7\u4E0B\u4E00\u6B21\u5FC3\u8DF3"
+  Role: 3
+  MaxHp: 28
+  Speed: 5
+  SanityOffset: 15
+  EnemyPattern: 0
+  Primary: {fileID: 11400000, guid: a5b58c8fe13037048b508b42f7c90e7a, type: 2}
+  Support: {fileID: 11400000, guid: 79f6565b5308e044e8fa6a969c20f0f4, type: 2}
+  Technical: {fileID: 11400000, guid: e0073ab3f5cf0a648b31701d23c1eff5, type: 2}
+  Primal: {fileID: 11400000, guid: a7882280c6b103245819a8169845e17e, type: 2}

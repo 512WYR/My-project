@@ -1,0 +1,6 @@
+{
+  "name": "Ruin.EditModeTests",
+  "references": ["Ruin.Core", "Ruin.Runtime"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

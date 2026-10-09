@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: hunter
+  m_EditorClassIdentifier: 
+  Id: hunter
+  DisplayName: "\u8FFD\u730E\u8005"
+  Subtitle: "\u8FFD\u51FB\u865A\u5F31\u8005\u5E76\u9020\u6210\u6D41\u8840"
+  Role: 4
+  MaxHp: 24
+  Speed: 7
+  SanityOffset: 0
+  EnemyPattern: 2
+  Primary: {fileID: 0}
+  Support: {fileID: 0}
+  Technical: {fileID: 0}
+  Primal: {fileID: 0}

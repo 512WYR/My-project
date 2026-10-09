@@ -1,0 +1,6 @@
+{
+  "name": "Ruin.Editor",
+  "references": ["Ruin.Core", "Ruin.Runtime"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}

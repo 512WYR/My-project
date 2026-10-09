@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: guard
+  m_EditorClassIdentifier: 
+  Id: guard
+  DisplayName: "\u62A4\u536B"
+  Subtitle: "\u5B88\u4F4F\u961F\u4F0D\u7684\u7B2C\u4E00\u9053\u9632\u7EBF"
+  Role: 0
+  MaxHp: 42
+  Speed: 4
+  SanityOffset: 0
+  EnemyPattern: 0
+  Primary: {fileID: 11400000, guid: 248b6b4e015ad9845ac4961337deaa71, type: 2}
+  Support: {fileID: 11400000, guid: f77a433e9618206438f0d38d4fecedff, type: 2}
+  Technical: {fileID: 11400000, guid: d24a9aa0fdc522d45b413e0bd5dc1d35, type: 2}
+  Primal: {fileID: 11400000, guid: 4d166d248f70caa49af2feb0db6b9c1e, type: 2}

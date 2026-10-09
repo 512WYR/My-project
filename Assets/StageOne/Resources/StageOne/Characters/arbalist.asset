@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: arbalist
+  m_EditorClassIdentifier: 
+  Id: arbalist
+  DisplayName: "\u5F29\u624B"
+  Subtitle: "\u8DDD\u79BB\u3001\u51C6\u661F\u4E0E\u4E00\u6B21\u547C\u5438"
+  Role: 2
+  MaxHp: 30
+  Speed: 6
+  SanityOffset: 10
+  EnemyPattern: 0
+  Primary: {fileID: 11400000, guid: dd5825a909167294aa3720e68c35e5b4, type: 2}
+  Support: {fileID: 11400000, guid: 18add776b70984c4d8baa2bce634e783, type: 2}
+  Technical: {fileID: 11400000, guid: b1d2db09126bf7b4e800df6e8010d9c2, type: 2}
+  Primal: {fileID: 11400000, guid: dd7463a4a0c9f2d4392c0be7445a48d4, type: 2}

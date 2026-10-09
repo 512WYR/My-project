@@ -1,0 +1,6 @@
+{
+  "name": "Ruin.Runtime",
+  "rootNamespace": "Ruin.Runtime",
+  "references": ["Ruin.Core", "UnityEngine.UI"],
+  "autoReferenced": true
+}
