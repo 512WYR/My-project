@@ -12,3 +12,4 @@
 *.pidb
 *.booproj
 *.tmp
+.vscode/

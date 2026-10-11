@@ -1,46 +1,84 @@
 using System;
+using System.Collections.Generic;
 
 namespace Ruin.Core
 {
-    // The only entry point for node generation. Every draw reads the player sanity (Run.PlayerSanity)
+    // The only entry point for route generation. Every draw reads the player sanity (Run.PlayerSanity)
     // and uses SanityGate.None: the document keeps map and event probability continuous, without the
     // character-only 30/70 activation window.
+    //
+    // The route is a fixed skeleton -- every floor opens on a fixed room and ends on a fixed room -- with
+    // a run of sampled positions in between. A position is only drawn when the party walks up to it, so
+    // looking ahead is impossible and a position already on screen is never re-rolled.
     public static class MapGenerator
     {
-        // Danger leans are deliberately smaller than supply leans, so low sanity stays risky but not extreme.
+        // Danger leans are deliberately smaller than the lucid leans, so low sanity stays risky but not
+        // extreme: elite rooms plus altars reach about 54% of the table at sanity 15 and about 14% at 85.
+        // The four older entries are scaled by 0.90 so the chest room takes the remaining 10% at sanity 50
+        // without changing how the other four relate to each other. The table still sums to exactly 1.
         public static readonly NodeOddsSpec[] DefaultOdds =
         {
-            new NodeOddsSpec(NodeType.Battle, 0.28, -0.5),
-            new NodeOddsSpec(NodeType.EliteBattle, 0.12, -0.5),
-            new NodeOddsSpec(NodeType.Event, 0.20, 0),
-            new NodeOddsSpec(NodeType.Merchant, 0.14, 1.0),
-            new NodeOddsSpec(NodeType.Camp, 0.14, 1.0),
-            new NodeOddsSpec(NodeType.Workshop, 0.12, 1.0)
+            new NodeOddsSpec(NodeType.Battle, 0.315, 0),
+            new NodeOddsSpec(NodeType.EliteBattle, 0.135, -1.0),
+            new NodeOddsSpec(NodeType.Altar, 0.180, -1.0),
+            new NodeOddsSpec(NodeType.Event, 0.270, 1.0),
+            new NodeOddsSpec(NodeType.Treasure, 0.100, 0)
         };
 
-        public static readonly double[] DefaultBranchWeights = { 0.15, 0.60, 0.25 };
+        public static readonly double[] DefaultBranchWeights = { 0.31, 0.38, 0.31 };
+        public static readonly int[] DefaultSteps = { 5, 6, 7 };
+
+        private const int DefaultFloors = 3;
 
         // Fills in anything a catalog left blank. Every GameCatalog asset predates these fields, so an
-        // absent value arrives as zero and has to fall back to the rule default.
+        // absent value arrives as zero and has to fall back to the rule default. Every field has to be
+        // copied explicitly: this constructs a brand new MapRules, so a field left out is silently reset.
         public static MapRules Resolve(MapRules rules)
         {
             var source = rules ?? new MapRules();
-            var resolved = new MapRules
+            int floors = source.Floors > 0 ? source.Floors : DefaultFloors;
+            return new MapRules
             {
-                Floors = source.Floors > 0 ? source.Floors : 10,
-                ProbabilityStrength = Finite(source.ProbabilityStrength) && source.ProbabilityStrength > 0
-                    ? source.ProbabilityStrength : 1.0,
-                OpeningBranchCount = source.OpeningBranchCount > 0 ? Math.Min(source.OpeningBranchCount, 3) : 3,
-                GuaranteedBattleIndex = source.GuaranteedBattleIndex,
-                BranchAffinity = Finite(source.BranchAffinity) && source.BranchAffinity > 0
-                    ? source.BranchAffinity : 1.0,
+                Floors = floors,
+                StepsPerFloor = ResolveSteps(source.StepsPerFloor, floors),
+                ProbabilityStrength = Positive(source.ProbabilityStrength) ? source.ProbabilityStrength : 1.0,
+                BranchAffinity = Positive(source.BranchAffinity) ? source.BranchAffinity : 1.5,
                 BranchWeights = Usable(source.BranchWeights) ? (double[])source.BranchWeights.Clone() : (double[])DefaultBranchWeights.Clone(),
-                NodeOdds = Usable(source.NodeOdds) ? Clone(source.NodeOdds) : Clone(DefaultOdds)
+                NodeOdds = Usable(source.NodeOdds) ? Clone(source.NodeOdds) : Clone(DefaultOdds),
+                Events = source.Events != null && source.Events.Length > 0 ? (EventSpec[])source.Events.Clone() : null,
+                OpeningBuffs = Usable(source.OpeningBuffs) ? (GrowthBuff[])source.OpeningBuffs.Clone() : DefaultBuffs(),
+                SupplyHealRatio = Positive(source.SupplyHealRatio) ? source.SupplyHealRatio : 0.35,
+                SuppliesPerBattle = source.SuppliesPerBattle > 0 ? source.SuppliesPerBattle : 2,
+                SuppliesPerElite = source.SuppliesPerElite > 0 ? source.SuppliesPerElite : 4,
+                SuppliesPerBoss = source.SuppliesPerBoss > 0 ? source.SuppliesPerBoss : 8,
+                EliteHealthBonus = source.EliteHealthBonus > 0 ? source.EliteHealthBonus : 20,
+                EliteAttackScale = Positive(source.EliteAttackScale) ? source.EliteAttackScale : 1.25,
+                BossHealthBonus = source.BossHealthBonus > 0 ? source.BossHealthBonus : 45,
+                BossAttackScale = Positive(source.BossAttackScale) ? source.BossAttackScale : 1.5
             };
-            return resolved;
         }
 
         private static bool Finite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
+
+        private static bool Positive(double value) { return Finite(value) && value > 0; }
+
+        // One entry per floor. A short or damaged array keeps its usable entries and falls back on the
+        // documented pattern for the rest, so a two-floor catalog still produces a sane third floor.
+        private static int[] ResolveSteps(int[] source, int floors)
+        {
+            var copy = new int[floors];
+            for (int i = 0; i < floors; i++)
+            {
+                bool usable = source != null && i < source.Length && source[i] > 0;
+                copy[i] = usable ? source[i] : DefaultSteps[Math.Min(i, DefaultSteps.Length - 1)];
+            }
+            return copy;
+        }
+
+        private static GrowthBuff[] DefaultBuffs()
+        {
+            return new[] { GrowthBuff.Toughness, GrowthBuff.Sharpness, GrowthBuff.Clarity };
+        }
 
         private static bool Usable(double[] values)
         {
@@ -48,10 +86,15 @@ namespace Ruin.Core
             double sum = 0;
             for (int i = 0; i < values.Length; i++)
             {
-                if (values[i] < 0 || double.IsNaN(values[i]) || double.IsInfinity(values[i])) return false;
+                if (values[i] < 0 || !Finite(values[i])) return false;
                 sum += values[i];
             }
             return sum > 0;
+        }
+
+        private static bool Usable(GrowthBuff[] values)
+        {
+            return values != null && values.Length > 0;
         }
 
         private static bool Usable(NodeOddsSpec[] values)
@@ -61,8 +104,8 @@ namespace Ruin.Core
             for (int i = 0; i < values.Length; i++)
             {
                 if (values[i] == null) return false;
-                if (values[i].Weight < 0 || double.IsNaN(values[i].Weight) || double.IsInfinity(values[i].Weight)) return false;
-                if (double.IsNaN(values[i].Affinity) || double.IsInfinity(values[i].Affinity)) return false;
+                if (values[i].Weight < 0 || !Finite(values[i].Weight)) return false;
+                if (!Finite(values[i].Affinity)) return false;
                 sum += values[i].Weight;
             }
             return sum > 0;
@@ -86,7 +129,7 @@ namespace Ruin.Core
             return SanityProbability.Distribution(playerSanity, outcomes, resolved.ProbabilityStrength);
         }
 
-        // Pure. Index 0 is one branch, index 2 is three branches.
+        // Pure. Index 0 is one candidate, index 2 is three candidates.
         public static double[] BranchOdds(MapRules rules, double playerSanity)
         {
             var resolved = Resolve(rules);
@@ -106,58 +149,123 @@ namespace Ruin.Core
             return odds[0] + 2 * odds[1] + 3 * odds[2];
         }
 
-        // Idempotent: a floor that has already been shown is returned untouched and consumes no draws,
-        // so re-rendering or reloading never re-rolls it.
-        public static FloorState EnsureFloor(MapState map, MapRules rules, RunRandom random, double playerSanity)
+        // How many positions a floor holds: the fixed opening room, the sampled run, and the fixed last room.
+        public static int StepsOnFloor(MapRules rules, int floor)
+        {
+            var resolved = Resolve(rules);
+            int f = Math.Min(Math.Max(floor, 1), resolved.Floors);
+            return resolved.StepsPerFloor[f - 1] + 2;
+        }
+
+        public static int TotalSteps(MapRules rules)
+        {
+            var resolved = Resolve(rules);
+            int total = 0;
+            for (int i = 0; i < resolved.Floors; i++) total += resolved.StepsPerFloor[i] + 2;
+            return total;
+        }
+
+        // Walks up to the next position. A position that has already been shown is returned untouched and
+        // consumes no draws, so re-rendering or reloading never re-rolls it.
+        public static StepState Advance(MapState map, MapRules rules, RunRandom random, double playerSanity)
         {
             if (map == null) throw new ArgumentNullException("map");
             if (random == null) throw new ArgumentNullException("random");
-            var existing = map.FloorAt(map.Floor);
-            if (existing != null) return existing;
-            var created = Generate(map.Floor, rules, random, playerSanity);
-            map.Floors.Add(created);
-            return created;
-        }
-
-        public static FloorState Generate(int floor, MapRules rules, RunRandom random, double playerSanity)
-        {
-            if (random == null) throw new ArgumentNullException("random");
             var resolved = Resolve(rules);
-            var state = new FloorState { Floor = floor };
+            if (map.Finished) return map.Current;
+            if (map.StepIndex < 0) map.StepIndex = 0;
 
-            if (floor >= resolved.Floors)
-            {
-                state.Nodes.Add(Create(floor, 0, NodeType.Boss));
-                return state;
-            }
+            var existing = map.Current;
+            if (existing != null && existing.Shown) return existing;
 
-            int count = floor <= 1
-                ? resolved.OpeningBranchCount
-                : SanityProbability.Sample(BranchOdds(resolved, playerSanity), random) + 1;
+            // A debug tool can jump straight to a later position. The skipped positions are still built in
+            // order so the random sequence evolves exactly as it would have if the party had walked it.
+            while (map.Steps.Count < map.StepIndex) map.Steps.Add(Build(map.Steps.Count, resolved, random, playerSanity));
 
-            var typeOdds = TypeOdds(resolved, playerSanity);
-            for (int index = 0; index < count; index++)
-            {
-                // The spine branch is fixed and draws nothing, which also keeps at least one playable
-                // node on every floor.
-                var type = index == resolved.GuaranteedBattleIndex
-                    ? NodeType.Battle
-                    : resolved.NodeOdds[SanityProbability.Sample(typeOdds, random)].Type;
-                state.Nodes.Add(Create(floor, index, type));
-            }
-            return state;
+            var step = Build(map.StepIndex, resolved, random, playerSanity);
+            if (map.Steps.Count == map.StepIndex) map.Steps.Add(step);
+            else map.Steps[map.StepIndex] = step;
+            map.Floor = step.Floor;
+            return step;
         }
 
-        private static NodeState Create(int floor, int index, NodeType type)
+        // Fixed positions draw nothing at all; a sampled position draws its candidate count and then one
+        // type per candidate. That count is the documented draw contract and the tests pin it down.
+        private static StepState Build(int stepIndex, MapRules rules, RunRandom random, double sanity)
         {
-            return new NodeState { Floor = floor, Index = index, Type = type, Placeholder = IsPlaceholder(type) };
+            int floor, index;
+            Position(rules, stepIndex, out floor, out index);
+            int span = rules.StepsPerFloor[floor - 1] + 2;
+            var step = new StepState { Floor = floor, Index = index, Fixed = index == 0 || index == span - 1 };
+
+            if (index == 0)
+            {
+                step.Candidates.Add(Create(floor, index, floor == 1 ? NodeType.Opening : NodeType.Supply, 0));
+            }
+            else if (index == span - 1)
+            {
+                step.Candidates.Add(Create(floor, index, floor >= rules.Floors ? NodeType.Boss : NodeType.Elevator, 0));
+            }
+            else
+            {
+                int count = SanityProbability.Sample(BranchOdds(rules, sanity), random) + 1;
+                var odds = TypeOdds(rules, sanity);
+                var taken = new bool[odds.Length];
+                for (int i = 0; i < count; i++)
+                {
+                    int drawn = SanityProbability.Sample(SpokenFor(odds, rules.NodeOdds, taken), random);
+                    step.Candidates.Add(Create(floor, index, rules.NodeOdds[drawn].Type, i));
+                    taken[drawn] = true;
+                }
+            }
+
+            step.Shown = true;
+            return step;
         }
 
-        // Only plain battles have content behind them today. Everything else is a clearly marked
-        // placeholder that resolves by being skipped.
-        public static bool IsPlaceholder(NodeType type) { return type != NodeType.Battle; }
+        // One candidate per room type, except event rooms: two events side by side read as two leads, so
+        // they are allowed to repeat. Masking instead of rejection sampling keeps the draw contract at
+        // exactly one draw per candidate, which the tests and the document both pin down.
+        private static double[] SpokenFor(double[] odds, NodeOddsSpec[] specs, bool[] taken)
+        {
+            var masked = new double[odds.Length];
+            double sum = 0;
+            for (int i = 0; i < odds.Length; i++)
+            {
+                bool blocked = taken[i] && specs[i].Type != NodeType.Event;
+                if (!blocked) { masked[i] = odds[i]; sum += odds[i]; }
+            }
+            // Fewer sampleable types than candidates: let the table repeat rather than hand Sample a row
+            // with nothing left to pick.
+            if (sum <= 0) return odds;
+            for (int i = 0; i < masked.Length; i++) masked[i] /= sum;
+            return masked;
+        }
 
-        public static bool IsCombat(NodeType type) { return type == NodeType.Battle || type == NodeType.EliteBattle; }
+        // Turns a linear step index into the floor it belongs to and the position inside that floor.
+        private static void Position(MapRules rules, int stepIndex, out int floor, out int index)
+        {
+            int remaining = Math.Max(stepIndex, 0);
+            for (int f = 1; f <= rules.Floors; f++)
+            {
+                int span = rules.StepsPerFloor[f - 1] + 2;
+                if (remaining < span) { floor = f; index = remaining; return; }
+                remaining -= span;
+            }
+            floor = rules.Floors;
+            index = rules.StepsPerFloor[floor - 1] + 1; // Clamp to the last position of the last floor.
+        }
+
+        private static NodeState Create(int floor, int index, NodeType type, int optionIndex)
+        {
+            return new NodeState { Floor = floor, Index = index, Type = type, OptionIndex = optionIndex };
+        }
+
+        // Battles, the boss and every room page are implemented now; nothing is skipped any more.
+        public static bool IsCombat(NodeType type)
+        {
+            return type == NodeType.Battle || type == NodeType.EliteBattle || type == NodeType.Boss;
+        }
 
         public static string Name(NodeType type)
         {
@@ -165,11 +273,13 @@ namespace Ruin.Core
             {
                 case NodeType.Battle: return "普通战斗";
                 case NodeType.EliteBattle: return "精英战斗";
-                case NodeType.Event: return "事件";
-                case NodeType.Merchant: return "商人";
-                case NodeType.Camp: return "营地";
-                case NodeType.Workshop: return "工坊";
+                case NodeType.Event: return "事件房间";
                 case NodeType.Boss: return "首领";
+                case NodeType.Supply: return "补给站";
+                case NodeType.Altar: return "祭坛房间";
+                case NodeType.Elevator: return "电梯井";
+                case NodeType.Opening: return "初始增益";
+                case NodeType.Treasure: return "宝箱房";
                 default: return "未知";
             }
         }

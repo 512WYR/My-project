@@ -41,10 +41,21 @@ namespace Ruin.Runtime
             var root = page.GetComponent<RectTransform>(); root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
             var bg = page.AddComponent<Image>(); bg.color = Bg;
             Header(root);
-            // The node page replaces the battle widgets in place. It stays inline rather than using a
+            // The room pages replace the battle widgets in place. They stay inline rather than using a
             // modal so the header buttons keep taking clicks, which the smoke run relies on.
             bool nodePage = app.AwaitingNode;
-            if (nodePage) NodeSelect(root);
+            if (nodePage)
+            {
+                switch (app.Room)
+                {
+                    case RoomView.Buff: BuffRoom(root); break;
+                    case RoomView.Supply: SupplyRoom(root); break;
+                    case RoomView.Event: EventRoom(root); break;
+                    case RoomView.Elevator: ElevatorRoom(root); break;
+                    case RoomView.Treasure: TreasureRoom(root); break;
+                    default: NodeSelect(root); break;
+                }
+            }
             else
             {
                 Battlefield(root);
@@ -52,7 +63,7 @@ namespace Ruin.Runtime
                 Actions(root);
                 Journal(root);
             }
-            Label(root, "Footer", "第一阶段  /  战斗与节点选择     ·     F1 操作说明     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1280, 22, 13, Muted);
+            Label(root, "Footer", "第一阶段  /  战斗与探索     ·     F1 操作说明     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1280, 22, 13, Muted);
             Label(root, "Version", "STAGE 01   /   0.3", 1370, 868, 195, 22, 13, Muted, TextAnchor.MiddleRight);
             if (!nodePage && app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
             if (app.HelpOpen) Help(root);
@@ -64,7 +75,7 @@ namespace Ruin.Runtime
         private void Header(RectTransform root)
         {
             Label(root, "Title", "界限之间", 34, 22, 420, 43, 31, Ink);
-            Label(root, "Subtitle", app.AwaitingNode ? "节点选择  /  玩家理智决定下一层的房间与分支" : "战斗演练  /  理智与队伍的第一场试炼", 35, 66, 700, 26, 15, Muted);
+            Label(root, "Subtitle", app.AwaitingNode ? "探索路线  /  玩家理智同时决定候选数量与房间类型" : "战斗演练  /  理智与队伍的第一场试炼", 35, 66, 700, 26, 15, Muted);
             Button(root, "Help", "操作说明", "F1", 1138, 27, 130, 53, app.ToggleHelp, false, true, 15);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             Button(root, "Laboratory", "验收工具", "F3", 1280, 27, 130, 53, app.ToggleLab, false, !app.Busy, 15);
@@ -75,8 +86,8 @@ namespace Ruin.Runtime
             Label(strip, "PlayerSanity", app.Run.PlayerSanity.ToString("0.0"), 112, 7, 110, 42, 29, Gold);
             Meter(strip, "PlayerMeter", 220, 25, 200, 7, (float)app.Run.PlayerSanity / 100, Gold);
             Label(strip, "BattleIndex", app.Battle == null
-                ? "第 " + app.Map.Floor + " 层   /   共 " + app.Catalog.MapRules().Floors + " 层"
-                : "第 " + app.Run.Battles + " 场演练   /   第 " + app.Battle.Round + " 回合", 458, 18, 300, 27, 17, Ink);
+                ? "第 " + app.Map.Floor + " 层   /   共 " + app.Catalog.MapRules().Floors + " 层   ·   补给 " + app.Map.Supplies
+                : "第 " + app.Run.Battles + " 场演练   /   第 " + app.Battle.Round + " 回合", 458, 18, 340, 27, 17, Ink);
             string next = app.Battle == null
                 ? (app.Map.Finished ? "本局已结束" : "等待选择房间")
                 : app.Battle.Current == null ? "本场已结束" : (app.Battle.Current.Player ? "我方行动 · " : "敌方行动 · ") + app.Battle.Current.Name;
@@ -115,7 +126,8 @@ namespace Ruin.Runtime
         private void ActorCard(RectTransform parent, ActorState actor, float x, float y, float w, float h)
         {
             bool active = app.Battle.Current == actor;
-            bool possible = app.Pending.HasValue && app.Battle.Targets(app.Pending.Value).Any(a => a.Id == actor.Id);
+            bool possible = app.PendingSwap ? app.Battle.SwapTargets().Any(a => a.Id == actor.Id)
+                : app.PendingSkill.HasValue && app.Battle.Targets(app.PendingSkill.Value).Any(a => a.Id == actor.Id);
             Color accent = actor.Player ? Cyan : Rust;
             Color background = actor.Dead ? Hex("161C22") : active ? Hex("2D363A") : Hex("202930");
             if (possible) background = actor.Player ? Hex("28434A") : Hex("4C3430");
@@ -127,7 +139,7 @@ namespace Ruin.Runtime
             if (active || possible || app.InspectedId == actor.Id) Outline(rect, possible ? Gold : active ? Gold : accent, 1.5f);
             Label(rect, "Rank", "位置 " + (actor.Rank + 1), 9, 6, 94, 21, 11, Muted);
             var art = NewRect(rect, "Silhouette", 6, 34, 100, 119).gameObject.AddComponent<SilhouetteGraphic>();
-            art.Role = actor.Definition.Role; art.Enemy = actor.Definition.Pattern; art.IsEnemy = !actor.Player;
+            art.Silhouette = actor.Definition.Silhouette; art.Enemy = actor.Definition.Pattern; art.IsEnemy = !actor.Player;
             art.color = actor.Dead ? Hex("41484B") : Hex("080E13"); art.Accent = actor.Dead ? Hex("5A5E5D") : accent; art.raycastTarget = false;
             Label(rect, "ActorName", actor.Name, 4, 149, 104, 29, 19, actor.Dead ? Muted : Ink, TextAnchor.MiddleCenter);
             Meter(rect, "HealthMeter", 9, 184, 94, 6, (float)actor.Hp / actor.Definition.MaxHp, actor.DeathDoor ? Rust : accent);
@@ -137,41 +149,67 @@ namespace Ruin.Runtime
             if (actor.Dead) Label(rect, "DeadCross", "×", 31, 63, 52, 65, 54, Rust, TextAnchor.MiddleCenter);
             if (actor.Player)
             {
-                string buff = actor.BleedTurns > 0 ? "流血 " + actor.BleedDamage + "×" + actor.BleedTurns : actor.Defending ? "防御" : actor.Form == SkillForm.Technical ? "技术灵感" : actor.Form == SkillForm.Primal ? "原始形态" : "";
-                Label(parent, "Buff_" + actor.Id, buff, x, y + h + 2, w, 22, 12, actor.BleedTurns > 0 ? Rust : Gold, TextAnchor.MiddleCenter);
+                string buff = actor.BleedTurns > 0 ? "流血 " + actor.BleedDamage + "×" + actor.BleedTurns : actor.Form == SkillForm.Technical ? "高理智技能" : actor.Form == SkillForm.Primal ? "低理智变化" : "";
+                // The most serious part injury rides along on the card, so a debuff is visible without
+                // opening the inspector.
+                string limb = LimbSystem.Summary(actor);
+                if (limb.Length > 0) buff = buff.Length > 0 ? limb + " · " + buff : limb;
+                Label(parent, "Buff_" + actor.Id, buff, x, y + h + 2, w, 22, 12, actor.BleedTurns > 0 || limb.Length > 0 ? Rust : Gold, TextAnchor.MiddleCenter);
             }
             else Label(parent, "Intent_" + actor.Id, app.Battle.Intent(actor), x - 3, y + h + 4, w + 6, 46, 11, actor.Interrupted > 0 ? Cyan : Rust, TextAnchor.UpperCenter);
         }
 
         private void Inspector(RectTransform root)
         {
-            var box = Box(root, "Inspector", 1228, 188, 338, 328, Panel);
+            var box = Box(root, "Inspector", 1228, 188, 338, 424, Panel);
             var actor = app.Battle.Find(app.InspectedId) ?? app.Run.Heroes[0];
-            Label(box, "InspectorHeading", "观察 / " + (actor.Player ? "队员" : "敌人"), 20, 15, 300, 24, 13, Muted);
-            Label(box, "SelectedName", actor.Name, 20, 47, 200, 34, 25, Ink);
-            Label(box, "ActorSubtitle", actor.Definition.Subtitle, 20, 84, 298, 27, 13, Muted);
+            Label(box, "InspectorHeading", "观察 / " + (actor.Player ? "队员" : "敌人"), 20, 14, 300, 22, 13, Muted);
+            Label(box, "SelectedName", actor.Name, 20, 42, 200, 32, 25, Ink);
+            Label(box, "ActorSubtitle", actor.Definition.Subtitle, 20, 76, 298, 22, 13, Muted);
             if (actor.Player)
             {
-                Label(box, "PersonalSanity", "个人理智  " + actor.Sanity.ToString("0.0") + "     速度  " + actor.Speed, 20, 119, 300, 26, 17, Cyan);
-                Meter(box, "SanityTrack", 20, 154, 298, 6, (float)actor.Sanity / 100, Cyan);
-                Box(box, "LowTick", 20 + 298 * 0.30f, 151, 2, 12, Gold);
-                Box(box, "HighTick", 20 + 298 * 0.70f, 151, 2, 12, Gold);
-                Label(box, "RangeLabels", "0          30          稳定区          70       100", 20, 169, 300, 19, 11, Muted);
+                Label(box, "PersonalSanity", "个人理智  " + actor.Sanity.ToString("0.0") + "     速度  " + actor.Speed, 20, 104, 300, 26, 17, Cyan);
+                Meter(box, "SanityTrack", 20, 138, 298, 6, (float)actor.Sanity / 100, Cyan);
+                Box(box, "LowTick", 20 + 298 * 0.30f, 135, 2, 12, Gold);
+                Box(box, "HighTick", 20 + 298 * 0.70f, 135, 2, 12, Gold);
+                Label(box, "RangeLabels", "0          30          稳定区          70       100", 20, 150, 300, 18, 11, Muted);
+                // The four part rows need the room, so the three form odds share one compact line.
                 double[] p = app.Battle.FormProbabilities(actor);
-                ProbabilityRow(box, "技术扩展", p[0], 197, Cyan);
-                ProbabilityRow(box, "基础形态", p[1], 223, Gold);
-                ProbabilityRow(box, "原始形态", p[2], 249, Rust);
-                Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 274, 300, 18, 11, Muted);
-                Label(box, "Attributes", AttributeText(actor), 20, 294, 300, 30, 11, Muted);
+                Label(box, "FormRow", "高理智 " + (p[0] * 100).ToString("0.0") + "%   常态 " + (p[1] * 100).ToString("0.0")
+                    + "%   低理智 " + (p[2] * 100).ToString("0.0") + "%", 20, 174, 300, 20, 12, Muted);
+                Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 198, 300, 18, 11, Muted);
+                Label(box, "Attributes", AttributeText(actor), 20, 218, 300, 30, 11, Muted);
+                Label(box, "LimbHeading", "部位损伤  ·  重伤→断肢→义肢", 20, 254, 300, 20, 13, Gold);
+                LimbRow(box, actor, LimbPart.Head, 278);
+                LimbRow(box, actor, LimbPart.Torso, 302);
+                LimbRow(box, actor, LimbPart.Arm, 326);
+                LimbRow(box, actor, LimbPart.Leg, 350);
             }
             else
             {
                 Label(box, "EnemyStats", "生命 " + actor.Hp + " / " + actor.Definition.MaxHp + "     速度 " + actor.Speed, 20, 124, 300, 27, 17, Rust);
                 Label(box, "EnemyAttr", AttributeText(actor), 20, 152, 300, 30, 11, Muted);
-                Label(box, "EnemyIntentHeading", "下一次行动预告", 20, 185, 300, 23, 13, Muted);
-                Label(box, "EnemyIntentDetail", app.Battle.Intent(actor), 20, 214, 295, 66, 20, Rust);
-                Label(box, "EnemyHint", "换位、掩护或打断可改变受到的威胁。", 20, 287, 300, 25, 12, Muted);
+                Label(box, "EnemyIntentHeading", "下一次行动预告", 20, 190, 300, 23, 13, Muted);
+                // Three lines once the threat warning is appended, so the box grew with the panel.
+                Label(box, "EnemyIntentDetail", app.Battle.Intent(actor), 20, 220, 295, 84, 20, Rust);
+                Label(box, "EnemyHint", "换位、掩护或打断可改变受到的威胁。", 20, 310, 300, 25, 12, Muted);
+                Label(box, "EnemyLimbNote", "敌人没有部位。只有执斧者的重劈与追猎者的追猎会重创我方部位。", 20, 344, 300, 62, 12, Muted);
             }
+        }
+
+        // One part: name, health bar, health, state. A fitted prosthetic is shown in place of the
+        // condition, because that is what the player actually cares about here.
+        private void LimbRow(RectTransform parent, ActorState actor, LimbPart part, float y)
+        {
+            var limb = LimbSystem.Get(actor, part);
+            var condition = LimbSystem.ConditionOf(limb);
+            bool fitted = limb != null && limb.ProstheticFitted;
+            Color color = fitted ? Cyan : condition == LimbCondition.Severed ? Rust : condition == LimbCondition.Injured ? Gold : Cyan;
+            Label(parent, "Limb_" + part + "_Name", LimbSystem.PartName(part), 20, y, 46, 21, 13, Ink);
+            Meter(parent, "Limb_" + part + "_Bar", 70, y + 8, 104, 5,
+                limb == null || limb.MaxHp <= 0 ? 0 : (float)limb.Hp / limb.MaxHp, color);
+            Label(parent, "Limb_" + part + "_Value", limb == null ? "—" : limb.Hp + "/" + limb.MaxHp, 180, y, 56, 21, 12, Muted, TextAnchor.MiddleRight);
+            Label(parent, "Limb_" + part + "_State", fitted ? "义肢" : LimbSystem.ConditionName(condition), 242, y, 76, 21, 12, color, TextAnchor.MiddleRight);
         }
 
         private string AttributeText(ActorState actor)
@@ -189,60 +227,351 @@ namespace Ruin.Runtime
         }
 
         // Inline page: the header stays clickable, so Help, the acceptance tool and 新开演练 keep working.
+        //
+        // The route is drawn as a line: every position already walked through is a settled card joined to
+        // the next, and the position the party is standing on opens out into this step's candidates.
         private void NodeSelect(RectTransform root)
         {
             if (app.Map.Finished) { RunEnd(root); return; }
-            var floor = app.Map.Current;
+            var step = app.Map.Current;
             var rules = app.Catalog.MapRules();
-            Label(root, "MapHeading", "第 " + floor.Floor + " 层  /  共 " + rules.Floors + " 层", 34, 192, 900, 40, 29, Ink);
-            Label(root, "MapSanityNote", "已推进 " + app.Map.ResolvedFloors + " 层 · 玩家理智决定本层的房间类型与分支数量（不受角色30/70门槛限制）",
-                36, 234, 1240, 24, 15, Muted);
-            Label(root, "MapOddsHeading", "本层可能出现房间的概率", 34, 266, 600, 24, 17, Gold);
-            var panel = Box(root, "MapOddsPanel", 34, 296, 900, 130, Panel);
+            if (step == null) { RunEnd(root); return; }
+
+            Label(root, "MapHeading", "第 " + step.Floor + " 层  /  共 " + rules.Floors + " 层", 34, 186, 700, 38, 29, Ink);
+            Label(root, "MapSupplies", "补给 " + app.Map.Supplies + "   ·   持有义肢 " + app.Run.Prosthetics.Count
+                + (app.Map.BuffChosen ? "   ·   增益 " + OpeningBuffs.Name(app.Map.Buff) : ""),
+                760, 192, 806, 30, 16, Gold, TextAnchor.MiddleRight);
+            Label(root, "MapSanityNote", "已通过 " + app.Map.ResolvedSteps + " 个位置 · 玩家理智 " + app.Run.PlayerSanity.ToString("0.0")
+                + " 同时决定候选数量与房间类型（不受角色30/70门槛限制）", 36, 226, 1240, 24, 15, Muted);
+
+            // Floors already behind the party collapse into one summary line each.
+            float y = 254;
+            for (int f = 1; f < step.Floor; f++)
+            {
+                Label(root, "MapHistory" + f, "第 " + f + " 层   " + FloorSummary(f), 36, y, 1500, 24, 14, Muted);
+                y += 24;
+            }
+
+            Label(root, "MapOddsHeading", "本位置可能出现房间的概率", 34, y + 6, 600, 24, 17, Gold);
+            // Four rows fit across the panel; the fifth type (the chest room) wraps onto a second row and
+            // the route panel gives up exactly as much height as it takes. Zero-weight rows stay off the
+            // panel, so parking a type costs nothing here.
             double[] odds = MapGenerator.TypeOdds(rules, app.Run.PlayerSanity);
             var specs = MapGenerator.Resolve(rules).NodeOdds;
+            int shown = 0;
+            for (int i = 0; i < specs.Length; i++) if (specs[i].Weight > 0) shown++;
+            int rows = Mathf.Max(1, (shown + 3) / 4);
+            float oddsHeight = Mathf.Max(54f, 16f + rows * 30f);
+            var panel = Box(root, "MapOddsPanel", 34, y + 36, 1500, oddsHeight, Panel);
+            int column = 0;
             for (int i = 0; i < specs.Length; i++)
-                ProbabilityRow(panel, MapGenerator.Name(specs[i].Type), odds[i], 14 + (i % 3) * 36, NodeColor(specs[i].Type), 20 + (i / 3) * 440);
-            Label(root, "MapCardsHeading", "本层的房间  ·  " + floor.Nodes.Count + " 个分支", 34, 444, 900, 24, 17, Gold);
-            int count = floor.Nodes.Count;
-            float start = (1600 - (count * 220 + (count - 1) * 40)) / 2;
+            {
+                // A type parked at weight 0 would only ever draw a 0.0% row, so it stays off the panel.
+                if (specs[i].Weight <= 0) continue;
+                ProbabilityRow(panel, MapGenerator.Name(specs[i].Type), odds[i],
+                    17 + (column / 4) * 30, NodeColor(specs[i].Type), 20 + (column % 4) * 366);
+                column++;
+            }
+
+            // The route panel shrinks by whatever the odds strip grew, so the page never runs past the
+            // footer. RouteLine moves its lower half up to match.
+            float routeHeight = Mathf.Max(300f, 330f - (oddsHeight - 54f));
+            float routeTop = y + 36 + oddsHeight + 14;
+            Label(root, "MapCardsHeading", "本层路线  ·  " + (step.Fixed ? "固定房间" : step.Candidates.Count + " 个候选"), 34, routeTop, 900, 24, 17, Gold);
+            // The last fight's reward line, riding along the same row on the right so it cannot push the
+            // route panel off the page.
+            if (!string.IsNullOrEmpty(app.MapNote))
+                Label(root, "MapNote", app.MapNote, 940, routeTop, 626, 24, 14, Gold, TextAnchor.MiddleRight);
+            RouteLine(root, step, routeTop + 30, routeHeight);
+            Label(root, "MapHint", app.Hint ?? "", 34, 782, 1532, 42, 15, Ink);
+            Label(root, "MapRule", "点击一个候选前进。走过的房间固定不变；前方候选只有在走到跟前才会抽出来。", 34, 828, 1532, 22, 12, Muted);
+        }
+
+        // "第 1 层   增益 → 战斗 → 事件 → 电梯井" for the floors already behind the party.
+        private string FloorSummary(int floor)
+        {
+            var names = new List<string>();
+            foreach (var s in app.Map.OnFloor(floor))
+            {
+                if (!s.Resolved || s.Chosen == null) continue;
+                names.Add(s.Chosen.Name);
+            }
+            return names.Count == 0 ? "（未经过任何房间）" : string.Join("  →  ", names);
+        }
+
+        // height is 330 whenever the odds strip is one row tall, which is the normal case. The candidate
+        // half moves up by exactly the shortfall so the cards never spill out of the panel.
+        private void RouteLine(RectTransform root, StepState step, float y, float height)
+        {
+            var panel = Box(root, "RoutePanel", 34, y, 1532, height, Panel);
+            Label(panel, "RouteCaption", "第 " + step.Floor + " 层", 18, 10, 200, 22, 13, Muted);
+
+            // 1) the settled cards, left to right.
+            var passed = new List<NodeState>();
+            foreach (var s in app.Map.OnFloor(step.Floor))
+                if (s.Resolved && s.Chosen != null) passed.Add(s.Chosen);
+            float cardW = 104, cardH = 62, gap = 22;
+            const float inner = 1496;
+            if (!step.Fixed && step.Candidates.Count > 0)
+            {
+                float needed = passed.Count * cardW + (passed.Count + 1) * gap;
+                if (needed > inner) { cardW = Mathf.Max(56, cardW * inner / needed); gap = Mathf.Max(12, gap * inner / needed); }
+            }
+            float x = 18;
+            float lastCenter = 18 + cardW / 2;
+            for (int i = 0; i < passed.Count; i++)
+            {
+                var card = Box(panel, "Passed_" + i, x, 42, cardW, cardH, Raised);
+                Outline(card, NodeColor(passed[i].Type), 1);
+                Label(card, "Passed_" + i + "_Name", passed[i].Name, 4, 8, cardW - 8, 24, 14, Ink, TextAnchor.MiddleCenter);
+                Label(card, "Passed_" + i + "_Floor", "已通过", 4, 34, cardW - 8, 20, 11, Muted, TextAnchor.MiddleCenter);
+                lastCenter = x + cardW / 2;
+                x += cardW;
+                if (i < passed.Count - 1)
+                {
+                    Box(panel, "Link_" + i, x + 2, 42 + cardH / 2 - 1, gap - 4, 2, LineColor);
+                    x += gap;
+                }
+            }
+
+            if (step.Fixed)
+            {
+                // A fixed position has exactly one way forward, so it is its own card.
+                var only = step.Candidates[0];
+                float fx = passed.Count == 0 ? 18 : x + gap;
+                var card = Button(panel, "Node_0", only.Name, "唯一的固定房间",
+                    fx, 42, 220, cardH + 88, () => app.SelectNode(0), false, true, 20);
+                var rect = (RectTransform)card.transform;
+                Outline(rect, NodeColor(only.Type), 1);
+                Label(rect, "NodeDesc0", NodeDescription(only.Type), 13, 48, 194, 72, 12, Muted);
+                Label(panel, "RouteNote", passed.Count == 0 ? "这一层的起点。继续前进会走到这里。" : "本层的末端。继续前进会走到这里。",
+                    18, 42 + cardH + 96, 900, 22, 12, Muted);
+                return;
+            }
+
+            // 2) the trunk: down from the last settled card, then across to every candidate.
+            int count = step.Candidates.Count;
+            float start = (inner - (count * 220 + (count - 1) * 40)) / 2 + 18;
+            float firstCenter = start + 110, lastCandCenter = start + (count - 1) * 260 + 110;
+            float barY = Mathf.Max(106f, 128f - (330f - height));
+            float cardY = barY + 32f;
+            Box(panel, "Trunk", lastCenter - 1, 42 + cardH, 2, barY - 42 - cardH, LineColor);
+            Box(panel, "TrunkBar", Mathf.Min(lastCenter, firstCenter), barY, Mathf.Abs(lastCandCenter - Mathf.Min(lastCenter, firstCenter)) + 2, 2, LineColor);
             for (int i = 0; i < count; i++)
             {
-                var node = floor.Nodes[i];
                 // Captured per iteration: the loop variable itself is shared, so every card would
                 // otherwise call SelectNode with the value the loop ended on.
                 int index = i;
-                var card = Button(root, "Node_" + i, node.Name, node.Placeholder ? "待实现 · 点击跳过" : "可进入战斗",
-                    start + i * 260, 476, 220, 150, () => app.SelectNode(index), false, true, 22);
+                float cx = start + i * 260;
+                Box(panel, "Stub_" + i, cx + 109, barY, 2, cardY - barY, LineColor);
+                var node = step.Candidates[i];
+                var card = Button(panel, "Node_" + i, node.Name, "点击前进",
+                    cx, cardY, 220, 150, () => app.SelectNode(index), false, true, 22);
                 var rect = (RectTransform)card.transform;
-                Outline(rect, node.Placeholder ? LineColor : Gold, 1);
+                Outline(rect, Gold, 1);
                 Label(rect, "NodeDesc" + i, NodeDescription(node.Type), 13, 48, 194, 68, 12, Muted);
             }
-            Label(root, "MapHint", app.Hint ?? "", 34, 782, 1532, 42, 15, Ink);
-            Label(root, "MapRule", "点击一个房间进入；标记「待实现」的房间点击即跳过。已经展示的房间不会重抽。", 34, 828, 1532, 22, 12, Muted);
         }
 
         private void RunEnd(RectTransform root)
         {
-            var panel = Box(root, "MapRunEnd", 34, 260, 1532, 400, Panel);
-            Label(panel, "MapRunEndTitle", "本局结束", 40, 34, 1452, 60, 40, Ink);
+            var panel = Box(root, "MapRunEnd", 34, 240, 1532, 430, Panel);
+            Label(panel, "MapRunEndTitle", app.Map.Cleared ? "本局通关" : "本局结束", 40, 34, 1452, 60, 40, app.Map.Cleared ? Gold : Ink);
             Label(panel, "MapRunEndNote", app.RunEndNote ?? "冒险已经结束。", 40, 112, 1452, 56, 18, Muted);
-            Label(panel, "MapRunEndSummary", "到达第 " + app.Map.Floor + " 层  ·  已完成 " + app.Map.ResolvedFloors + " 层  ·  玩家理智 " + app.Run.PlayerSanity.ToString("0.0"),
-                40, 186, 1452, 40, 20, Gold);
-            Button(panel, "MapNewRun", "新开一局", "重置全部队员与地图", 40, 268, 520, 66, () => app.NewRun(), true, true, 20);
+            Label(panel, "MapRunEndSummary", "到达第 " + app.Map.Floor + " 层  ·  通过 " + app.Map.ResolvedSteps + " 个位置  ·  玩家理智 " + app.Run.PlayerSanity.ToString("0.0"),
+                40, 180, 1452, 40, 20, Gold);
+            Label(panel, "MapRunEndStock", "补给 " + app.Map.Supplies + "  ·  " + StockText(), 40, 224, 1452, 30, 15, Muted);
+            string state = string.Join("   ·   ", app.Run.Heroes.Select(h => h.Name + (h.Dead ? " 阵亡" : " " + h.Hp + "/" + h.Definition.MaxHp)));
+            Label(panel, "MapRunEndParty", state, 40, 262, 1452, 30, 15, Ink);
+            Button(panel, "MapNewRun", "新开一局", "重置全部队员与路线", 40, 322, 520, 66, () => app.NewRun(), true, true, 20);
+        }
+
+        private static readonly LimbPart[] PartOrder = { LimbPart.Head, LimbPart.Torso, LimbPart.Arm, LimbPart.Leg };
+
+        // ---------------- the room pages ----------------
+        // All four are inline, for the same reason NodeSelect is: F1 and F3 have to keep working here.
+
+        private void BuffRoom(RectTransform root)
+        {
+            Label(root, "BuffHeading", "初始增益", 34, 190, 900, 38, 29, Ink);
+            Label(root, "BuffNote", "出发之前，队伍只来得及带走一样东西。选定之后本次冒险不再更改。", 36, 230, 1240, 24, 15, Muted);
+            var options = app.Catalog.MapRules().OpeningBuffs;
+            float start = (1600 - (options.Length * 400 + (options.Length - 1) * 40)) / 2;
+            for (int i = 0; i < options.Length; i++)
+            {
+                var buff = options[i];
+                bool taken = app.Map.BuffChosen;
+                bool mine = taken && app.Map.Buff == buff;
+                var card = Button(root, "Buff_" + buff, OpeningBuffs.Name(buff), OpeningBuffs.Describe(buff),
+                    start + i * 440, 300, 400, 200, () => app.ChooseBuff(buff), mine, !taken, 24);
+                var rect = (RectTransform)card.transform;
+                Outline(rect, mine ? Gold : LineColor, 1);
+            }
+            Label(root, "BuffResult", app.RoomNote ?? "", 34, 540, 1532, 60, 19, Gold);
+            Button(root, "LeaveRoom", app.Map.BuffChosen ? "离开增益房间" : "先选择一项增益", "继续前进",
+                34, 806, 1532, 54, app.LeaveRoom, false, app.Map.BuffChosen, 19);
+        }
+
+        // The supply room took over everything the workshop and the camp used to do. The limb half below is
+        // the old workshop page unchanged, so a part still only ever goes up by being repaired here.
+        private void SupplyRoom(RectTransform root)
+        {
+            Label(root, "SupplyHeading", "补给站", 34, 186, 900, 38, 29, Ink);
+            Label(root, "SupplyNote", "治疗全队、修复重伤部位、为断肢安装义肢、静养恢复理智。每项各可用一次，离开后继续前进。",
+                36, 226, 1240, 24, 15, Muted);
+
+            var heal = Button(root, "SupplyHeal", app.Map.SupplyHealed ? "治疗已使用" : "治疗全队",
+                "每名队员恢复 " + (app.Catalog.MapRules().SupplyHealRatio * 100).ToString("0") + "% 生命",
+                34, 258, 700, 52, app.SupplyHeal, app.Map.SupplyHealed, !app.Map.SupplyHealed, 17);
+            Outline((RectTransform)heal.transform, Cyan, 1);
+            var calm = Button(root, "SupplyCalm", app.Map.SupplyCalmed ? "静养已使用" : "静养",
+                "玩家理智 +" + Exploration.CalmSanity,
+                760, 258, 706, 52, app.SupplyCalm, app.Map.SupplyCalmed, !app.Map.SupplyCalmed, 17);
+            Outline((RectTransform)calm.transform, Gold, 1);
+
+            for (int i = 0; i < app.Run.Heroes.Count; i++) SupplyHero(root, app.Run.Heroes[i], 322 + i * 118);
+            Label(root, "SupplyStock", StockText(), 34, 800, 1532, 22, 14, Gold);
+            Label(root, "SupplyHint", app.Hint ?? "", 34, 824, 1100, 22, 13, Muted);
+            Button(root, "LeaveRoom", "离开补给站", "继续前进", 1160, 812, 406, 44, app.LeaveRoom, false, true, 17);
+        }
+
+        private void SupplyHero(RectTransform root, ActorState hero, float y)
+        {
+            var box = Box(root, "SupplyHero_" + hero.Id, 34, y, 1532, 112, Panel);
+            Label(box, "HeroName", hero.Name, 18, 8, 280, 28, 19, hero.Dead ? Muted : Ink);
+            Label(box, "HeroState", hero.Dead ? "已死亡" : "生命 " + hero.Hp + " / " + hero.Definition.MaxHp,
+                18, 38, 280, 22, 13, hero.Dead ? Rust : Muted);
+            string worst = LimbSystem.Summary(hero);
+            Label(box, "HeroLimb", worst.Length == 0 ? "部位全部完好。" : "最严重  " + worst,
+                18, 62, 280, 42, 12, worst.Length == 0 ? Muted : Rust);
+            for (int i = 0; i < PartOrder.Length; i++)
+                SupplyPart(box, hero, PartOrder[i], 316 + i * 290);
+        }
+
+        // Repair is offered only on an injured part; a severed part offers whatever prosthetic the party
+        // already holds for it, or says so when there is none.
+        private void SupplyPart(RectTransform parent, ActorState hero, LimbPart part, float x)
+        {
+            var limb = LimbSystem.Get(hero, part);
+            var condition = LimbSystem.ConditionOf(limb);
+            bool fitted = limb != null && limb.ProstheticFitted;
+            Color color = fitted ? Cyan : condition == LimbCondition.Severed ? Rust : condition == LimbCondition.Injured ? Gold : Cyan;
+            Label(parent, "Part_" + part + "_Name", LimbSystem.PartName(part), x, 6, 272, 21, 14, Ink);
+            string state = fitted ? "义肢" : LimbSystem.ConditionName(condition);
+            if (limb != null && !fitted) state += "  " + limb.Hp + "/" + limb.MaxHp;
+            Label(parent, "Part_" + part + "_State", state, x, 28, 272, 21, 12, color);
+            if (hero.Dead || limb == null) return;
+            if (condition == LimbCondition.Injured)
+            {
+                Button(parent, "Repair_" + hero.Id + "_" + part, "修复", "恢复到 " + limb.MaxHp + "/" + limb.MaxHp,
+                    x, 52, 272, 48, () => app.RepairLimb(hero.Id, part), false, true, 15);
+                return;
+            }
+            if (condition != LimbCondition.Severed) return;
+            var item = app.Run.Prosthetics.FirstOrDefault(p => p != null && p.Part == part);
+            if (item == null) { Label(parent, "Part_" + part + "_Need", "缺少该部位的义肢", x, 58, 272, 38, 12, Rust); return; }
+            Button(parent, "Install_" + hero.Id + "_" + part, "安装 " + item.Name, item.Description,
+                x, 52, 272, 48, () => app.InstallProsthetic(hero.Id, item.Id), false, true, 15);
+        }
+
+        // Events and altars share one page. The visible options were frozen when the party walked in, so a
+        // re-render never re-rolls the room and never widens the choice.
+        private void EventRoom(RectTransform root)
+        {
+            var node = app.ActiveNode;
+            bool altar = node != null && node.Type == NodeType.Altar;
+            Label(root, "EventHeading", altar ? "祭坛房间" : "事件房间", 34, 190, 900, 38, 29, Ink);
+            var spec = node == null ? null : Exploration.Find(app.Catalog.MapRules(), node.EventId);
+            if (spec == null)
+            {
+                Label(root, "EventNote", "这里什么也没有留下。", 36, 232, 1240, 24, 15, Muted);
+                Button(root, "LeaveRoom", "离开", "继续前进", 34, 806, 1532, 54, app.LeaveRoom, false, true, 19);
+                return;
+            }
+            Label(root, "EventTitle", spec.Title, 34, 232, 1240, 34, 23, Gold);
+            Label(root, "EventBody", spec.Body, 36, 274, 1240, 56, 16, Ink);
+            var mask = node.OptionMask;
+            float start = (1600 - (spec.Options.Length * 480 + (spec.Options.Length - 1) * 30)) / 2;
+            for (int i = 0; i < spec.Options.Length; i++)
+            {
+                bool shown = mask != null && i < mask.Length && mask[i];
+                var option = spec.Options[i];
+                string detail = shown ? option.Detail : "此刻你不会想到这个选项。";
+                int index = i;
+                Button(root, "EventOption_" + i, shown ? option.Label : "—— 不可选 ——", detail,
+                    start + i * 510, 350, 480, 140,
+                    shown && !app.EventChosen ? () => app.ChooseEventOption(index) : (Action)(() => { }),
+                    app.EventChosen && node.OptionChosen == i, shown && !app.EventChosen, 18);
+            }
+            Label(root, "EventResult", app.RoomNote ?? "", 34, 520, 1532, 60, 19, app.EventChosen ? Gold : Muted);
+            Label(root, "EventSanity", "玩家理智 " + app.Run.PlayerSanity.ToString("0.0") + "   ·   补给 " + app.Map.Supplies,
+                34, 584, 1532, 24, 15, Muted);
+            Button(root, "LeaveRoom", app.EventChosen ? "离开房间" : "先选择一种处理方式", "继续前进",
+                34, 806, 1532, 54, app.LeaveRoom, false, app.EventChosen, 19);
+        }
+
+        // A pure transition page: no fight, no draw, just the floor summary and the way down.
+        private void ElevatorRoom(RectTransform root)
+        {
+            Label(root, "ElevatorHeading", "电梯井", 34, 190, 900, 38, 29, Ink);
+            Label(root, "ElevatorNote", "第 " + app.Map.Floor + " 层到此为止。下行之后不会自动整备生命，个人理智与精神状态保留。",
+                36, 230, 1240, 24, 15, Muted);
+            var panel = Box(root, "ElevatorPanel", 34, 268, 1532, 330, Panel);
+            Label(panel, "ElevatorRoute", "本层路线   " + FloorSummary(app.Map.Floor), 22, 20, 1488, 30, 17, Gold);
+            for (int i = 0; i < app.Run.Heroes.Count; i++)
+            {
+                var hero = app.Run.Heroes[i];
+                string line = hero.Name + (hero.Dead ? "   阵亡" : "   生命 " + hero.Hp + " / " + hero.Definition.MaxHp);
+                Label(panel, "ElevatorHero" + i, line, 22, 66 + i * 34, 700, 28, 16, hero.Dead ? Rust : Ink);
+                string limbs = LimbSystem.Summary(hero);
+                Label(panel, "ElevatorLimb" + i, limbs.Length == 0 ? "部位全部完好" : "最严重  " + limbs,
+                    760, 66 + i * 34, 750, 28, 13, limbs.Length == 0 ? Muted : Gold);
+            }
+            Label(panel, "ElevatorStock", StockText(), 22, 246, 1488, 24, 14, Muted);
+            Label(panel, "ElevatorSupply", "补给 " + app.Map.Supplies + "   ·   玩家理智 " + app.Run.PlayerSanity.ToString("0.0") + "   ·   增益 " + OpeningBuffs.Name(app.Map.Buff),
+                22, 278, 1488, 24, 14, Muted);
+            Button(root, "ElevatorDown", "下到第 " + (app.Map.Floor + 1) + " 层", "进入下一层的补给站", 34, 806, 1532, 54, app.AdvanceFloor, false, true, 19);
+        }
+
+        // A page for a room type that is registered but has no content yet. It resolves the position like
+        // any other room so a forced visit cannot strand the party on the route.
+        private void TreasureRoom(RectTransform root)
+        {
+            Label(root, "TreasureHeading", "宝箱房", 34, 190, 900, 38, 29, Ink);
+            Label(root, "TreasureNote", "第 " + app.Map.Floor + " 层   ·   " + app.Map.Current.Index + " 号位置",
+                36, 230, 1240, 24, 15, Muted);
+            var panel = Box(root, "TreasurePanel", 34, 268, 1532, 330, Panel);
+            Label(panel, "TreasureBody", "这个房间还没有内容。", 22, 24, 1488, 32, 19, Gold);
+            Label(panel, "TreasureDetail",
+                "宝箱房已经进入路线，理智50 时占房间概率的 10%，但它发什么奖励还没有定，所以进来不发放任何东西。\n"
+                + "奖励确定后在这里补上即可，权重可以在 GameCatalog 资产的 MapNodeOdds 里调。",
+                22, 66, 1488, 90, 15, Ink);
+            Label(panel, "TreasureStock", "补给 " + app.Map.Supplies + "   ·   持有义肢 " + app.Run.Prosthetics.Count
+                + "   ·   玩家理智 " + app.Run.PlayerSanity.ToString("0.0"), 22, 176, 1488, 26, 15, Muted);
+            Label(panel, "TreasureResult", app.RoomNote ?? "", 22, 218, 1488, 60, 17, Gold);
+            Button(root, "LeaveRoom", "离开宝箱房", "继续前进", 34, 806, 1532, 54, app.LeaveRoom, false, true, 19);
+        }
+
+        private string StockText()
+        {
+            if (app.Run.Prosthetics.Count == 0) return "持有义肢：无（精英战斗掉落，本次可用 F3 验收工具发放）";
+            var groups = app.Run.Prosthetics.GroupBy(p => p.Id).Select(g => g.First().Name + (g.Count() > 1 ? " ×" + g.Count() : ""));
+            return "持有义肢：" + string.Join("   ·   ", groups);
         }
 
         private static string NodeDescription(NodeType type)
         {
             switch (type)
             {
-                case NodeType.Battle: return "普通敌人。胜利后结算理智反馈。";
-                case NodeType.EliteBattle: return "更强的敌人与更好的收获。";
+                case NodeType.Battle: return "普通敌人。胜利后结算理智反馈与补给。";
+                case NodeType.EliteBattle: return "更强的敌人，掉落义肢。";
                 case NodeType.Event: return "面对情境并做出选择。";
-                case NodeType.Merchant: return "商议补给与交易。";
-                case NodeType.Camp: return "整备生命与持续状态。";
-                case NodeType.Workshop: return "安装与修复义肢。";
-                case NodeType.Boss: return "本层的终点，尚未实装。";
+                case NodeType.Altar: return "祭坛：代价换收获。";
+                case NodeType.Boss: return "本层终点。胜利即通关，全队阵亡则本局结束。";
+                case NodeType.Supply: return "治疗、修复部位、安装义肢、静养。";
+                case NodeType.Elevator: return "本层到此为止，通往下一层。";
+                case NodeType.Opening: return "三选一的全队增益。";
+                case NodeType.Treasure: return "宝箱房（内容待定，进去目前不发放任何东西）。";
                 default: return "";
             }
         }
@@ -254,9 +583,8 @@ namespace Ruin.Runtime
                 case NodeType.Battle:
                 case NodeType.EliteBattle:
                 case NodeType.Boss: return Rust;
-                case NodeType.Merchant:
-                case NodeType.Camp:
-                case NodeType.Workshop: return Cyan;
+                case NodeType.Supply: return Cyan;
+                case NodeType.Elevator: return LineColor;
                 default: return Gold;
             }
         }
@@ -267,66 +595,45 @@ namespace Ruin.Runtime
             var actor = app.Battle.Current;
             string title = actor == null ? "战斗已结算" : !actor.Player ? "等待敌方行动" : actor.Name + " · 选择行动";
             Label(area, "ActionTitle", title, 20, 14, 600, 29, 20, Ink);
-            Label(area, "Instruction", app.Pending.HasValue ? "点击高亮目标  /  Esc取消" : "每次行动消耗一个回合", 713, 18, 440, 24, 13, Muted, TextAnchor.MiddleRight);
-            ActionKind[] order = { ActionKind.Primary, ActionKind.Support, ActionKind.Technical, ActionKind.Defend, ActionKind.Swap, ActionKind.Focus, ActionKind.Embrace, ActionKind.Retreat };
-            for (int i = 0; i < order.Length; i++)
+            Label(area, "Instruction", app.Choosing ? "点击高亮目标  /  Esc取消" : "每次行动消耗一个回合", 713, 18, 440, 24, 13, Muted, TextAnchor.MiddleRight);
+            // 每一回合只有这个角色当前形态的技能，外加一个换位。高理智形态有四个常态技能
+            // 加一个特殊技能，所以按钮最多六个，两行四列的网格仍然装得下。
+            var skills = actor != null && actor.Player ? app.Battle.SkillsFor(actor) : ActorSpec.EmptySkills;
+            for (int i = 0; i <= skills.Length; i++)
             {
-                var kind = order[i];
-                var skill = actor != null && actor.Player ? app.Battle.SkillFor(actor, kind) : null;
-                string name = ActionName(kind, skill);
-                string reason = app.Battle.DisabledReason(kind);
-                string detail = reason ?? ActionDetail(kind, actor, skill);
-                Button(area, "Action_" + kind, name, detail, 20 + (i % 4) * 287, 55 + (i / 4) * 77, 275, 65,
-                    () => app.SelectAction(kind), app.Pending == kind, reason == null && !app.Busy, 17);
+                int index = i;
+                bool swap = index == skills.Length;
+                var skill = swap ? null : skills[index];
+                string reason = swap ? app.Battle.SwapDisabledReason() : app.Battle.SkillDisabledReason(index);
+                string detail = reason ?? (swap ? "与相邻队员交换位置" : SkillDetail(actor, skill));
+                Button(area, swap ? "Swap" : "Skill_" + index, swap ? "换位" : skill.Name, detail,
+                    20 + (index % 4) * 287, 55 + (index / 4) * 77, 275, 65,
+                    swap ? (Action)(() => app.SelectSwap()) : () => app.SelectSkill(index),
+                    swap ? app.PendingSwap : app.PendingSkill == index, reason == null && !app.Busy, 17);
             }
-            Label(area, "ActionHint", app.Hint ?? "", 20, 218, 1136, 42, 14, app.Pending.HasValue ? Gold : Muted);
+            Label(area, "ActionHint", app.Hint ?? "", 20, 218, 1136, 42, 14, app.Choosing ? Gold : Muted);
         }
 
-        private string ActionName(ActionKind kind, SkillSpec skill)
+        private string SkillDetail(ActorState actor, SkillSpec skill)
         {
-            if (skill != null) return skill.Name;
-            switch (kind)
-            {
-                case ActionKind.Primary: return "主要技能";
-                case ActionKind.Support: return "职业技能";
-                case ActionKind.Technical: return "技术灵感";
-                case ActionKind.Defend: return "防御";
-                case ActionKind.Swap: return "换位";
-                case ActionKind.Focus: return "稳定心神";
-                case ActionKind.Embrace: return "直视深渊";
-                default: return "撤退";
-            }
-        }
-
-        private string ActionDetail(ActionKind kind, ActorState actor, SkillSpec skill)
-        {
-            if (skill != null)
-            {
-                string count = kind == ActionKind.Support && skill.Uses > 0 ? " · 剩" + actor.SupportUses + "次" : "";
-                string value = skill.Effect == SkillEffect.Attack ? "伤害 " + app.Battle.SkillValue(actor, skill) + " · "
-                    : skill.Effect == SkillEffect.Heal ? "恢复 " + app.Battle.SkillValue(actor, skill) + " · " : "";
-                return value + skill.Description + count;
-            }
-            switch (kind)
-            {
-                case ActionKind.Defend: return "下次行动前 · 攻击伤害减半";
-                case ActionKind.Swap: return "与相邻队员交换位置";
-                case ActionKind.Focus: return "理智+15 · 剩" + (actor == null ? 0 : actor.FocusUses) + "次";
-                case ActionKind.Embrace: return "理智−15 · 剩" + (actor == null ? 0 : actor.EmbraceUses) + "次";
-                case ActionKind.Retreat: return "结束本场 · 结算理智反馈";
-                default: return "本回合未获得";
-            }
+            string count = skill.Uses > 0 ? " · 剩" + actor.UsesLeft(skill) + "次" : "";
+            string value = skill.Effect == SkillEffect.Attack ? "伤害 " + app.Battle.SkillValue(actor, skill) + " · "
+                : skill.Effect == SkillEffect.Heal ? "恢复 " + app.Battle.SkillValue(actor, skill) + " · " : "";
+            return value + skill.Description + count;
         }
 
         private void Journal(RectTransform root)
         {
-            var box = Box(root, "Journal", 1228, 532, 338, 321, Panel);
+            // Three entries instead of five: the part rows took the vertical room the log used to have.
+            var box = Box(root, "Journal", 1228, 628, 338, 225, Panel);
             Label(box, "JournalHeading", "战斗记录", 20, 15, 298, 25, 17, Ink);
             Box(box, "JournalLine", 20, 51, 298, 1, LineColor);
-            var entries = app.Battle.Events.AsEnumerable().Reverse().Take(5).ToArray();
+            var entries = app.Battle.Events.AsEnumerable().Reverse().Take(3).ToArray();
             for (int i = 0; i < entries.Length; i++)
             {
-                Color c = entries[i].Kind == "damage" || entries[i].Kind == "death" ? Rust : entries[i].Kind == "heal" || entries[i].Kind == "sanity" ? Cyan : Muted;
+                Color c = entries[i].Kind == "damage" || entries[i].Kind == "death" ? Rust
+                    : entries[i].Kind == "limb" ? Gold
+                    : entries[i].Kind == "heal" || entries[i].Kind == "sanity" ? Cyan : Muted;
                 Label(box, "Log" + i, entries[i].Message, 20, 65 + i * 48, 298, 44, 13, c);
             }
         }
@@ -354,37 +661,54 @@ namespace Ruin.Runtime
             Label(p, "Formula", "平均净变化 " + average.ToString("+0.0;-0.0;0.0") + "  ×  " + app.Battle.Rules.FeedbackFactor.ToString("0.0") + "  =  " + result.RawDelta.ToString("+0.0;-0.0;0.0"), 40, 376, 820, 30, 17, Muted);
             Label(p, "PlayerResult", "玩家理智    " + result.Before.ToString("0.0") + "  →  " + result.After.ToString("0.0"), 40, 420, 820, 48, 29, Gold);
             bool wiped = app.Run.Heroes.All(a => a.Dead);
-            Label(p, "Continuity", "进入下一层不会整备生命；个人理智与精神状态保留，死亡队员不复活。", 40, 478, 820, 33, 13, Muted);
-            Button(p, "ContinueBattle", wiped ? "结束本局" : "进入下一层", wiped ? "查看本局结果" : "选择下一个房间",
+            bool boss = app.ActiveNode != null && app.ActiveNode.Type == NodeType.Boss;
+            bool won = result.Outcome == BattleOutcome.Victory;
+            string continuity = boss
+                ? "首领是这条路的尽头：胜利即通关，全队阵亡则本局结束。"
+                : won
+                    ? "胜利的补给已经入账。治疗与义肢只在补给站提供，路线上不会自动整备。"
+                    : "战斗失利，没有收获。治疗与义肢只在补给站提供，路线上不会自动整备。";
+            Label(p, "Continuity", continuity, 40, 478, 820, 33, 13, Muted);
+            Button(p, "ContinueBattle", wiped || (boss && !won) ? "结束本局" : boss ? "通关结算" : "继续前进",
+                wiped ? "查看本局结果" : boss ? "查看本局结果" : "选择下一个位置",
                 40, 532, 394, 56, app.ContinueBattle, true, true, 18);
             Button(p, "ResultNewRun", "新开演练", "重置全部队员", 450, 532, 410, 56, () => app.NewRun(), false, true, 18);
         }
 
         private void Help(RectTransform root)
         {
-            var p = Modal(root, "HelpModal", 980, 656);
+            var p = Modal(root, "HelpModal", 980, 838);
             Label(p, "HelpTitle", "行动指南", 34, 25, 900, 45, 29, Ink);
             string text = "01  选择技能，再点击高亮目标。点击任意角色可查看详情。\n\n" +
                 "02  我方前排靠近敌人。位置不符时，可以消耗行动与相邻队友换位。\n\n" +
-                "03  理智低于30才可能原始化，高于70才可能出现技术灵感。\n      30至70只用基础形态；抽出的技能在本回合内固定。\n\n" +
-                "04  稳定心神和直视深渊分别改变15点个人理智，每场各限两次。\n      它们与敌方低语可能产生凝神或躁动；持续状态跨战斗保留。\n\n" +
-                "05  敌人卡片下方显示下一次攻击。用掩护、换位或打断应对。\n      医师可治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
-                "06  胜利和撤退都会反馈玩家理智：队员平均净变化 × 0.5。\n      结算后进入下一层，玩家理智决定房间类型与分支数量。\n\n" +
-                "07  命中、暴击与闪避由角色属性直接决定，不随理智变化。\n      技能伤害 = 基础攻击力 × 技能倍率；受伤按目标防御比例减少。";
-            Label(p, "HelpBody", text, 38, 92, 904, 470, 18, Ink);
-            Button(p, "CloseHelp", "返回战斗", "Esc / F1", 38, 579, 904, 52, app.ToggleHelp, true, true, 18);
+                "03  每回合只能使用该角色当前的技能，或与相邻队员换位。\n      部分技能每场限次；用尽或站位不符时按钮上会写明原因。\n\n" +
+                "04  理智低于30技能会发生变化，高于70会解锁特殊技能。\n      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n      敌方低语可能带来凝神或躁动；持续状态跨战斗保留。\n\n" +
+                "05  敌人卡片下方显示下一次攻击。用格挡、反击、守护、打断或换位应对。\n      奶妈可以治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
+                "06  战斗结束（胜利或全队阵亡）都会反馈玩家理智：队员平均净变化 × 0.5。\n      全队阵亡本局立即结束；结算后继续前进，理智决定候选数量与房间类型。\n\n" +
+                "07  命中、暴击与闪避由角色属性直接决定，不随理智变化。\n      技能伤害 = 基础攻击力 × 技能倍率；受伤按目标防御比例减少。\n\n" +
+                "08  每个队员有头部、躯干、手臂、腿部四个部位，各有独立血量。\n" +
+                "      只有执斧者的重劈与追猎者的追猎会重创部位：一次重伤，两次断肢。\n" +
+                "      重伤与断肢削弱对应属性（头→命中，躯干→防御，手臂→攻击，腿→速度）。\n" +
+                "      补给站能修复重伤；断肢只能安装已经持有的义肢，义肢会被再次打断。\n\n" +
+                "09  路线共三层：第1层从初始增益房间出发，第2、3层从补给站出发。\n" +
+                "      每层最后是电梯井（第3层为首领）；层内的房间只在你走到跟前时才抽出。\n\n" +
+                "10  每次给出1至3个候选，你选一个走过去；同一个位置不会重复同一种房间。\n" +
+                "      低理智更容易遇到精英与祭坛，高理智更容易遇到事件房间。\n" +
+                "      补给站治疗与修复；精英战斗掉落义肢；宝箱房已上路但奖励未定。";
+            Label(p, "HelpBody", text, 38, 92, 904, 640, 18, Ink);
+            Button(p, "CloseHelp", "返回", "Esc / F1", 38, 752, 904, 52, app.ToggleHelp, true, true, 18);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private void Laboratory(RectTransform root)
         {
-            var p = Modal(root, "LabModal", 1040, 704);
+            var p = Modal(root, "LabModal", 1040, 890);
             Label(p, "LabTitle", "第一阶段验收工具", 34, 23, 960, 44, 28, Ink);
             Label(p, "LabCaption", "仅开发版提供。新建队伍会重置演练；单人调整会计入本场理智净变化。", 36, 76, 968, 28, 15, Muted);
             Label(p, "PresetHeading", "新建固定理智队伍", 36, 128, 920, 26, 17, Gold);
-            Button(p, "Preset15", "理智 15", "只可能触发原始形态", 36, 171, 310, 66, () => app.NewRun(15), false, true, 20);
-            Button(p, "Preset50", "理智 50", "稳定区 · 仅基础形态", 365, 171, 310, 66, () => app.NewRun(50), false, true, 20);
-            Button(p, "Preset85", "理智 85", "只可能触发技术扩展", 694, 171, 310, 66, () => app.NewRun(85), false, true, 20);
+            Button(p, "Preset15", "理智 15", "只可能触发低理智技能变化", 36, 171, 310, 66, () => app.NewRun(15), false, true, 20);
+            Button(p, "Preset50", "理智 50", "稳定区 · 仅常态技能", 365, 171, 310, 66, () => app.NewRun(50), false, true, 20);
+            Button(p, "Preset85", "理智 85", "只可能解锁高理智技能", 694, 171, 310, 66, () => app.NewRun(85), false, true, 20);
             var actor = app.Battle == null ? null : app.Battle.Find(app.InspectedId);
             string selected = actor != null && actor.Player ? actor.Name : "第一位存活队员";
             Label(p, "ChangeHeading", "调整选中队员 / " + selected + "    （不会重抽本回合技能）", 36, 262, 968, 27, 16, Ink);
@@ -396,13 +720,28 @@ namespace Ruin.Runtime
             Button(p, "ClearMental", "治疗状态", "清除持续状态", 856, 304, 148, 54, () => app.DebugMental(MentalState.None), false, true, 16);
             Label(p, "ScenariosHeading", "结算与濒死样例", 36, 389, 920, 26, 17, Gold);
             Button(p, "FeedbackExample", "反馈 −2.5", "变化 −20 / −10 / 0 / +10", 36, 432, 310, 67, app.DebugFeedbackExample, false, true, 18);
-            Button(p, "DeathDoorExample", "濒死演练", "护卫0生命 · 尝试救治", 365, 432, 310, 67, app.DebugDeathDoor, false, true, 18);
+            Button(p, "DeathDoorExample", "濒死演练", "盾卫0生命 · 尝试救治", 365, 432, 310, 67, app.DebugDeathDoor, false, true, 18);
             Button(p, "EndBattleDebug", "结束当前演练", "查看反馈与状态延续", 694, 432, 310, 67, app.DebugSettle, false, true, 18);
-            Label(p, "MapLabHeading", "地图与整备", 36, 508, 920, 26, 17, Gold);
-            Button(p, "RestParty", "整备全队生命", "验收便利 · 不改理智", 36, 548, 310, 54, app.DebugRestParty, false, true, 18);
-            Button(p, "SkipFloor", "跳过本层", "推进到下一层房间", 365, 548, 310, 54, app.DebugResolveFloor, false, true, 18);
-            Button(p, "JumpBoss", "跳到首领层", "查看结束流程", 694, 548, 310, 54, () => app.DebugEnterFloor(app.Catalog.MapRules().Floors), false, true, 18);
-            Button(p, "CloseLab", "返回", "F3 / Esc", 36, 620, 968, 56, app.ToggleLab, true, true, 18);
+            Label(p, "MapLabHeading", "地图与房间", 36, 504, 920, 26, 17, Gold);
+            Button(p, "RestParty", "整备全队生命", "验收便利 · 不改理智", 36, 542, 310, 54, app.DebugRestParty, false, true, 18);
+            Button(p, "SkipFloor", "跳到本层末端", "末位是电梯井或首领", 365, 542, 310, 54, app.DebugSkipToFloorEnd, false, true, 18);
+            Button(p, "JumpBoss", "跳到首领层", "查看结束流程", 694, 542, 310, 54, () => app.DebugEnterFloor(app.Catalog.MapRules().Floors), false, true, 18);
+            // Five buttons share the row the four used to, so the widths shrink by 43 px each. The chest
+            // room has no weight on the route yet, which makes this the only way to look at its page.
+            Button(p, "ForceSupply", "进入补给站", "替换当前候选", 36, 602, 184, 50, () => app.DebugForceRoom(NodeType.Supply), false, true, 15);
+            Button(p, "ForceEvent", "进入事件房间", "替换当前候选", 232, 602, 184, 50, () => app.DebugForceRoom(NodeType.Event), false, true, 15);
+            Button(p, "ForceAltar", "进入祭坛房间", "替换当前候选", 428, 602, 184, 50, () => app.DebugForceRoom(NodeType.Altar), false, true, 15);
+            Button(p, "ForceTreasure", "进入宝箱房", "内容待定", 624, 602, 184, 50, () => app.DebugForceRoom(NodeType.Treasure), false, true, 15);
+            Button(p, "ForceElevator", "进入电梯井", "替换当前候选", 820, 602, 184, 50, () => app.DebugForceRoom(NodeType.Elevator), false, true, 15);
+            Label(p, "LimbLabHeading", "身体与义肢   （作用于选中队员，可在房间页使用）", 36, 664, 968, 26, 17, Gold);
+            Button(p, "InjureHead", "击伤·头部", "命中 −10%", 36, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Head), false, true, 16);
+            Button(p, "InjureTorso", "击伤·躯干", "防御 −20%", 283, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Torso), false, true, 16);
+            Button(p, "InjureArm", "击伤·手臂", "攻击 −20%", 530, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Arm), false, true, 16);
+            Button(p, "InjureLeg", "击伤·腿部", "速度 −20%", 777, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Leg), false, true, 16);
+            Button(p, "SeverArm", "断肢·手臂", "两次击伤的效果", 36, 764, 294, 54, () => app.DebugSeverLimb(LimbPart.Arm), false, true, 16);
+            Button(p, "SeverLeg", "断肢·腿部", "两次击伤的效果", 350, 764, 294, 54, () => app.DebugSeverLimb(LimbPart.Leg), false, true, 16);
+            Button(p, "GrantAllProsthetics", "发放全部义肢", "进入补给站前先领好", 664, 764, 340, 54, app.DebugGrantAllProsthetics, false, true, 16);
+            Button(p, "CloseLab", "返回", "F3 / Esc", 36, 830, 968, 52, app.ToggleLab, true, true, 18);
         }
 #endif
 

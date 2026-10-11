@@ -54,33 +54,74 @@ namespace Ruin.Runtime
 
         private IEnumerator RunChecks()
         {
-            // A run opens on the node page: the opening floor offers three rooms to pick from.
-            Require(app.AwaitingNode && app.Map != null && app.Map.Current != null, "Run opens on the node selection page");
-            Require(app.Map.Current.Nodes.Count == 3, "Opening floor offers three rooms");
-            Require(app.Map.Current.Nodes[0].Type == NodeType.Battle, "Opening floor keeps a playable battle on the spine");
-            Require(app.Map.Current.Nodes.Count >= 1 && app.Map.Current.Nodes.Count <= 3, "Branch count stays between one and three");
-            app.View.InterfaceFont.RequestCharactersInTexture("界限之间护卫侦察者弩手医师理智凝神躁动濒死商人营地工坊首领", 24, FontStyle.Normal);
-            Require("界限之间护卫理智濒死商人营地工坊首领".All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
+            // 开局：路线的第一个位置是第一层的初始增益房，固定不抽随机。
+            Require(app.AwaitingNode && app.Map != null && app.Map.Current != null, "Run opens on the route page");
+            Require(app.Map.Floor == 1 && app.Map.Current.Index == 0, "Run opens on the first position of the first floor");
+            Require(app.Map.Current.Fixed && app.Map.Current.Candidates.Count == 1 && app.Map.Current.Candidates[0].Type == NodeType.Opening,
+                "The opening position is a fixed buff room");
+            app.View.InterfaceFont.RequestCharactersInTexture("界限之间战士盾卫枪手奶妈理智凝神躁动濒死祭坛事件补给站电梯井首领增益坚韧锋锐清明部位义肢断修复重创", 24, FontStyle.Normal);
+            Require("界限之间战士盾卫枪手奶妈理智濒死祭坛事件补给站电梯井首领增益部位义肢断修复".All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
             yield return Capture("map-1080.png", 1920, 1080);
             yield return Capture("map-720.png", 1280, 720);
 
-            // 已经展示的节点保持固定：重新渲染既不改动房间，也不消耗随机序列。
-            var shownTypes = app.Map.Current.Nodes.Select(n => n.Type).ToArray();
+            // 已经抽出的位置保持固定：重新渲染既不改动候选，也不消耗随机序列。
+            var shownTypes = app.Map.Current.Candidates.Select(n => n.Type).ToArray();
             uint shownState = app.Run.Random.State;
             app.Refresh(); yield return null; app.Refresh(); yield return null;
-            Require(app.Map.Current.Nodes.Select(n => n.Type).SequenceEqual(shownTypes) && app.Run.Random.State == shownState,
-                "A shown floor never re-rolls and consumes no draws");
+            Require(app.Map.Current.Candidates.Select(n => n.Type).SequenceEqual(shownTypes) && app.Run.Random.State == shownState,
+                "A drawn position never re-rolls and consumes no draws");
+
+            // 初始增益：三选一，全队生效，部位上限跟着生命走。
+            var maxBefore = app.Run.Heroes.Select(h => h.Definition.MaxHp).ToArray();
+            var torsoBefore = app.Run.Heroes.Select(h => LimbSystem.Get(h, LimbPart.Torso).MaxHp).ToArray();
+            Click("Node_0"); yield return null;
+            Require(app.Room == RoomView.Buff && app.Battle == null, "The opening room opens the buff page");
+            yield return Capture("buff-1080.png", 1920, 1080);
+            Require(FindObjectsOfType<Button>().Any(b => b.name == "Buff_Toughness") && FindObjectsOfType<Button>().Any(b => b.name == "Buff_Clarity"),
+                "All three opening buffs are offered");
+            Click("Buff_Toughness"); yield return null;
+            Require(app.Map.BuffChosen && app.Map.Buff == GrowthBuff.Toughness, "Choosing a buff records the pick");
+            Require(app.Run.Heroes.Select(h => h.Definition.MaxHp).SequenceEqual(maxBefore.Select(v => v + OpeningBuffs.ToughnessHealth)),
+                "Toughness raises every hero's max health");
+            Require(app.Run.Heroes.Select((h, i) => LimbSystem.Get(h, LimbPart.Torso).MaxHp > torsoBefore[i]).All(grew => grew),
+                "Limb caps follow the buffed health");
+            Click("LeaveRoom"); yield return null;
+            Require(app.AwaitingNode && app.Room == RoomView.Map, "Leaving the buff room returns to the route");
+            Require(!app.Map.Current.Fixed && app.Map.Current.Candidates.Count >= 1 && app.Map.Current.Candidates.Count <= 3,
+                "The next position draws one to three candidates");
+            Require(app.Map.Current.Candidates.All(n => n.Type == NodeType.Battle || n.Type == NodeType.EliteBattle
+                || n.Type == NodeType.Altar || n.Type == NodeType.Event || n.Type == NodeType.Treasure),
+                "Drawable positions only offer the sampleable rooms");
+            // Candidates inside one position never repeat a room type, except events: two events side by
+            // side read as two leads, so they are allowed to pair up.
+            var drawn = app.Map.Current.Candidates.Select(n => n.Type).Where(t => t != NodeType.Event).ToList();
+            Require(drawn.Distinct().Count() == drawn.Count, "One position never offers the same non-event room twice");
+            yield return Capture("route-1080.png", 1920, 1080);
 
             yield return EnterBattle();
             Require(app.Battle != null && app.Run.Heroes.Count == 4, "Four-hero battle loaded");
             yield return Capture("battle-1080.png", 1920, 1080);
             yield return Capture("battle-720.png", 1280, 720);
-            Click("Action_Primary"); yield return null;
-            Require(app.Pending == ActionKind.Primary, "Skill selection exposes target selection");
-            string target = app.Battle.Targets(ActionKind.Primary).First().Id;
-            Click("Actor_" + target);
-            yield return WaitReady();
-            Require(app.Battle.Events.Any(e => e.Kind == "action" || e.Kind == "miss"), "Target click resolves action and enemy response");
+            // 行动区只有当前形态的技能加一个换位，所以这里按下标找第一个按钮可用的技能。
+            int opening = FirstUsableSkill(SkillEffect.Attack);
+            Require(opening >= 0 || app.Battle.SwapDisabledReason() == null, "The action area always offers something to do");
+            if (opening >= 0)
+            {
+                Click("Skill_" + opening); yield return null;
+                Require(app.PendingSkill == opening, "Skill selection exposes target selection");
+                string target = app.Battle.Targets(opening).First().Id;
+                Click("Actor_" + target);
+                yield return WaitReady();
+            }
+            else
+            {
+                Click("Swap"); yield return null;
+                Require(app.PendingSwap, "Swap selection exposes neighbour selection");
+                Click("Actor_" + app.Battle.SwapTargets().First().Id);
+                yield return WaitReady();
+            }
+            Require(app.Battle.Events.Any(e => e.Kind == "action" || e.Kind == "miss" || e.Kind == "heal" || e.Kind == "move"),
+                "Target click resolves action and enemy response");
 
             Click("Laboratory"); yield return null; Click("Preset85"); yield return null;
             yield return EnterBattle();
@@ -109,59 +150,201 @@ namespace Ruin.Runtime
             Click("NewRun"); yield return null;
             yield return EnterBattle();
 
-            int actions = 0;
-            while (app.Battle.Outcome == BattleOutcome.Active && actions++ < 150)
-            {
-                yield return WaitReady();
-                if (app.Battle.Outcome != BattleOutcome.Active) break;
-                var battle = app.Battle;
-                ActionKind chosen = ActionKind.Defend;
-                var actor = battle.Current;
-                if (actor == null || !actor.Player) throw new Exception("No human turn after ready");
-                if (actor.Definition.Role == HeroRole.Medic && battle.DisabledReason(ActionKind.Support) == null && battle.Targets(ActionKind.Support).Any(h => h.Hp <= h.Definition.MaxHp - 9))
-                    chosen = ActionKind.Support;
-                else
-                {
-                    foreach (var k in new[] { ActionKind.Technical, ActionKind.Primary, ActionKind.Support })
-                        if (battle.DisabledReason(k) == null && battle.SkillFor(actor, k).Effect == SkillEffect.Attack) { chosen = k; break; }
-                }
-                string targetId = battle.Targets(chosen).OrderBy(a => a.Hp).Select(a => a.Id).FirstOrDefault();
-                Click("Action_" + chosen); yield return null;
-                if (targetId != null) { Click("Actor_" + targetId); yield return null; }
-                yield return WaitReady();
-            }
+            yield return Fight();
             Require(app.Battle.Outcome == BattleOutcome.Victory, "Full battle completed to victory using UI buttons");
             Require(app.Battle.Settlement != null, "Victory produces sanity settlement");
             yield return Capture("victory-1080.png", 1920, 1080);
 
-            // 结算 → 下一层 → 占位房间跳过 → 首领层结束本局。
+            // 结算只把队伍往前推一个位置，不换层；走过之后那个位置仍然固定不变。
             Click("ContinueBattle"); yield return null;
-            Require(app.AwaitingNode && app.Map.Floor == 2, "Victory advances to the next floor");
-            var floorTwoTypes = app.Map.Current.Nodes.Select(n => n.Type).ToArray();
-            int placeholder = Array.FindIndex(app.Map.Current.Nodes.ToArray(), n => n.Placeholder);
-            if (placeholder >= 0)
-            {
-                Click("Node_" + placeholder); yield return null;
-                Require(app.Map.Floor > 2, "A placeholder room skips straight to the next floor");
-            }
-            Require(app.Map.FloorAt(2).Nodes.Select(n => n.Type).SequenceEqual(floorTwoTypes), "A shown floor is never re-rolled after advancing");
+            Require(app.AwaitingNode && app.Battle == null && app.Map.Floor == 1, "A won battle walks to the next position on the same floor");
+            Require(!string.IsNullOrEmpty(app.MapNote) && app.MapNote.Contains("补给"),
+                "The route page reports what the won fight paid out");
+            Require(FindObjectsOfType<Text>().Any(t => t.name == "MapNote" && t.text == app.MapNote),
+                "That reward line is actually drawn on the route page");
+            var nextTypes = app.Map.Current.Candidates.Select(n => n.Type).ToArray();
+            uint nextState = app.Run.Random.State;
+            app.Refresh(); yield return null; app.Refresh(); yield return null;
+            Require(app.Map.Current.Candidates.Select(n => n.Type).SequenceEqual(nextTypes) && app.Run.Random.State == nextState,
+                "A drawn position stays fixed after a battle");
 
-            while (app.Map.Floor < app.Catalog.MapRules().Floors && !app.Map.Finished) { app.DebugResolveFloor(); yield return null; }
-            Require(app.Map.Current != null && app.Map.Current.Nodes.Count == 1 && app.Map.Current.Nodes[0].Type == NodeType.Boss,
-                "The final floor holds a single boss room");
-            Click("Node_0"); yield return null;
-            Require(app.Map.Finished, "The boss room ends the run");
+            // 撤退不发奖励。验收工具结束战斗走的是撤退，正好用来验这条规则。
+            int suppliesBefore = app.Map.Supplies;
+            int stockBefore = app.Run.Prosthetics.Count;
+            app.DebugForceRoom(NodeType.EliteBattle);
+            yield return WaitReady();
+            Require(app.Battle != null, "The debug tool can open an elite battle");
+            app.DebugSettle();
+            yield return WaitReady();
+            Click("ContinueBattle"); yield return null;
+            Require(app.Map.Supplies == suppliesBefore && app.Run.Prosthetics.Count == stockBefore,
+                "A retreat pays no supplies and drops no prosthetic");
+            Require(!string.IsNullOrEmpty(app.MapNote) && app.MapNote.Contains("撤退"),
+                "The route page reports the retreat");
+
+            // 事件房间：内容与可见选项在进房时冻结，隐藏选项不能选，也改不动任何状态。
+            Click("Laboratory"); yield return null; Click("ForceEvent"); yield return null;
+            Require(app.Room == RoomView.Event && app.Battle == null, "The event room opens the event page");
+            yield return Capture("event-1080.png", 1920, 1080);
+            var eventNode = app.ActiveNode;
+            Require(eventNode != null && !string.IsNullOrEmpty(eventNode.EventId) && eventNode.OptionMask != null && eventNode.OptionMask[0],
+                "The event rolls content and always offers the base option");
+            var eventSpec = Exploration.Find(app.Catalog.MapRules(), eventNode.EventId);
+            Require(eventSpec != null && eventSpec.Options.Length == eventNode.OptionMask.Length,
+                "The frozen option mask matches the rolled content");
+            for (int i = 0; i < eventNode.OptionMask.Length; i++)
+            {
+                var option = FindObjectsOfType<Button>().FirstOrDefault(b => b.name == "EventOption_" + i);
+                if (option == null)
+                {
+                    // Every option is rendered, even the frozen-out ones, so a hidden option is visible as
+                    // a disabled card rather than vanishing.
+                    throw new Exception("Event option card missing: " + i);
+                }
+                if (option.interactable != eventNode.OptionMask[i]) throw new Exception("A frozen-out option is still selectable: " + i);
+            }
+            double sanityBefore = app.Run.PlayerSanity;
+            int hidden = Array.FindIndex(eventNode.OptionMask, m => !m);
+            if (hidden >= 0)
+            {
+                app.ChooseEventOption(hidden); yield return null;
+                Require(!app.EventChosen && Math.Abs(app.Run.PlayerSanity - sanityBefore) < 0.000001,
+                    "A frozen-out option is refused and changes nothing");
+            }
+            app.ChooseEventOption(eventSpec.Options.Length); yield return null;
+            Require(!app.EventChosen, "An out-of-range option is refused");
+            int open = Array.FindIndex(eventNode.OptionMask, m => m);
+            var picked = eventSpec.Options[open];
+            Click("EventOption_" + open); yield return null;
+            Require(app.EventChosen && eventNode.OptionChosen == open, "A visible option resolves the room");
+            Require(Math.Abs(app.Run.PlayerSanity - SanityProbability.Clamp(sanityBefore + picked.SanityDelta, 0, 100)) < 0.000001,
+                "The chosen option applies its sanity cost");
+            Click("LeaveRoom"); yield return null;
+            Require(app.AwaitingNode && app.Room == RoomView.Map, "Leaving the event returns to the route");
+
+            // 补给站：治疗、修复重伤部位、为断肢安装义肢。工坊的全部职责都并进了这一页。
+            app.DebugInjureLimb(LimbPart.Arm); yield return null;
+            app.DebugSeverLimb(LimbPart.Head); yield return null;
+            var wounded = app.Run.Heroes.FirstOrDefault(h => LimbSystem.ConditionOf(h, LimbPart.Arm) == LimbCondition.Injured);
+            var amputee = app.Run.Heroes.FirstOrDefault(h => LimbSystem.ConditionOf(h, LimbPart.Head) == LimbCondition.Severed);
+            Require(wounded != null && amputee != null, "The acceptance tool injures one part and severs another");
+            Click("Laboratory"); yield return null; Click("ForceSupply"); yield return null;
+            Require(app.Room == RoomView.Supply && app.Battle == null, "The supply room opens the supply page");
+            yield return Capture("supply-1080.png", 1920, 1080);
+            Require(FindObjectsOfType<Button>().Any(b => b.name == "Repair_" + wounded.Id + "_Arm"), "An injured part offers a repair");
+            Click("Repair_" + wounded.Id + "_Arm"); yield return null;
+            Require(LimbSystem.ConditionOf(wounded, LimbPart.Arm) == LimbCondition.Intact, "The supply room repairs an injured part");
+            Require(FindObjectsOfType<Text>().Any(t => t.name == "Part_Head_Need"), "A severed part without a matching prosthetic says so");
+            app.DebugGrantProsthetic(LimbPart.Head); yield return null;
+            Require(FindObjectsOfType<Button>().Any(b => b.name == "Install_" + amputee.Id + "_Head"), "A held prosthetic offers an install");
+            Click("Install_" + amputee.Id + "_Head"); yield return null;
+            Require(LimbSystem.HasProsthetic(amputee, LimbPart.Head), "The supply room fits a prosthetic");
+            Require(app.Run.Prosthetics.All(p => p.Part != LimbPart.Head), "Fitting consumes the prosthetic from the stock");
+            Click("SupplyHeal"); yield return null;
+            Require(app.Map.SupplyHealed, "The supply room heals the party once per visit");
+            Click("SupplyCalm"); yield return null;
+            Require(app.Map.SupplyCalmed, "The supply room steadies the party once per visit");
+            Click("LeaveRoom"); yield return null;
+            Require(app.AwaitingNode && app.Room == RoomView.Map, "Leaving the supply room returns to the route");
+
+            // 电梯井：纯过渡页，只换层，不整备生命。
+            Click("Laboratory"); yield return null; Click("ForceElevator"); yield return null;
+            Require(app.Room == RoomView.Elevator && app.Battle == null, "The elevator opens a transition page");
+            yield return Capture("elevator-1080.png", 1920, 1080);
+            int hpAtElevator = app.Run.Heroes.Where(h => !h.Dead).Sum(h => h.Hp);
+            Click("ElevatorDown"); yield return null;
+            Require(app.AwaitingNode && app.Room == RoomView.Map && app.Map.Floor == 2, "The elevator goes down exactly one floor");
+            Require(app.Map.Current.Fixed && app.Map.Current.Candidates[0].Type == NodeType.Supply,
+                "The second floor opens on a fixed supply room");
+            Require(app.Run.Heroes.Where(h => !h.Dead).Sum(h => h.Hp) == hpAtElevator, "Going down does not heal the party");
+
+            // 首领：最后一层的末端。胜利即通关，撤退或阵亡则本局结束。
+            app.DebugEnterFloor(app.Catalog.MapRules().Floors); yield return null;
+            Require(app.Map.Floor == app.Catalog.MapRules().Floors, "The acceptance tool jumps to the final floor");
+            app.DebugSkipToFloorEnd(); yield return null;
+            Require(app.Map.Current.Fixed && app.Map.Current.Candidates[0].Type == NodeType.Boss,
+                "The final floor ends on a single boss room");
+            Click("Node_0"); yield return WaitReady();
+            Require(app.Battle != null && app.Battle.Enemies.All(e => e.Name.StartsWith("首领")),
+                "The boss room scales the enemies into bosses");
+            yield return Fight();
+            bool bossWon = app.Battle.Outcome == BattleOutcome.Victory;
+            Click("ContinueBattle"); yield return null;
+            Require(app.Map.Finished, "The boss room always ends the run");
+            Require(app.Map.Cleared == bossWon, "Only a won boss fight clears the run");
             yield return Capture("map-end-1080.png", 1920, 1080);
             Click("MapNewRun"); yield return null;
-            Require(!app.Map.Finished && app.Map.Floor == 1 && app.Map.Current.Nodes.Count == 3, "New run restarts at the opening floor");
+            Require(!app.Map.Finished && app.Map.Floor == 1 && app.Map.Current.Candidates[0].Type == NodeType.Opening,
+                "A new run restarts at the opening buff room");
+
+            // 战斗页的部位面板：断肢与重伤都要能在队伍卡片下方看到。
+            app.DebugSeverLimb(LimbPart.Arm); yield return null;
+            app.DebugInjureLimb(LimbPart.Leg); yield return null;
+            yield return EnterBattle();
+            Require(FindObjectsOfType<Text>().Any(t => t.name == "LimbHeading"), "The inspector carries the part panel");
+            Require(FindObjectsOfType<Text>().Any(t => t.text.Contains("断肢")), "A severed part shows on the battle page");
+            yield return Capture("limbs-1080.png", 1920, 1080);
         }
 
-        // Battle rooms are entered through the node page now, so every battle step goes through here.
+        // The route draws its own rooms, so a battle on demand goes through the acceptance tool instead of
+        // whatever the seed happened to put in front of the party.
         private IEnumerator EnterBattle()
         {
-            Click("Node_0");
+            if (app.Room != RoomView.Map) throw new Exception("EnterBattle needs the route page, was " + app.Room);
+            app.DebugForceRoom(NodeType.Battle);
             yield return WaitReady();
             if (app.Battle == null) throw new Exception("Battle room did not open a battle");
+        }
+
+        // The greedy policy the smoke uses to grind a fight to its end through the real UI buttons.
+        private IEnumerator Fight()
+        {
+            int actions = 0;
+            while (app.Battle.Outcome == BattleOutcome.Active && actions++ < 200)
+            {
+                yield return WaitReady();
+                if (app.Battle.Outcome != BattleOutcome.Active) break;
+                yield return PlayOneAction();
+            }
+            if (app.Battle.Outcome == BattleOutcome.Active) throw new Exception("Battle did not finish within 200 actions");
+        }
+
+        // 优先打人，其次治疗或增益，都不行才换位。低理智形态只留一个技能，如果那个技能是治疗，
+        // 满血时就会没有合法目标，这时唯一还能做的就是换位。
+        private IEnumerator PlayOneAction()
+        {
+            var battle = app.Battle;
+            var actor = battle.Current;
+            if (actor == null || !actor.Player) throw new Exception("No human turn after ready");
+            int chosen = FirstUsableSkill(SkillEffect.Attack);
+            if (chosen < 0) chosen = FirstUsableSkill(null);
+            if (chosen >= 0)
+            {
+                string targetId = battle.Targets(chosen).OrderBy(a => a.Hp).Select(a => a.Id).FirstOrDefault();
+                Click("Skill_" + chosen); yield return null;
+                if (targetId != null) { Click("Actor_" + targetId); yield return null; }
+                yield return WaitReady();
+                yield break;
+            }
+            if (battle.SwapDisabledReason() != null) throw new Exception("No usable action for " + actor.Name);
+            string neighbour = battle.SwapTargets().Select(a => a.Id).First();
+            Click("Swap"); yield return null;
+            Click("Actor_" + neighbour); yield return null;
+            yield return WaitReady();
+        }
+
+        // 第一个按钮可用、且有合法目标的技能下标。effect 为 null 时不筛效果。
+        private int FirstUsableSkill(SkillEffect? effect)
+        {
+            var battle = app.Battle;
+            var skills = battle.SkillsFor(battle.Current);
+            for (int i = 0; i < skills.Length; i++)
+            {
+                if (effect.HasValue && skills[i].Effect != effect.Value) continue;
+                if (battle.SkillDisabledReason(i) != null) continue;
+                if (battle.Targets(i).Any() || skills[i].Targeting == SkillTargeting.All) return i;
+            }
+            return -1;
         }
 
         private IEnumerator WaitReady()

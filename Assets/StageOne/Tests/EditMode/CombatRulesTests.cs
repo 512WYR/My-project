@@ -11,7 +11,8 @@ namespace Ruin.Tests
     {
         private GameCatalog catalog;
         [SetUp] public void SetUp() { catalog = Resources.Load<GameCatalog>("StageOne/GameCatalog"); Assert.NotNull(catalog, "Generate catalog before running tests"); }
-        private RunState Run(double sanity = 50, uint seed = 44972) { return RunState.Create(catalog.Heroes.Select(x => x.ToSpec()).ToArray(), seed, sanity); }
+        // 队伍要在与战斗相同的规则下建部位血量，否则部位上限会和战斗读取的规则脱节。
+        private RunState Run(double sanity = 50, uint seed = 44972) { return RunState.Create(catalog.Heroes.Select(x => x.ToSpec()).ToArray(), seed, sanity, catalog.Rules()); }
         private BattleEngine Battle(RunState run, CombatRules rules = null) { return new BattleEngine(run, catalog.Enemies.Select(x => x.ToSpec()).ToArray(), rules ?? catalog.Rules()); }
         private static WeightedOutcome[] Forms() { return new[] { new WeightedOutcome(.2, 1, SanityGate.High), new WeightedOutcome(.6, 0), new WeightedOutcome(.2, -1, SanityGate.Low) }; }
 
@@ -119,16 +120,17 @@ namespace Ruin.Tests
         [Test] public void InvalidTargetDoesNotSpendActionOrRandomDraw()
         {
             var run = Run(); var battle = Battle(run); var actor = battle.Current; uint state = run.Random.State;
-            string error; Assert.IsFalse(battle.Execute(new ActionRequest(ActionKind.Primary, actor.Id), out error));
+            string error; Assert.IsFalse(battle.Execute(new ActionRequest(ActionKind.Skill, actor.Id, 0), out error));
             Assert.AreSame(actor, battle.Current); Assert.AreEqual(state, run.Random.State); Assert.IsNotEmpty(error);
         }
 
         [Test] public void SwapOnlyAllowsAdjacentLivingAllyAndChangesRanks()
         {
-            var run = Run(); var battle = Battle(run); var scout = battle.Current;
-            Assert.AreEqual("scout", scout.Id); Assert.IsFalse(battle.Targets(ActionKind.Swap).Contains(run.Heroes[3]));
-            string error; Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Swap, "guard"), out error));
-            Assert.AreEqual(0, scout.Rank); Assert.AreEqual(1, run.Heroes[0].Rank);
+            var run = Run(); var battle = Battle(run); var gunner = battle.Current;
+            Assert.AreEqual("gunner", gunner.Id); Assert.AreEqual(3, gunner.Rank);
+            Assert.IsFalse(battle.SwapTargets().Contains(run.Heroes[1]), "只能与相邻的队员换位");
+            string error; Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Swap, "medic"), out error));
+            Assert.AreEqual(2, gunner.Rank); Assert.AreEqual(3, run.Heroes[2].Rank);
         }
 
         [Test] public void FirstZeroHpHitEntersDeathDoorAndSecondCanKill()
@@ -139,19 +141,22 @@ namespace Ruin.Tests
             battle.Damage(hero, 1); Assert.IsTrue(hero.Dead);
         }
 
-        [Test] public void HealingRemovesDeathDoorAndConsumesLimitedUse()
+        [Test] public void HealingRemovesDeathDoor()
         {
-            var run = Run(); var medic = run.Heroes[3]; medic.Definition.Speed = 100; run.Heroes[0].Hp = 0;
+            var run = Run(); var medic = run.Heroes[2]; medic.Definition.Speed = 100; run.Heroes[0].Hp = 0;
             var battle = Battle(run); string error; Assert.AreSame(medic, battle.Current);
-            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Support, "guard"), out error));
-            Assert.AreEqual(9, run.Heroes[0].Hp); Assert.IsFalse(run.Heroes[0].DeathDoor); Assert.AreEqual(2, medic.SupportUses);
+            // 「流血奶」是奶妈常态列表里的第二项：治疗攻击力 × 1.4。
+            var heal = battle.SkillFor(medic, 1);
+            Assert.AreEqual(SkillEffect.Heal, heal.Effect);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, "shield", 1), out error), error);
+            Assert.AreEqual(14, run.Heroes[0].Hp); Assert.IsFalse(run.Heroes[0].DeathDoor);
         }
 
         [Test] public void DefenseHalvesAttackButDoesNotHalveBleeding()
         {
             var run = Run(); var battle = Battle(run); var hero = run.Heroes[0]; hero.Defending = true;
-            battle.Damage(hero, 10); Assert.AreEqual(37, hero.Hp);
-            battle.Damage(hero, 2, bleeding: true); Assert.AreEqual(35, hero.Hp);
+            battle.Damage(hero, 10); Assert.AreEqual(39, hero.Hp);
+            battle.Damage(hero, 2, bleeding: true); Assert.AreEqual(37, hero.Hp);
         }
 
         [Test] public void BaseAttackAndSkillMultiplierProduceDamage()
@@ -167,20 +172,20 @@ namespace Ruin.Tests
 
         [Test] public void DefenseReducesDamagePercentuallyWithFloorOne()
         {
-            var run = Run(); var battle = Battle(run); var hero = run.Heroes[0]; // guard, 42 HP
+            var run = Run(); var battle = Battle(run); var hero = run.Heroes[0]; // 盾卫，44 生命
             hero.Definition.Defense = 0.25;
-            battle.Damage(hero, 8); Assert.AreEqual(36, hero.Hp);
+            battle.Damage(hero, 8); Assert.AreEqual(38, hero.Hp);
             hero.Definition.Defense = 0.5; hero.Defending = true;
-            battle.Damage(hero, 10); Assert.AreEqual(33, hero.Hp); // 10 → 5 → 2.5 → 3
+            battle.Damage(hero, 10); Assert.AreEqual(35, hero.Hp); // 10 → 5 → 2.5 → 3
             hero.Definition.Defense = 0.9;
-            battle.Damage(hero, 5); Assert.AreEqual(32, hero.Hp); // reduction never drops below 1
+            battle.Damage(hero, 5); Assert.AreEqual(34, hero.Hp); // reduction never drops below 1
         }
 
         [Test] public void BleedingIgnoresDefenseAndBrace()
         {
             var run = Run(); var battle = Battle(run); var hero = run.Heroes[0];
             hero.Definition.Defense = 0.5; hero.Defending = true;
-            battle.Damage(hero, 6, bleeding: true); Assert.AreEqual(36, hero.Hp);
+            battle.Damage(hero, 6, bleeding: true); Assert.AreEqual(38, hero.Hp);
         }
 
         [Test] public void EnemyDamageFollowsCharacterAttackAndPattern()
@@ -195,26 +200,28 @@ namespace Ruin.Tests
 
         [Test] public void CertainHitAndZeroDodgeConsumeNoRandomDraw()
         {
-            var run = Run(); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
+            var run = Run(); run.Heroes[1].Definition.Speed = 100; // 战士先动：「斩劈」打得到 1 号位的敌人
+            var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
             specs[0].MaxHp = 1; specs[0].Speed = 1; specs[0].Dodge = 0; specs[0].Defense = 0;
             var battle = new BattleEngine(run, specs, catalog.Rules());
             var actor = battle.Current; actor.Definition.Accuracy = 1; actor.Definition.CritChance = 0;
-            var target = battle.Targets(ActionKind.Primary).First();
+            var target = battle.Targets(0).First();
             uint state = run.Random.State; string error;
-            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Primary, target.Id), out error), error);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
             Assert.AreEqual(BattleOutcome.Victory, battle.Outcome); // killing blow ends the battle, so no further draws
             Assert.AreEqual(state, run.Random.State);
         }
 
         [Test] public void DodgeOneNegatesHitWithoutDamage()
         {
-            var run = Run(); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
+            var run = Run(); run.Heroes[1].Definition.Speed = 100;
+            var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
             specs[0].Speed = 1; specs[0].Dodge = 1;
             var battle = new BattleEngine(run, specs, catalog.Rules());
             var actor = battle.Current; actor.Definition.Accuracy = 1; actor.Definition.CritChance = 0;
-            var target = battle.Targets(ActionKind.Primary).First();
+            var target = battle.Targets(0).First();
             int hp = target.Hp; string error;
-            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Primary, target.Id), out error), error);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
             Assert.AreEqual(hp, target.Hp); Assert.IsTrue(battle.Events.Any(e => e.Kind == "dodge"));
         }
 
@@ -225,41 +232,52 @@ namespace Ruin.Tests
             var actorA = a.Current; var actorB = b.Current;
             Assert.IsTrue(actorA.Player); Assert.AreEqual(actorA.Id, actorB.Id);
             actorA.Form = SkillForm.Basic; actorB.Form = SkillForm.Basic;
-            var skillA = a.SkillFor(actorA, ActionKind.Primary); var skillB = b.SkillFor(actorB, ActionKind.Primary);
+            var skillA = a.SkillFor(actorA, 0); var skillB = b.SkillFor(actorB, 0);
             Assert.AreEqual(skillA.Id, skillB.Id);
             actorA.Sanity = 15; double atLow = a.EffectiveAccuracy(actorA, skillA);
             actorA.Sanity = 85; double atHigh = a.EffectiveAccuracy(actorA, skillA);
             Assert.AreEqual(atLow, atHigh); Assert.AreEqual(actorA.Definition.Accuracy, atHigh);
-            var targetA = a.Targets(ActionKind.Primary).First(); var targetB = b.Targets(ActionKind.Primary).First();
+            var targetA = a.Targets(0).First(); var targetB = b.Targets(0).First();
             Assert.AreEqual(targetA.Id, targetB.Id);
             string error;
-            Assert.IsTrue(a.Execute(new ActionRequest(ActionKind.Primary, targetA.Id), out error), error);
-            Assert.IsTrue(b.Execute(new ActionRequest(ActionKind.Primary, targetB.Id), out error), error);
+            Assert.IsTrue(a.Execute(new ActionRequest(ActionKind.Skill, targetA.Id, 0), out error), error);
+            Assert.IsTrue(b.Execute(new ActionRequest(ActionKind.Skill, targetB.Id, 0), out error), error);
             Assert.AreEqual(targetA.Hp, targetB.Hp);
         }
 
         [Test] public void HealScalesWithBaseAttack()
         {
-            var run = Run(); var medic = run.Heroes[3]; medic.Definition.Speed = 100; medic.Definition.Attack = 20;
+            var run = Run(); var medic = run.Heroes[2]; medic.Definition.Speed = 100; medic.Definition.Attack = 20;
             run.Heroes[0].Hp = 0;
             var battle = Battle(run); string error; Assert.AreSame(medic, battle.Current);
-            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Support, "guard"), out error), error);
-            Assert.AreEqual(18, run.Heroes[0].Hp); // 20 × 0.9
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, "shield", 1), out error), error);
+            Assert.AreEqual(28, run.Heroes[0].Hp); // 20 × 1.4
         }
 
-        [Test] public void InterceptProtectsTargetAndUsesGuardReduction()
+        [Test] public void GuardRedirectsTheWholeRoundToTheProtector()
         {
-            var run = Run(50, 1); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray(); specs[0].Speed = 100;
+            var run = Run(50, 1); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
+            specs[0].Speed = 100; specs[0].Accuracy = 1;
             var battle = new BattleEngine(run, specs, catalog.Rules());
-            run.Heroes[0].ProtectorId = "medic"; run.Heroes[3].Defending = true;
+            run.Heroes[0].ProtectorId = "medic"; // 盾卫被奶妈守护
+            int shieldHp = run.Heroes[0].Hp; int medicHp = run.Heroes[2].Hp;
+            int expected = battle.EnemyDamage(battle.Enemies[0]);
             battle.ExecuteEnemy();
-            Assert.AreEqual(42, run.Heroes[0].Hp); Assert.AreEqual(24, run.Heroes[3].Hp); Assert.IsNull(run.Heroes[0].ProtectorId);
+            Assert.AreEqual(shieldHp, run.Heroes[0].Hp, "被守护者不承受这次攻击");
+            Assert.AreEqual(medicHp - expected, run.Heroes[2].Hp, "守护者代为承受");
+            Assert.AreEqual("medic", run.Heroes[0].ProtectorId, "守护持续整个回合");
         }
 
-        [Test] public void LimitedSanityActionsCannotBeFarmedWithinBattle()
+        [Test] public void LimitedSkillCannotBeFarmedWithinBattle()
         {
-            var run = Run(); var battle = Battle(run); battle.Current.FocusUses = 0;
-            Assert.IsNotNull(battle.DisabledReason(ActionKind.Focus));
+            var run = Run(); var battle = Battle(run); var actor = battle.Current;
+            var skill = battle.SkillFor(actor, 1);
+            Assert.IsTrue(skill.Uses > 0, "第二项技能应当是有次数限制的");
+            actor.Uses.Add(new SkillUse { Id = skill.Id, Left = 0 });
+            Assert.IsNotNull(battle.SkillDisabledReason(1));
+            // 次数按技能 Id 记，下一场战斗会重新计数。
+            var second = Battle(run);
+            Assert.AreEqual(skill.Uses, second.Find(actor.Id).UsesLeft(second.SkillFor(second.Find(actor.Id), 1)));
         }
 
         [Test] public void DefeatSettlesWithoutAliveRosterDivisionError()
@@ -274,10 +292,25 @@ namespace Ruin.Tests
             while (battle.Outcome == BattleOutcome.Active && actions++ < 240)
             {
                 if (!battle.Current.Player) { battle.ExecuteEnemy(); continue; }
-                var kind = new[] { ActionKind.Technical, ActionKind.Primary, ActionKind.Support }.FirstOrDefault(k => battle.DisabledReason(k) == null && battle.SkillFor(battle.Current, k).Effect == SkillEffect.Attack);
-                if (battle.DisabledReason(kind) != null || !battle.Targets(kind).Any()) kind = ActionKind.Defend;
+                var skills = battle.SkillsFor(battle.Current);
+                // 先找能打的技能，再找其余能用的技能，都没有才换位：低理智形态只留一个技能。
+                int chosen = -1;
+                for (int i = 0; i < skills.Length && chosen < 0; i++)
+                    if (battle.SkillDisabledReason(i) == null && skills[i].Effect == SkillEffect.Attack) chosen = i;
+                for (int i = 0; i < skills.Length && chosen < 0; i++)
+                    if (battle.SkillDisabledReason(i) == null) chosen = i;
                 string error;
-                Assert.IsTrue(battle.Execute(new ActionRequest(kind, battle.Targets(kind).Select(a => a.Id).FirstOrDefault()), out error), error);
+                if (chosen >= 0)
+                {
+                    var target = battle.Targets(chosen).Select(a => a.Id).FirstOrDefault();
+                    Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target, chosen), out error), error);
+                }
+                else
+                {
+                    Assert.IsNull(battle.SwapDisabledReason(), "每个回合都必须至少有一个可用行动");
+                    var neighbour = battle.SwapTargets().Select(a => a.Id).First();
+                    Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Swap, neighbour), out error), error);
+                }
             }
             Assert.That(actions, Is.LessThan(240)); Assert.NotNull(battle.Settlement);
         }

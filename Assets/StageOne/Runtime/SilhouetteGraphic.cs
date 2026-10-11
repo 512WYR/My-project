@@ -7,7 +7,7 @@ namespace Ruin.Runtime
     // Vector silhouettes keep the prototype self-contained and easily replaceable by sprites.
     public sealed class SilhouetteGraphic : Graphic
     {
-        public HeroRole Role;
+        public string Silhouette;
         public EnemyPattern Enemy;
         public bool IsEnemy;
         public Color Accent = new Color(0.7f, 0.7f, 0.7f);
@@ -48,7 +48,7 @@ namespace Ruin.Runtime
                     Poly(Accent, new Vector2(72, 130), new Vector2(97, 125), new Vector2(97, 150), new Vector2(80, 156));
                 }
             }
-            else if (Role == HeroRole.Guard)
+            else if (Silhouette == "shield")
             {
                 Poly(Accent, new Vector2(9, 94), new Vector2(40, 99), new Vector2(42, 54), new Vector2(25, 38), new Vector2(8, 55));
                 Line(new Vector2(25, 48), new Vector2(25, 92), 2, shadow);
@@ -56,7 +56,7 @@ namespace Ruin.Runtime
                 Line(new Vector2(35, 133), new Vector2(66, 133), 4, Accent);
                 Poly(shadow, new Vector2(37, 142), new Vector2(45, 158), new Vector2(58, 142));
             }
-            else if (Role == HeroRole.Arbalist)
+            else if (Silhouette == "gunner")
             {
                 Poly(shadow, new Vector2(25, 130), new Vector2(38, 148), new Vector2(65, 143), new Vector2(75, 126));
                 Line(new Vector2(21, 81), new Vector2(92, 102), 7, Accent);
@@ -64,7 +64,7 @@ namespace Ruin.Runtime
                 Line(new Vector2(30, 119), new Vector2(76, 53), 4, Accent);
                 Line(new Vector2(42, 133), new Vector2(64, 133), 3, Accent);
             }
-            else if (Role == HeroRole.Medic)
+            else if (Silhouette == "medic")
             {
                 Poly(Accent, new Vector2(39, 115), new Vector2(51, 86), new Vector2(63, 115));
                 Poly(shadow, new Vector2(14, 40), new Vector2(86, 40), new Vector2(67, 104), new Vector2(34, 104));

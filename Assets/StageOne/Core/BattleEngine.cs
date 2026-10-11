@@ -39,8 +39,10 @@ namespace Ruin.Core
         {
             actor.Form = SkillForm.Basic; actor.Defending = false; actor.ProtectorId = null;
             actor.Interrupted = 0; actor.BleedDamage = 0; actor.BleedTurns = 0;
-            actor.FocusUses = 2; actor.EmbraceUses = 2;
-            actor.SupportUses = actor.Definition.Support == null ? 0 : actor.Definition.Support.Uses;
+            actor.BlockCharges = 0; actor.Counter = false; actor.Followup = false; actor.FollowupAttack = 0;
+            actor.Imbalance = 0; actor.ImbalanceImmuneRound = -1;
+            actor.DefenseBuff = 0; actor.AccuracyBuff = 0; actor.SelfVulnerable = 0;
+            actor.Uses.Clear();
         }
 
         public IEnumerable<ActorState> All { get { return Run.Heroes.Concat(Enemies); } }
@@ -66,7 +68,16 @@ namespace Ruin.Core
                 if (turns.Count == 0)
                 {
                     Round++;
-                    foreach (var actor in All.Where(a => !a.Dead).OrderByDescending(a => a.Speed).ThenBy(a => a.Player ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal))
+                    // Round-scoped effects fall off here: team boosts, blocks, counters, the pursuit buff and
+                    // the wound gambit's own vulnerability. Guard redirection is not cleared here, it ends on
+                    // the protector's turn.
+                    foreach (var actor in All)
+                    {
+                        actor.DefenseBuff = 0; actor.AccuracyBuff = 0;
+                        actor.SelfVulnerable = 0; actor.BlockCharges = 0;
+                        actor.Counter = false; actor.Followup = false; actor.FollowupAttack = 0;
+                    }
+                    foreach (var actor in All.Where(a => !a.Dead).OrderByDescending(a => EffectiveSpeed(a)).ThenBy(a => a.Player ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal))
                         turns.Enqueue(actor);
                     Log("—— 第 " + Round + " 回合 ——", "round");
                 }
@@ -88,94 +99,267 @@ namespace Ruin.Core
                     Log(next.Name + " 的行动被打断。", "control", null, next.Id);
                     continue;
                 }
+                if (next.Imbalance > 0)
+                {
+                    next.Imbalance--;
+                    Log(next.Name + " 陷入失衡，本回合无法行动。", "control", null, next.Id);
+                    continue;
+                }
                 Current = next;
                 if (next.Player)
                 {
                     next.Form = (SkillForm)SanityProbability.Sample(FormProbabilities(next), Run.Random);
                     if (next.Form != SkillForm.Basic)
-                        Log(next.Name + (next.Form == SkillForm.Technical ? " 获得技术灵感：" + next.Definition.Technical.Name : " 技能原始化：" + next.Definition.Primal.Name), "form", next.Id);
+                        Log(next.Name + (next.Form == SkillForm.Technical ? " 高理智：解锁特殊技能。" : " 低理智：技能发生变化。"), "form", next.Id);
                 }
                 return;
             }
         }
 
-        public SkillSpec SkillFor(ActorState actor, ActionKind kind)
+        // ---------------- skills ----------------
+
+        public SkillSpec[] SkillsFor(ActorState actor)
         {
-            if (actor == null) return null;
-            if (kind == ActionKind.Primary) return actor.Form == SkillForm.Primal ? actor.Definition.Primal : actor.Definition.Primary;
-            if (kind == ActionKind.Support) return actor.Definition.Support;
-            if (kind == ActionKind.Technical && actor.Form == SkillForm.Technical) return actor.Definition.Technical;
-            return null;
+            return actor == null ? ActorSpec.EmptySkills : actor.Definition.SkillsFor(actor.Form);
         }
 
-        public string DisabledReason(ActionKind kind)
+        public SkillSpec SkillFor(ActorState actor, int index)
+        {
+            var list = SkillsFor(actor);
+            return index >= 0 && index < list.Length ? list[index] : null;
+        }
+
+        private static bool NeedsTarget(SkillSpec skill)
+        {
+            return skill != null && skill.Targeting == SkillTargeting.Choose;
+        }
+
+        public string SkillDisabledReason(int index)
         {
             if (Outcome != BattleOutcome.Active) return "本场战斗已结束";
             if (Current == null || !Current.Player) return "等待敌方行动";
-            if (kind == ActionKind.Focus && Current.FocusUses <= 0) return "本场稳定心神次数已用尽";
-            if (kind == ActionKind.Embrace && Current.EmbraceUses <= 0) return "本场直视深渊次数已用尽";
-            if (kind == ActionKind.Focus && Current.Sanity >= 100) return "理智已达到100";
-            if (kind == ActionKind.Embrace && Current.Sanity <= 0) return "理智已达到0";
-            if (kind == ActionKind.Swap && !Targets(kind).Any()) return "没有相邻的存活队员";
-            if (kind == ActionKind.Primary || kind == ActionKind.Support || kind == ActionKind.Technical)
-            {
-                var skill = SkillFor(Current, kind);
-                if (skill == null) return "本回合未获得该技能";
-                if ((skill.ActorRanks & (1 << Current.Rank)) == 0) return "当前站位无法使用，尝试换位";
-                if (kind == ActionKind.Support && skill.Uses > 0 && Current.SupportUses <= 0) return "本场技能次数已用尽";
-                if (!Targets(kind).Any()) return "没有合法目标";
-            }
+            var skill = SkillFor(Current, index);
+            if (skill == null) return "本回合没有这个技能";
+            if ((skill.ActorRanks & (1 << Current.Rank)) == 0) return "当前站位无法使用，尝试换位";
+            if (Current.UsesLeft(skill) <= 0) return "本场技能次数已用尽";
+            if (NeedsTarget(skill) && !Targets(index).Any()) return "没有合法目标";
             return null;
         }
 
-        public IEnumerable<ActorState> Targets(ActionKind kind)
+        public string SwapDisabledReason()
+        {
+            if (Outcome != BattleOutcome.Active) return "本场战斗已结束";
+            if (Current == null || !Current.Player) return "等待敌方行动";
+            return SwapTargets().Any() ? null : "没有相邻的存活队员";
+        }
+
+        public IEnumerable<ActorState> Targets(int skillIndex)
         {
             if (Current == null) return Enumerable.Empty<ActorState>();
-            if (kind == ActionKind.Swap) return Run.Heroes.Where(a => !a.Dead && a != Current && Math.Abs(a.Rank - Current.Rank) == 1);
-            var skill = SkillFor(Current, kind);
-            if (skill == null) return Enumerable.Empty<ActorState>();
-            var side = skill.Target == TargetSide.Ally ? Run.Heroes : Enemies;
+            var skill = SkillFor(Current, skillIndex);
+            if (!NeedsTarget(skill)) return Enumerable.Empty<ActorState>();
+            var side = skill.Target == TargetSide.Ally ? (IEnumerable<ActorState>)Run.Heroes : Enemies;
             return side.Where(a => !a.Dead && (skill.TargetRanks & (1 << a.Rank)) != 0
                 && (skill.Effect != SkillEffect.Heal || a.Hp < a.Definition.MaxHp || (skill.Cleanse && a.BleedTurns > 0))
                 && (skill.Effect != SkillEffect.Protect || a != Current));
         }
 
+        public IEnumerable<ActorState> SwapTargets()
+        {
+            if (Current == null) return Enumerable.Empty<ActorState>();
+            return Run.Heroes.Where(a => !a.Dead && a != Current && Math.Abs(a.Rank - Current.Rank) == 1);
+        }
+
         public bool Execute(ActionRequest request, out string error)
         {
-            error = DisabledReason(request.Kind);
+            if (request.Kind == ActionKind.Swap) return ExecuteSwap(request, out error);
+            return ExecuteSkill(request, out error);
+        }
+
+        private bool ExecuteSwap(ActionRequest request, out string error)
+        {
+            error = SwapDisabledReason();
             if (error != null) return false;
             var actor = Current;
-            if (request.Kind == ActionKind.Retreat) { Log("队伍撤离。保留本场理智变化。", "system"); Finish(BattleOutcome.Retreat); return true; }
-            if (request.Kind == ActionKind.Defend)
-            { actor.Defending = true; Log(actor.Name + " 防御，至下次行动前受到的攻击伤害减半。", "guard", actor.Id); }
-            else if (request.Kind == ActionKind.Focus || request.Kind == ActionKind.Embrace)
-            {
-                bool focus = request.Kind == ActionKind.Focus;
-                if (focus) actor.FocusUses--; else actor.EmbraceUses--;
-                ChangeSanity(actor, focus ? Rules.MindStep : -Rules.MindStep, focus ? "稳定心神" : "直视深渊");
-                TryMentalState(actor);
-            }
-            else
-            {
-                var target = Targets(request.Kind).FirstOrDefault(a => a.Id == request.TargetId);
-                if (target == null) { error = "请选择高亮的合法目标"; return false; }
-                if (request.Kind == ActionKind.Swap)
-                {
-                    int rank = actor.Rank; actor.Rank = target.Rank; target.Rank = rank;
-                    Log(actor.Name + " 与 " + target.Name + " 交换站位。", "move", actor.Id, target.Id);
-                }
-                else
-                {
-                    var skill = SkillFor(actor, request.Kind);
-                    if (request.Kind == ActionKind.Support && skill.Uses > 0) actor.SupportUses--;
-                    ResolveSkill(actor, target, skill);
-                }
-            }
+            var target = SwapTargets().FirstOrDefault(a => a.Id == request.TargetId);
+            if (target == null) { error = "请选择相邻的高亮队员"; return false; }
+            int rank = actor.Rank; actor.Rank = target.Rank; target.Rank = rank;
+            Log(actor.Name + " 与 " + target.Name + " 交换站位。", "move", actor.Id, target.Id);
             if (!CheckEnd()) Advance();
             return true;
         }
 
-        private void ResolveSkill(ActorState actor, ActorState target, SkillSpec skill)
+        private bool ExecuteSkill(ActionRequest request, out string error)
+        {
+            error = SkillDisabledReason(request.SkillIndex);
+            if (error != null) return false;
+            var actor = Current;
+            var skill = SkillFor(actor, request.SkillIndex);
+            ActorState primary = null;
+            if (NeedsTarget(skill))
+            {
+                primary = skill.RandomTarget
+                    ? DrawRandom(Targets(request.SkillIndex).ToArray())
+                    : Targets(request.SkillIndex).FirstOrDefault(a => a.Id == request.TargetId);
+                if (primary == null) { error = "请选择高亮的合法目标"; return false; }
+            }
+            actor.SpendUse(skill);
+            ResolveSkill(actor, primary, skill);
+            if (!CheckEnd()) Advance();
+            return true;
+        }
+
+        private ActorState DrawRandom(ActorState[] pool)
+        {
+            if (pool.Length == 0) return null;
+            int index = Math.Min(pool.Length - 1, (int)(Run.Random.NextUnit() * pool.Length));
+            return pool[index];
+        }
+
+        private void ResolveSkill(ActorState actor, ActorState primary, SkillSpec skill)
+        {
+            if (skill.SelfMove != 0) MoveSelf(actor, skill.SelfMove);
+            ApplyBuffs(actor, actor, skill.SelfGrant, skill);
+            if (skill.Effect == SkillEffect.Attack)
+            {
+                ResolveAttack(actor, primary, skill);
+                return;
+            }
+            // Healing, guarding and buffs land on the whole sweep without a hit roll.
+            foreach (var target in BuildArea(actor, primary, skill))
+                ApplySupport(actor, target, skill);
+            ApplyRider(actor, primary, skill, 0);
+        }
+
+        private void ResolveAttack(ActorState actor, ActorState primary, SkillSpec skill)
+        {
+            var set = BuildArea(actor, primary, skill);
+            var main = primary ?? set.FirstOrDefault();
+            if (main == null) return;
+
+            // A displaced enemy that is imbalanced this round cannot dodge the displacement.
+            bool autoHit = skill.PullToFront && main.Imbalance > 0 && main.ImbalanceImmuneRound != Round;
+            if (!autoHit)
+            {
+                if (!Roll(EffectiveAccuracy(actor, skill)))
+                { Log(actor.Name + " · " + skill.Name + " 未命中。", "miss", actor.Id, main.Id); ApplyRider(actor, primary, skill, 0); return; }
+                if (main.Definition.Dodge > 0 && Roll(main.Definition.Dodge))
+                { Log(actor.Name + " · " + skill.Name + " → " + main.Name + " 被闪避。", "dodge", actor.Id, main.Id); return; }
+            }
+            bool critical = Roll(actor.Definition.CritChance);
+            Log(actor.Name + " · " + skill.Name + (critical ? " 暴击！" : ""), "action", actor.Id, main.Id);
+            int dealt = 0;
+            foreach (var target in set)
+            {
+                if (target.Dead) continue;
+                int amount = DamageFor(actor, target, skill, main, critical);
+                Damage(target, amount, actor.Id);
+                dealt += amount;
+                if (!target.Dead) ApplyOnHit(actor, target, skill, target == main);
+            }
+            ApplyRider(actor, primary, skill, dealt);
+            TryFollowups(actor, main, false);
+        }
+
+        // The sweep around the main target. Only enemy-side skills read Adjacent/Splash/Pierce; ally-side
+        // All/Party skills simply take the whole living side.
+        private IList<ActorState> BuildArea(ActorState actor, ActorState primary, SkillSpec skill)
+        {
+            var side = skill.Target == TargetSide.Ally ? (IEnumerable<ActorState>)Run.Heroes : Enemies;
+            if (skill.Targeting == SkillTargeting.All || skill.Area == SkillArea.Party)
+                return side.Where(a => !a.Dead).ToList();
+            var result = new List<ActorState>();
+            if (primary == null || primary.Dead) return result;
+            result.Add(primary);
+            switch (skill.Area)
+            {
+                case SkillArea.Adjacent:
+                {
+                    int before = result.Count;
+                    AddByRank(result, side, primary.Rank - 1);
+                    AddByRank(result, side, primary.Rank + 1);
+                    // Adjacent honours AreaMax as well: the low-sanity sweep takes at most one neighbour,
+                    // and it takes the front one (rank - 1 is added first). A non-positive AreaMax means no cap.
+                    if (skill.AreaMax > 0)
+                        while (result.Count > before + skill.AreaMax) result.RemoveAt(result.Count - 1);
+                    break;
+                }
+                case SkillArea.Splash:
+                    result.AddRange(side.Where(a => !a.Dead && a != primary)
+                        .OrderBy(a => Math.Abs(a.Rank - primary.Rank)).ThenBy(a => a.Rank).Take(skill.AreaMax));
+                    break;
+                case SkillArea.Pierce:
+                    result.AddRange(side.Where(a => !a.Dead && a != primary && a.Rank > primary.Rank)
+                        .OrderBy(a => a.Rank).Take(skill.AreaMax));
+                    break;
+            }
+            // Warrior's low-sanity sweep: with no adjacent enemy to spread onto, it may maul a neighbour.
+            if (skill.FriendlyFireChance > 0 && result.Count == 1)
+                result.AddRange(FriendlyFire(actor, skill.FriendlyFireChance));
+            return result;
+        }
+
+        private static void AddByRank(List<ActorState> result, IEnumerable<ActorState> side, int rank)
+        {
+            var actor = side.FirstOrDefault(a => !a.Dead && a.Rank == rank);
+            if (actor != null) result.Add(actor);
+        }
+
+        private IEnumerable<ActorState> FriendlyFire(ActorState actor, double chance)
+        {
+            var neighbours = Run.Heroes.Where(a => !a.Dead && a != actor && Math.Abs(a.Rank - actor.Rank) == 1).ToArray();
+            if (neighbours.Length == 0 || !Roll(chance)) return Enumerable.Empty<ActorState>();
+            return new[] { DrawRandom(neighbours) };
+        }
+
+        private int DamageFor(ActorState actor, ActorState target, SkillSpec skill, ActorState main, bool critical)
+        {
+            double multiplier = skill.Multiplier;
+            if (target != main)
+            {
+                int step = Math.Max(1, Math.Abs(target.Rank - main.Rank));
+                if (skill.Area == SkillArea.Pierce) multiplier = Math.Max(0.1, multiplier - skill.AreaDecay * step);
+                else multiplier *= skill.AreaRatio;
+            }
+            // The wound gambit drops every limb penalty for this one swing.
+            double attack = skill.IgnoreLimbPenalty ? actor.Definition.Attack
+                : actor.Definition.Attack * LimbSystem.AttackFactor(actor, Rules.Limbs);
+            if (skill.HpMissingDamageScale > 0 && actor.Definition.MaxHp > 0)
+                multiplier += skill.HpMissingDamageScale * Math.Max(0, actor.Definition.MaxHp - actor.Hp) / actor.Definition.MaxHp;
+            int value = attack <= 0 || multiplier <= 0 ? 0 : (int)Math.Ceiling(attack * multiplier - 1e-9);
+            if (skill.LimbBonusPerStack > 0)
+            {
+                int injured = actor.Limbs.Count(l => LimbSystem.ConditionOf(l) != LimbCondition.Intact);
+                value += Math.Min(injured, skill.MaxLimbBonusStacks) * skill.LimbBonusPerStack;
+            }
+            if (critical) value = (int)Math.Ceiling(value * Rules.CritMultiplier - 1e-9);
+            return value;
+        }
+
+        private void ApplyOnHit(ActorState actor, ActorState target, SkillSpec skill, bool isMain)
+        {
+            if (isMain && skill.Imbalance && target.ImbalanceImmuneRound != Round)
+            {
+                target.Imbalance = 1;
+                target.ImbalanceImmuneRound = Round + Rules.ImbalanceImmuneRounds;
+                Log(target.Name + " 失衡，本回合无法行动。", "control", actor.Id, target.Id);
+            }
+            if (skill.Bleed > 0 && (skill.BleedChance <= 0 || Roll(skill.BleedChance)))
+            {
+                target.BleedDamage = skill.Bleed;
+                target.BleedTurns = Math.Max(1, skill.BleedTurns);
+                Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed", actor.Id, target.Id);
+            }
+            // Only the main target is interrupted: the piercing round's rear targets just take damage.
+            if (isMain && skill.Interrupt && !target.Player)
+            {
+                target.Interrupted = Math.Max(1, target.Interrupted);
+                Log(target.Name + " 下一次行动被打断。", "control", actor.Id, target.Id);
+            }
+            if (skill.PullToFront && !target.Player && Roll(skill.PullChance)) PullToFront(target);
+        }
+
+        private void ApplySupport(ActorState actor, ActorState target, SkillSpec skill)
         {
             if (skill.Effect == SkillEffect.Heal)
             {
@@ -183,39 +367,148 @@ namespace Ruin.Core
                 target.Hp += restored;
                 if (skill.Cleanse) target.BleedTurns = 0;
                 Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 恢复 " + restored + (skill.Cleanse ? "，清除流血。" : "。"), "heal", actor.Id, target.Id, restored);
+                if (skill.Bleed > 0 && (skill.BleedChance <= 0 || Roll(skill.BleedChance)))
+                {
+                    target.BleedDamage = skill.Bleed;
+                    target.BleedTurns = Math.Max(1, skill.BleedTurns);
+                    Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed", actor.Id, target.Id);
+                }
                 return;
             }
             if (skill.Effect == SkillEffect.Protect)
             {
-                target.ProtectorId = actor.Id; actor.Defending = true;
-                Log(actor.Name + " 掩护 " + target.Name + "，拦截下一次攻击并减半伤害。", "guard", actor.Id, target.Id);
+                target.ProtectorId = actor.Id;
+                Log(actor.Name + " 守护 " + target.Name + "，本回合代为承受攻击。", "guard", actor.Id, target.Id);
+            }
+            else if (skill.Cleanse)
+            {
+                if (target.BleedTurns > 0) target.BleedTurns = 0;
+                Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 移除一处减益。", "heal", actor.Id, target.Id);
+            }
+            ApplyBuffs(actor, target, skill.Grant, skill);
+        }
+
+        // One place applies every buff flag, so Protect and Buff skills share the same mechanics and the
+        // caster's own grants (SelfGrant) ride through the same path.
+        private void ApplyBuffs(ActorState actor, ActorState target, AllyBuff grant, SkillSpec skill)
+        {
+            if (target == null || target.Dead) return;
+            bool touched = false;
+            if ((grant & AllyBuff.Block) != 0) { target.BlockCharges++; touched = true; }
+            if ((grant & AllyBuff.Counter) != 0) { target.Counter = true; touched = true; }
+            if ((grant & AllyBuff.Followup) != 0) { target.Followup = true; target.FollowupAttack = actor.Definition.Attack; touched = true; }
+            if ((grant & AllyBuff.DefenseUp) != 0) { target.DefenseBuff = Math.Max(target.DefenseBuff, skill.GrantDefense); touched = true; }
+            if ((grant & AllyBuff.AccuracyUp) != 0) { target.AccuracyBuff = Math.Max(target.AccuracyBuff, skill.GrantAccuracy); touched = true; }
+            if (touched) Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 获得增益。", "guard", actor.Id, target.Id);
+        }
+
+        private void ApplyRider(ActorState actor, ActorState primary, SkillSpec skill, int damageDealt)
+        {
+            var rider = skill.Rider;
+            if (rider == null || rider.Kind == RiderKind.None) return;
+            if (rider.Kind == RiderKind.SanityRestore)
+            {
+                var chosen = rider.Area == RiderArea.Chosen ? primary : actor;
+                if (chosen != null && !chosen.Dead) { ChangeSanity(chosen, rider.Amount, skill.Name); TryMentalState(chosen); }
                 return;
             }
-            if (!Roll(EffectiveAccuracy(actor, skill)))
-            { Log(actor.Name + " · " + skill.Name + " 未命中。", "miss", actor.Id, target.Id); return; }
-            if (target.Definition.Dodge > 0 && Roll(target.Definition.Dodge))
-            { Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 被闪避。", "dodge", actor.Id, target.Id); return; }
-            bool critical = Roll(actor.Definition.CritChance);
-            Log(actor.Name + " · " + skill.Name + (critical ? " 暴击！" : ""), "action", actor.Id, target.Id);
-            Damage(target, critical ? CritValue(actor, skill) : SkillValue(actor, skill), actor.Id);
-            if (!target.Dead)
+            var targets = new List<ActorState> { actor };
+            if (rider.Area == RiderArea.SelfAdjacent)
+                targets.AddRange(Run.Heroes.Where(a => !a.Dead && a != actor && Math.Abs(a.Rank - actor.Rank) == 1)
+                    .OrderBy(a => a.Rank));
+            int main = Math.Max(0, (int)Math.Ceiling(damageDealt * rider.Ratio - 1e-9));
+            for (int i = 0; i < targets.Count; i++)
             {
-                if (skill.Bleed > 0) { target.BleedDamage = skill.Bleed; target.BleedTurns = 2; Log(target.Name + " 流血 " + skill.Bleed + " × 2次行动。", "bleed", actor.Id, target.Id); }
-                if (skill.Interrupt) { target.Interrupted = Math.Max(1, target.Interrupted); Log(target.Name + " 下一次行动被打断。", "control", actor.Id, target.Id); }
+                var target = targets[i];
+                if (target.Dead) continue;
+                int amount = i == 0 ? main : (int)Math.Ceiling(main * rider.SpreadRatio - 1e-9);
+                int restored = Math.Max(0, Math.Min(amount, target.Definition.MaxHp - target.Hp));
+                target.Hp += restored;
+                Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 恢复 " + restored + "。", "heal", actor.Id, target.Id, restored);
             }
         }
 
-        // Character attribute helpers. Judgements use the attribute values directly and are never shifted by sanity.
+        // A follow-up fires whenever a buffed hero lands damage on an enemy. The follow-up hit itself
+        // passes fromFollowup, so it can never chain into another follow-up.
+        private void TryFollowups(ActorState source, ActorState enemy, bool fromFollowup)
+        {
+            if (fromFollowup || enemy == null || enemy.Player || enemy.Dead) return;
+            foreach (var hero in Run.Heroes.Where(h => !h.Dead && h.Followup).ToArray())
+            {
+                if (hero.Dead || enemy.Dead) continue;
+                int amount = (int)Math.Ceiling(hero.FollowupAttack * Rules.FollowupRatio - 1e-9);
+                if (amount <= 0) continue;
+                Log(hero.Name + " 追击 " + enemy.Name + "。", "action", hero.Id, enemy.Id);
+                Damage(enemy, amount, hero.Id);
+            }
+        }
+
+        private bool ConsumeBlock(ActorState target)
+        {
+            if (target.BlockCharges <= 0) return false;
+            target.BlockCharges--;
+            return true;
+        }
+
+        private void TryCounter(ActorState bearer, ActorState attacker)
+        {
+            if (bearer == null || attacker == null || bearer.Dead || attacker.Dead || !bearer.Counter) return;
+            bearer.Counter = false;
+            int amount = (int)Math.Ceiling(bearer.Definition.Attack * Rules.CounterRatio - 1e-9);
+            Log(bearer.Name + " 反击 " + attacker.Name + "。", "action", bearer.Id, attacker.Id);
+            Damage(attacker, amount, bearer.Id);
+            TryFollowups(bearer, attacker, false);
+        }
+
+        private void MoveSelf(ActorState actor, int delta)
+        {
+            int destination = actor.Rank + delta;
+            if (destination < 0 || destination > 3) return;
+            var occupant = Run.Heroes.FirstOrDefault(h => !h.Dead && h != actor && h.Rank == destination);
+            if (occupant != null) occupant.Rank = actor.Rank;
+            actor.Rank = destination;
+            Log(actor.Name + " 移动到 " + (destination + 1) + " 号位。", "move", actor.Id);
+        }
+
+        private void PullToFront(ActorState enemy)
+        {
+            int from = enemy.Rank;
+            if (from <= 0) return;
+            foreach (var other in Enemies.Where(e => e != enemy && !e.Dead && e.Rank < from)) other.Rank++;
+            enemy.Rank = 0;
+            Log(enemy.Name + " 被拖拽到 1 号位。", "move", null, enemy.Id);
+        }
+
+        // Character attribute helpers. Judgements use the attribute values directly and are never shifted by
+        // sanity; the only things that move them are limb damage and the temporary team boosts.
         public double EffectiveAccuracy(ActorState actor, SkillSpec skill)
         {
             if (actor == null || skill == null) return 0;
-            return SanityProbability.Clamp(actor.Definition.Accuracy + (skill.Accuracy - Rules.SkillAccuracyBaseline)
-                + Rules.Mental(actor.Mental).AccuracyModifier, 0, 1);
+            return SanityProbability.Clamp(actor.Definition.Accuracy * LimbSystem.AccuracyFactor(actor, Rules.Limbs)
+                + (skill.Accuracy - Rules.SkillAccuracyBaseline)
+                + Rules.Mental(actor.Mental).AccuracyModifier
+                + actor.AccuracyBuff, 0, 1);
+        }
+
+        public double EffectiveAttack(ActorState actor)
+        {
+            return actor.Definition.Attack * LimbSystem.AttackFactor(actor, Rules.Limbs);
+        }
+
+        public double EffectiveDefense(ActorState actor)
+        {
+            return SanityProbability.Clamp((actor.Definition.Defense + actor.DefenseBuff) * LimbSystem.DefenseFactor(actor, Rules.Limbs), 0, 1);
+        }
+
+        // Speed drives turn order, so a broken leg has to be visible here rather than on ActorState.Speed.
+        public int EffectiveSpeed(ActorState actor)
+        {
+            return Math.Max(1, (int)Math.Round(actor.Definition.Speed * LimbSystem.SpeedFactor(actor, Rules.Limbs), MidpointRounding.AwayFromZero));
         }
 
         public int SkillValue(ActorState actor, SkillSpec skill)
         {
-            return Scale(actor.Definition.Attack, skill.Multiplier);
+            return Scale(actor.Definition.Attack, skill.Multiplier * LimbSystem.AttackFactor(actor, Rules.Limbs));
         }
 
         public int CritValue(ActorState actor, SkillSpec skill)
@@ -250,12 +543,18 @@ namespace Ruin.Core
             if (enemy.Interrupted > 0) return "下一次行动被打断";
             var target = EnemyTarget(enemy);
             if (target == null) return "—";
+            string text;
             switch (enemy.Definition.Pattern)
             {
-                case EnemyPattern.Whisperer: return "低语 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 理智−14";
-                case EnemyPattern.Hunter: return "追猎 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 流血2×2";
-                default: return (Round % 2 == 0 ? "重劈" : "斩击") + " → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 前排";
+                case EnemyPattern.Whisperer: text = "低语 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 理智−14"; break;
+                case EnemyPattern.Hunter: text = "追猎 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 流血2×2"; break;
+                default: text = (Round % 2 == 0 ? "重劈" : "斩击") + " → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 前排"; break;
             }
+            // A crippling attack has to be announced. This stays pure so re-rendering costs no draws.
+            var spec = LimbSystem.ForPattern(enemy.Definition.Pattern);
+            if (spec != null && (!spec.HeavyRoundsOnly || Round % 2 == 0))
+                text += "\n可能重创" + LimbSystem.PartName(spec.Part);
+            return text;
         }
 
         private ActorState EnemyTarget(ActorState enemy)
@@ -276,12 +575,19 @@ namespace Ruin.Core
             if (protector != null && !protector.Dead)
             {
                 Log(protector.Name + " 为 " + target.Name + " 拦下攻击。", "guard", protector.Id, target.Id);
-                target.ProtectorId = null; target = protector;
+                // The guard holds for the whole round now, so ProtectorId is left in place; it is cleared
+                // when the protector takes its next turn.
+                target = protector;
             }
             if (!Roll(SanityProbability.Clamp(enemy.Definition.Accuracy, 0, 1)))
                 Log(target.Name + " 避开了 " + enemy.Name + " 的攻击。", "miss", enemy.Id, target.Id);
             else if (target.Definition.Dodge > 0 && Roll(target.Definition.Dodge))
                 Log(target.Name + " 闪避了 " + enemy.Name + " 的攻击。", "dodge", enemy.Id, target.Id);
+            else if (ConsumeBlock(target))
+            {
+                Log(target.Name + " 的格挡免除了这次攻击。", "guard", enemy.Id, target.Id);
+                TryCounter(target, enemy);
+            }
             else
             {
                 Log(enemy.Name + " 发动" + (enemy.Definition.Pattern == EnemyPattern.Whisperer ? "低语。" : "攻击。"), "action", enemy.Id, target.Id);
@@ -290,8 +596,27 @@ namespace Ruin.Core
                 { ChangeSanity(target, -14, "受到低语侵蚀"); TryMentalState(target); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
                 { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id); }
+                if (!target.Dead) TryLimbDamage(enemy, target);
+                TryCounter(target, enemy);
             }
             if (!CheckEnd()) Advance();
+        }
+
+        // Limb damage is a second track next to HP, so it only rolls once the attack has actually landed.
+        // A miss, a non-crippling pattern, an off-turn heavy swing and an already severed part all spend
+        // no draw at all.
+        private void TryLimbDamage(ActorState enemy, ActorState target)
+        {
+            if (!target.Player) return;
+            var spec = LimbSystem.ForPattern(enemy.Definition.Pattern);
+            if (spec == null) return;
+            if (spec.HeavyRoundsOnly && Round % 2 != 0) return;
+            if (LimbSystem.ConditionOf(target, spec.Part) == LimbCondition.Severed) return;
+            if (!Roll(spec.Chance)) return;
+            int amount = LimbSystem.HitAmount(target, spec.Part, Rules.Limbs);
+            bool severed = LimbSystem.Damage(target, spec.Part, amount);
+            Log(target.Name + " 的" + LimbSystem.PartName(spec.Part) + "受到 " + amount + " 点部位伤害，"
+                + (severed ? "已经断肢！" : "陷入重伤。"), "limb", enemy.Id, target.Id, amount);
         }
 
         public void ChangeSanity(ActorState actor, double amount, string reason)
@@ -319,8 +644,9 @@ namespace Ruin.Core
             int actual = amount;
             if (!bleeding)
             {
-                double reduced = amount * (1 - actor.Definition.Defense);
+                double reduced = amount * (1 - EffectiveDefense(actor));
                 if (actor.Defending) reduced *= 0.5;
+                if (actor.SelfVulnerable > 0) reduced *= 1 + actor.SelfVulnerable;
                 actual = Math.Max(1, (int)Math.Ceiling(reduced - 1e-9));
             }
             bool alreadyDying = actor.DeathDoor;
