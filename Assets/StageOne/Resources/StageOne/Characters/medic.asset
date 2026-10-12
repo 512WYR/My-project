@@ -13,19 +13,23 @@ MonoBehaviour:
   m_Name: medic
   m_EditorClassIdentifier: 
   Id: medic
-  DisplayName: "\u533B\u5E08"
+  DisplayName: "\u5976\u5988"
   Subtitle: "\u8BA9\u540C\u4F34\u6491\u8FC7\u4E0B\u4E00\u6B21\u5FC3\u8DF3"
-  Role: 3
+  Silhouette: medic
   MaxHp: 28
   Speed: 5
-  SanityOffset: 15
+  SanityOffset: 0
   EnemyPattern: 0
   Attack: 10
   Accuracy: 0.9
   CritChance: 0.1
   Dodge: 0
   Defense: 0
-  Primary: {fileID: 11400000, guid: a5b58c8fe13037048b508b42f7c90e7a, type: 2}
-  Support: {fileID: 11400000, guid: 79f6565b5308e044e8fa6a969c20f0f4, type: 2}
-  Technical: {fileID: 11400000, guid: e0073ab3f5cf0a648b31701d23c1eff5, type: 2}
-  Primal: {fileID: 11400000, guid: a7882280c6b103245819a8169845e17e, type: 2}
+  BasicSkills:
+  - {fileID: 11400000, guid: 410d4d0e6ae318d4e92d2a466f9c3f8e, type: 2}
+  - {fileID: 11400000, guid: bdbe7cb25bb118d4bba0a788d69c7c1c, type: 2}
+  - {fileID: 11400000, guid: 111fcd130c09462418281eb0cfab0478, type: 2}
+  - {fileID: 11400000, guid: 57f109ce33d64df47bcf165d1077c2af, type: 2}
+  PrimalSkills:
+  - {fileID: 11400000, guid: b0bdd106834861f4b98c14c48238ce3a, type: 2}
+  TechnicalSpecial: {fileID: 11400000, guid: 08d3adca2ad572a42869514b8575efd3, type: 2}

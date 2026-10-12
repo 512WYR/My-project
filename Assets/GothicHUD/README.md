@@ -14,6 +14,10 @@
 - Bottom HUD / Limbs：头部、躯干、手臂、腿部，各有正常/破损图标及血条。
 - Bottom HUD / Skills：五个技能槽、右侧位移按钮、四个快捷物品槽。
 - Bottom HUD / Description：可编辑的技能标题与说明。
+- Ally Positions：我方 4 个位置卡，压在我方站位横条正上方。
+- Enemy Positions：敌方 4 个位置卡，压在敌方站位横条正上方。
+- Debug Button：右上角「调试」按钮，打开调试页。
+- Debug Page：默认隐藏的调试页，收纳目前没有落位的信息与功能。
 
 Canvas 基准为 1920×1080，顶部居中、队伍靠左上、底栏贴底，Expand 适配宽屏。透明 PNG 直接使用默认 UI 材质。头像与肢体血条在 Sprite Editor 中配置有效裁切区域，原始图片未修改。
 
@@ -61,6 +65,33 @@ MechanicalRoundCounter 保留 SetRound(int)、自动读取 StageOneApp.Battle.Ro
 GothicHudPanel.OnSkillSelected 提供技能选择事件，技能效果由游戏逻辑绑定。四个快捷物品槽是可编辑按钮，物品使用逻辑可通过 Button.OnClick 接入。
 
 角色名称、生命和理智可自动跟随 StageOneApp。本地预览或接入其他系统时，请关闭 Follow Stage One Battle。
+
+## 接管战斗页：mainScene
+
+GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity。该场景把 StageOneApp 的 External Battle Ui 打开，于是 StageOneView 不再绘制战斗页（背景、页眉、战场、技能、说明、日志全部让出），只保留路线、房间、结算弹窗、F1 帮助和 F3 验收工具；它的 Canvas 排序为 50，所以弹窗仍盖在 HUD（排序 10）之上。
+
+战斗页由根对象上的 GothicBattleHudController 独占驱动，数据来源是 StageOneApp 的 Changed 事件，只在战斗页生效：
+
+| 归属 | 组件 | 说明 |
+|---|---|---|
+| 生命 / 理智 / 肢体 / 队伍头像 | ModularHudController | Follow Stage One Battle 关闭，由战斗控制器写 Characters 后调用 RefreshView |
+| 回合数 | MechanicalRoundCounter | Follow Stage One Battle 关闭，由战斗控制器调用 SetRound |
+| 技能槽 / 位移 / 说明 / 位置卡 / 调试页 | GothicBattleHudController | 唯一写入者，只更新已存在对象，不重建层级 |
+
+战斗页本身只承担位置、血量、技能三件事，其余都收进调试页：
+
+| 区域 | 来源 | 内容 |
+|---|---|---|
+| 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、状态行（我方）或敌人意图（敌方）、行动/可选标记、阵亡叉 |
+| 血量 | ModularHudController / Vitals | 当前被查看角色的生命与理智 |
+| 技能 | ModularHudController / Skills | 五个技能槽、位移键、技能说明 |
+| 调试页 | GothicBattleHudController | 玩家理智、层数/场次/回合、当前行动者、提示、敌人意图、帮助 F1、验收 F3、新开演练 |
+
+位置卡不显示理智，理智看 Vitals 区。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
+
+保留 Follow Stage One Battle 为默认值的原因为：StageOne.unity 与该场景的自动化测试（StageOneSmoke、StageOneFlowTests）都走内置战斗页，External Battle Ui 默认关闭，行为不变。
+
+战场卡点击会选中该角色，选中技能或位移后可作为目标；`StageOneView.RegisterCardImage` 让打击闪红在 HUD 上照常工作。
 
 ## 验收与备份
 

@@ -27,18 +27,36 @@ namespace Ruin.Runtime
             var canvasObject = new GameObject("StageOneCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(transform, false);
             canvas = canvasObject.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // Above the optional external battle HUD (sortingOrder 10), so the settlement, help and lab
+            // modals it still paints cover it. With a single canvas in the scene this changes nothing.
+            canvas.sortingOrder = 50;
             var scaler = canvasObject.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1600, 900); scaler.matchWidthOrHeight = 0.5f;
             if (!FindObjectOfType<EventSystem>()) new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
         }
 
+        /// <summary>Lets an external battle UI hand its actor portraits over, so the hit flash still finds them.</summary>
+        public void RegisterCardImage(string id, Image image) { if (!string.IsNullOrEmpty(id) && image) cardImages[id] = image; }
+
         public void Render()
         {
+            // A scene that draws its own battle page keeps this canvas for the modals only. The background has
+            // to stay transparent then, or it would cover the external UI sitting underneath.
+            bool externalBattle = app.ExternalBattleUi && !app.AwaitingNode;
             if (page) { page.SetActive(false); Destroy(page); }
-            cardImages.Clear();
+            if (!externalBattle) cardImages.Clear();
             page = new GameObject("Page", typeof(RectTransform)); page.transform.SetParent(canvas.transform, false);
             var root = page.GetComponent<RectTransform>(); root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
+            if (externalBattle)
+            {
+                if (app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
+                if (app.HelpOpen) Help(root);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (app.LabOpen) Laboratory(root);
+#endif
+                return;
+            }
             var bg = page.AddComponent<Image>(); bg.color = Bg;
             Header(root);
             // The room pages replace the battle widgets in place. They stay inline rather than using a

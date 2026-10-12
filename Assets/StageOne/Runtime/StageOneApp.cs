@@ -41,6 +41,10 @@ namespace Ruin.Runtime
         public string RunEndNote { get; private set; }
         public MapState Map { get { return Run == null ? null : Run.Map; } }
         public bool AutomationMode { get; set; }
+        // Off by default, so StageOne.unity, the smoke run and the play mode tests keep the built-in battle
+        // page. A scene that supplies its own battle UI turns this on and StageOneView stops drawing the
+        // battle half of the page (rooms, route, settlement and the modals are never suppressed).
+        public bool ExternalBattleUi;
         public const uint DefaultSeed = 44972;
 
         // A room page is open, so the debug tool stays shut the way it did around the workshop.
@@ -420,7 +424,11 @@ namespace Ruin.Runtime
             LabOpen = true; HelpOpen = false; ClearPending(); Refresh();
 #endif
         }
-        public void Refresh() { if (View) View.Render(); }
+        // Everything that changes state funnels through Refresh(), so this is the one place a second UI can
+        // listen for changes instead of polling. Subscribers must only read: calling back into Refresh()
+        // would loop.
+        public event Action Changed;
+        public void Refresh() { if (View) View.Render(); Changed?.Invoke(); }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         public void DebugSetSanity(double value)

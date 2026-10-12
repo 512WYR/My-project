@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88bf2eec55295e34b91f10bb3e0786ab, type: 3}
+  m_Name: s_block
+  m_EditorClassIdentifier: 
+  Spec:
+    Id: s_block
+    Name: "\u683C\u6321"
+    Description: "\u4E3A\u4E00\u540D\u5DF1\u65B9\u89D2\u8272\u8D4B\u4E881\u6B21\u683C\u6321\uFF081\u53F7\u4F4D\u65BD\u653E\uFF09"
+    Effect: 3
+    Target: 1
+    Multiplier: 0
+    ActorRanks: 1
+    TargetRanks: 15
+    Uses: 0
+    Bleed: 0
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 0
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: 0
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 1
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0
+    FollowupPercent: 50
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 0
+      Area: 0
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 0

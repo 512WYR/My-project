@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88bf2eec55295e34b91f10bb3e0786ab, type: 3}
+  m_Name: w_cleave
+  m_EditorClassIdentifier: 
+  Spec:
+    Id: w_cleave
+    Name: "\u65A9\u5288"
+    Description: "\u5411\u524D\u79FB\u52A8\u4E00\u4F4D\u5E76\u653B\u51FB\u654C\u65B91\u30012\u53F7\u4F4D"
+    Effect: 0
+    Target: 0
+    Multiplier: 1
+    ActorRanks: 7
+    TargetRanks: 3
+    Uses: 0
+    Bleed: 0
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 0
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: -1
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 0
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0
+    FollowupPercent: 50
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 0
+      Area: 0
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 0

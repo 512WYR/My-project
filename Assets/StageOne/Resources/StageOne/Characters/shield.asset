@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: shield
+  m_EditorClassIdentifier: 
+  Id: shield
+  DisplayName: "\u76FE\u536B"
+  Subtitle: "\u7AD9\u7A33\uFF0C\u7136\u540E\u8BA9\u522B\u4EBA\u7AD9\u5F97\u4E5F\u7A33"
+  Silhouette: shield
+  MaxHp: 44
+  Speed: 4
+  SanityOffset: 0
+  EnemyPattern: 0
+  Attack: 10
+  Accuracy: 0.9
+  CritChance: 0.1
+  Dodge: 0
+  Defense: 0
+  BasicSkills:
+  - {fileID: 11400000, guid: ece19f1c733605c4180fa82ca4dc3c23, type: 2}
+  - {fileID: 11400000, guid: 857e56231993a864ba817fd7fe1a38b2, type: 2}
+  - {fileID: 11400000, guid: ec77615adf2c7304dba0ad5e1036117d, type: 2}
+  - {fileID: 11400000, guid: 77c356e67f5df0541ada8fd088f0194b, type: 2}
+  PrimalSkills:
+  - {fileID: 11400000, guid: cfd7144bd004ae443afb77a7874ba0e8, type: 2}
+  TechnicalSpecial: {fileID: 11400000, guid: 702608dced3fb8c42850fbc79374b05f, type: 2}

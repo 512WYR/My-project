@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: GameCatalog
   m_EditorClassIdentifier: 
   Heroes:
-  - {fileID: 11400000, guid: 705456c8b54c68c4788500970bbb14fe, type: 2}
-  - {fileID: 11400000, guid: 5b6c0b46fc47edd4ca477ed6fe78b19b, type: 2}
-  - {fileID: 11400000, guid: 2e71b70dcfc725f4f924611157172630, type: 2}
+  - {fileID: 11400000, guid: 611bf9d2ff6ee54419da32bd466a5523, type: 2}
+  - {fileID: 11400000, guid: b2a79f6722128fd4a9e7c36817eaa062, type: 2}
   - {fileID: 11400000, guid: e110e13a0ca48404ca827bfae60e4be9, type: 2}
+  - {fileID: 11400000, guid: 3bf7a6ff208928841adc1250b4232406, type: 2}
   Enemies:
   - {fileID: 11400000, guid: 18744466fd924ac4a8bb7d16ae2aee73, type: 2}
   - {fileID: 11400000, guid: b9c2a7f7ad9c5ec45b2ccdf83802cc81, type: 2}
@@ -28,4 +28,55 @@ MonoBehaviour:
   ProbabilityStrength: 1.5
   FeedbackFactor: 0.5
   DeathChance: 0.25
+  CritMultiplier: 1.5
   MindStep: 15
+  MapFloors: 3
+  MapStepsPerFloor: 050000000600000007000000
+  MapProbabilityStrength: 1
+  MapBranchAffinity: 1.5
+  MapNodeOdds:
+  - Type: 0
+    Weight: 0.315
+    Affinity: 0
+  - Type: 1
+    Weight: 0.135
+    Affinity: -1
+  - Type: 5
+    Weight: 0.18
+    Affinity: -1
+  - Type: 2
+    Weight: 0.27
+    Affinity: 1
+  - Type: 8
+    Weight: 0.1
+    Affinity: 0
+  MapBranchWeights:
+  - 0.31
+  - 0.38
+  - 0.31
+  Events:
+  - {fileID: 11400000, guid: 0a3144690948c1048b6ea03fe565a248, type: 2}
+  - {fileID: 11400000, guid: 58d8eb034b8756f4b93493160c4e536b, type: 2}
+  - {fileID: 11400000, guid: c0a13b640a0ecfa468ba5a1e54175e96, type: 2}
+  - {fileID: 11400000, guid: f4cf658e9073d0247879d4f611fdb47e, type: 2}
+  SupplyHealRatio: 0.35
+  SuppliesPerBattle: 2
+  SuppliesPerElite: 4
+  SuppliesPerBoss: 8
+  EliteHealthBonus: 20
+  EliteAttackScale: 1.25
+  BossHealthBonus: 45
+  BossAttackScale: 1.5
+  LimbHitRatio: 0.5
+  LimbHeadRatio: 0.3
+  LimbTorsoRatio: 0.45
+  LimbArmRatio: 0.35
+  LimbLegRatio: 0.35
+  LimbHeadInjured: 0.1
+  LimbHeadSevered: 0.25
+  LimbTorsoInjured: 0.2
+  LimbTorsoSevered: 0.4
+  LimbArmInjured: 0.2
+  LimbArmSevered: 0.45
+  LimbLegInjured: 0.2
+  LimbLegSevered: 0.45

@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: warrior
+  m_EditorClassIdentifier: 
+  Id: warrior
+  DisplayName: "\u6218\u58EB"
+  Subtitle: "\u4EE5\u4F24\u6362\u4F24\uFF0C\u5411\u524D\u6495\u5F00\u7F3A\u53E3"
+  Silhouette: warrior
+  MaxHp: 36
+  Speed: 6
+  SanityOffset: 0
+  EnemyPattern: 0
+  Attack: 10
+  Accuracy: 0.9
+  CritChance: 0.1
+  Dodge: 0
+  Defense: 0
+  BasicSkills:
+  - {fileID: 11400000, guid: fe55a93e7205f654eb2cc5dc3a54e674, type: 2}
+  - {fileID: 11400000, guid: 236aed7eaeee6274688b9c6229e39b91, type: 2}
+  - {fileID: 11400000, guid: a19fb0536c5cc9b4a84fbcd422277786, type: 2}
+  - {fileID: 11400000, guid: 531b5dd5616ff6c449b77a91e1a2b73f, type: 2}
+  PrimalSkills:
+  - {fileID: 11400000, guid: 7d829c033881830459be79f83d0c94a8, type: 2}
+  TechnicalSpecial: {fileID: 11400000, guid: ad5b85c437a7ff74fbc8ea2cf437174b, type: 2}

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using GameMake.GothicHUD;
+using Ruin.Runtime;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.U2D.Sprites;
@@ -24,6 +25,14 @@ namespace GameMake.GothicHUDEditor
         static Sprite white;
         static readonly Color Gold = new Color32(219, 187, 131, 255);
         static readonly Color Muted = new Color32(162, 144, 111, 255);
+        static readonly Color Ink = new Color32(230, 224, 212, 255);
+        static readonly Color Cyan = new Color32(129, 193, 200, 255);
+        static readonly Color Rust = new Color32(206, 136, 117, 255);
+        // Position cards, in the 1920x1080 reference space. They sit on top of the operation frame, lined up
+        // with the two formation rails already painted inside it: allied rail x176..851, enemy rail
+        // x1150..1820, both at the frame's top edge y750. Rank 0 is the front rank in both columns.
+        const float CardW = 160, CardH = 180, CardStep = 161;
+        const float AllyCardsX = 192, EnemyCardsX = 1164, CardsY = 570;
         public static string Output => Path.GetFullPath(Path.Combine(Application.dataPath, "../../交付/哥特HUD/新版"));
 
         static SpriteRect Rect(string name, int x, int y, int w, int h, int height, Vector4 border = default)
@@ -100,6 +109,9 @@ namespace GameMake.GothicHUDEditor
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             var go = new GameObject("GothicBattleHUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(GothicHudPanel), typeof(ModularHudController));
             var root = (RectTransform)go.transform;
+            // A zero scale here is what left the previous prefab invisible; the canvas is driven by the
+            // CanvasScaler, so the transform must stay at identity.
+            root.localScale = Vector3.one;
             var canvas = go.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 10; canvas.pixelPerfect = true;
             var scaler = go.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(Width, Height); scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             var panel = go.GetComponent<GothicHudPanel>(); var controller = go.GetComponent<ModularHudController>(); controller.Panel = panel;
@@ -192,6 +204,7 @@ namespace GameMake.GothicHUDEditor
             panel.DescriptionTitle = Label(description, "Title", "技能介绍", 22, 16, 345, 34, 23, Gold);
             panel.DescriptionBody = Label(description, "Body", "选择技能查看说明", 23, 82, 337, 141, 17, Muted, TextAnchor.UpperLeft);
             controller.RefreshView();
+            BuildBattleChrome(root, panel, controller, counter, top.gameObject, party.gameObject, bottom.gameObject);
             PrefabUtility.SaveAsPrefabAsset(top.gameObject, Root + "/Prefabs/MechanicalRoundCounter.prefab");
             PrefabUtility.SaveAsPrefabAssetAndConnect(go, PrefabPath, InteractionMode.AutomatedAction);
             EditorSceneManager.SaveScene(scene, ScenePath); AssetDatabase.SaveAssets();
@@ -202,6 +215,121 @@ namespace GameMake.GothicHUDEditor
             Render(canvas, camera, "HUD-ArmBroken-Round12", 1920, 1080);
             controller.RestoreSelectedLimbs(); counter.ResetRound();
             Debug.Log("MODULAR_HUD_BUILD_OK " + ScenePath);
+        }
+
+        /// <summary>
+        /// What the battle page adds on top of the authored modules: the eight position cards, and one button
+        /// opening a debug sheet for the readouts that have no place on the layout yet. Everything the
+        /// controller toggles lives under one of the roots handed to ChromeRoots, so a scene can hide the
+        /// battle half in one call.
+        /// </summary>
+        static void BuildBattleChrome(RectTransform root, GothicHudPanel panel, ModularHudController controller,
+            MechanicalRoundCounter counter, GameObject top, GameObject party, GameObject bottom)
+        {
+            // ---- position cards, resting on the operation frame and lined up with the two formation rails
+            // painted inside it. Nothing new is drawn behind them: the rail already reads as the ground they
+            // stand on. Rank 0 faces the other side, so the ally column runs right to left and the enemy
+            // column left to right, the way the two rails point at each other.
+            var allyRoot = Group(root, "Ally Positions - 我方位置", AllyCardsX, CardsY, 3 * CardStep + CardW, CardH);
+            var enemyRoot = Group(root, "Enemy Positions - 敌方位置", EnemyCardsX, CardsY, 3 * CardStep + CardW, CardH);
+            var allies = new GothicBattleCard[4];
+            var enemies = new GothicBattleCard[4];
+            for (int rank = 0; rank < 4; rank++)
+            {
+                allies[rank] = Card(allyRoot, "Ally " + (rank + 1), (3 - rank) * CardStep, 0, true);
+                enemies[rank] = Card(enemyRoot, "Enemy " + (rank + 1), rank * CardStep, 0, false);
+            }
+
+            // ---- everything that has no place on the authored layout yet lives behind one button ----
+            var debugButton = HudButton(root, "Debug Button", "调试", 1720, 24, 180, 52);
+            var debug = Group(root, "Debug Page - 调试", 0, 0, Width, Height);
+            // The scrim has to swallow clicks, or a stray press next to the sheet would land on a position
+            // card underneath and issue a real battle command.
+            var scrim = Solid(debug, "Scrim", 0, 0, Width, Height, new Color32(5, 7, 9, 238));
+            scrim.raycastTarget = true;
+            var sheet = Group(debug, "Sheet", 510, 190, 900, 700);
+            Art(sheet, "Sheet Frame", "OperationFrame", 0, 0, 900, 700, true, 2);
+            Label(sheet, "Title", "调试 · Debug", 34, 20, 500, 40, 26, Gold);
+            var debugSanity = Label(sheet, "Player Sanity", "", 34, 76, 832, 30, 17, Cyan);
+            var debugFloor = Label(sheet, "Progress", "", 34, 110, 832, 30, 16, Muted);
+            var debugTurn = Label(sheet, "Turn", "", 34, 144, 832, 30, 16, Ink);
+            var debugHint = Label(sheet, "Hint", "", 34, 176, 832, 56, 15, Gold);
+            Label(sheet, "Intent Heading", "敌人意图", 34, 240, 400, 28, 18, Rust);
+            var debugIntent = Label(sheet, "Intent Body", "", 34, 272, 832, 178, 15, Muted, TextAnchor.UpperLeft);
+            var helpButton = HudButton(sheet, "Help", "帮助 F1", 34, 480, 190, 56);
+            var labButton = HudButton(sheet, "Lab", "验收 F3", 240, 480, 190, 56);
+            var newRunButton = HudButton(sheet, "New Run", "新开演练", 446, 480, 190, 56);
+            var closeButton = HudButton(sheet, "Close", "关闭", 652, 480, 214, 56);
+            debug.gameObject.SetActive(false);
+
+            var chrome = root.gameObject.AddComponent<GothicBattleHudController>();
+            chrome.Panel = panel;
+            chrome.Presentation = controller;
+            chrome.Counter = counter;
+            chrome.PlayerSanityText = debugSanity;
+            chrome.FloorText = debugFloor;
+            chrome.TurnText = debugTurn;
+            chrome.HintText = debugHint;
+            chrome.DebugIntentText = debugIntent;
+            chrome.DebugRoot = debug.gameObject;
+            chrome.DebugButton = debugButton;
+            chrome.DebugCloseButton = closeButton;
+            chrome.HelpButton = helpButton;
+            chrome.LabButton = labButton;
+            chrome.NewRunButton = newRunButton;
+            chrome.Allies = allies;
+            chrome.Enemies = enemies;
+            chrome.ChromeRoots = new[] { top, party, bottom, debugButton.gameObject, allyRoot.gameObject, enemyRoot.gameObject };
+        }
+
+        static Button HudButton(Transform parent, string name, string caption, float x, float y, float w, float h)
+        {
+            var image = Solid(parent, name, x, y, w, h, new Color32(17, 21, 24, 240));
+            Art(image.transform, "Border", "ItemFrame", 0, 0, w, h, true);
+            var button = Click(image);
+            Label(image.transform, "Caption", caption, 0, 0, w, h, 16, Gold, TextAnchor.MiddleCenter);
+            return button;
+        }
+
+        static Image Bar(Transform parent, string name, float x, float y, float w, float h, Color tint, out Text value)
+        {
+            var group = Group(parent, name, x, y, w, h);
+            Solid(group, "Track", 0, 0, w, h, new Color32(22, 25, 26, 255));
+            var fill = Solid(group, "Fill", 1, 1, w - 2, h - 2, tint);
+            fill.type = Image.Type.Filled; fill.fillMethod = Image.FillMethod.Horizontal; fill.fillOrigin = 0;
+            value = Label(group, "Value", "", 0, 0, w, h, 12, Ink, TextAnchor.MiddleCenter);
+            return fill;
+        }
+
+        /// <summary>
+        /// One position slot. It only carries what a position needs to be playable: who stands there, how
+        /// hurt they are, and whether they can be acted on. Sanity and the full limb breakdown stay in the
+        /// vitals module, which already shows them for the inspected character.
+        /// </summary>
+        static GothicBattleCard Card(Transform parent, string name, float x, float y, bool ally)
+        {
+            var slot = Group(parent, name, x, y, CardW, CardH);
+            var card = slot.gameObject.AddComponent<GothicBattleCard>();
+
+            // The body doubles as the click target, so a card costs one raycastable graphic and nothing else.
+            card.Background = Solid(slot, "Body", 0, 0, CardW, CardH, card.AliveBody);
+            card.Hit = Click(card.Background);
+            card.Highlight = card.Background.gameObject.AddComponent<Outline>();
+            card.Highlight.effectColor = Gold; card.Highlight.effectDistance = new Vector2(2, -2); card.Highlight.enabled = false;
+
+            var art = Group(slot, "Silhouette", 6, 6, CardW - 12, 78).gameObject.AddComponent<SilhouetteGraphic>();
+            art.raycastTarget = false; card.Art = art;
+
+            card.Name = Label(slot, "Name", ally ? "角色" : "敌人", 4, 88, CardW - 8, 22, 15, Gold, TextAnchor.MiddleCenter);
+            card.HealthFill = Bar(slot, "Health", 6, 112, CardW - 12, 17, new Color32(174, 47, 38, 255), out var healthValue);
+            card.HealthValue = healthValue;
+            card.Status = Label(slot, "Status", "", 6, 132, CardW - 12, 42, 12, Muted, TextAnchor.UpperLeft);
+            if (!ally) card.Intent = Label(slot, "Intent", "", 6, 132, CardW - 12, 42, 12, Rust, TextAnchor.UpperLeft);
+            card.ActiveBadge = Label(slot, "Active Badge", "行动", 6, 4, 48, 18, 13, Gold).gameObject;
+            card.TargetBadge = Label(slot, "Target Badge", "可选", CardW - 54, 4, 48, 18, 13, Gold, TextAnchor.MiddleRight).gameObject;
+            card.DeadCross = Label(slot, "Dead Cross", "✕", 0, 44, CardW, 70, 44, Rust, TextAnchor.MiddleCenter).gameObject;
+            card.ActiveBadge.SetActive(false); card.TargetBadge.SetActive(false); card.DeadCross.SetActive(false);
+            return card;
         }
 
         static RectTransform Group(Transform parent, string name, float x, float y, float w, float h)

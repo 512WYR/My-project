@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88bf2eec55295e34b91f10bb3e0786ab, type: 3}
+  m_Name: g_resupply
+  m_EditorClassIdentifier: 
+  Spec:
+    Id: g_resupply
+    Name: "\u519B\u5907\u8865\u5145"
+    Description: "\u5168\u961F\u7CBE\u51C6\u63D0\u5347 \xB7 \u4E3A\u4E00\u540D\u89D2\u8272\u6062\u590D10\u7406\u667A\uFF084\u53F7\u4F4D\u65BD\u653E\uFF09"
+    Effect: 3
+    Target: 1
+    Multiplier: 0
+    ActorRanks: 8
+    TargetRanks: 15
+    Uses: 0
+    Bleed: 0
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 4
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: 0
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 16
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0.2
+    FollowupPercent: 50
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 2
+      Area: 2
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 10

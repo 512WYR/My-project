@@ -111,7 +111,7 @@ namespace GameMake.GothicHUD
 
         public void RequestDisplacement()
         {
-            if (FollowStageOneBattle && BattleSource) BattleSource.SelectAction(ActionKind.Swap);
+            if (FollowStageOneBattle && BattleSource) BattleSource.SelectSwap();
             OnDisplacementRequested.Invoke();
         }
 
