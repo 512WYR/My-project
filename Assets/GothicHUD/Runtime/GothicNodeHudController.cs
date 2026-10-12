@@ -305,8 +305,8 @@ namespace GameMake.GothicHUD
             SetText(RoomSubtitle, altar ? "代价换收获。选择一种处理方式。" : "面对情境并做出选择。");
             SetAccent(RoomAccent, altar ? Rust : Gold);
 
-            var spec = node == null ? null : Exploration.Find(app.Catalog.MapRules(), node.EventId);
-            if (spec == null)
+            var page = EventScripts.Page(node, app.Run, app.Catalog.MapRules());
+            if (page == null)
             {
                 SetText(RoomTitle, "空房间");
                 SetText(RoomBody, "这里什么也没有留下。");
@@ -316,25 +316,25 @@ namespace GameMake.GothicHUD
                 return;
             }
 
-            SetText(RoomTitle, spec.Title);
-            SetText(RoomBody, spec.Body);
+            SetText(RoomTitle, page.Title);
+            SetText(RoomBody, page.Body ?? "");
             SetText(RoomNote, app.RoomNote ?? "");
+            SetText(OptionsHeading, page.Step > 0 && page.StepCount > 0
+                ? "选项　步骤 " + page.Step + "/" + page.StepCount : "选项");
 
-            // The visible options were frozen when the party walked in, so a re-render never re-rolls the
-            // room and never widens the choice.
-            var mask = node.OptionMask;
-            int count = Mathf.Min(spec.Options.Length, Options.Length);
+            // The current step is rebuilt from the node every sync, and that read draws nothing, so a
+            // re-render never re-rolls the room and never widens or narrows the choice.
+            int count = Mathf.Min(page.Choices.Count, Options.Length);
             LayoutOptions(count, OptionStart(count));
             for (int i = 0; i < count; i++)
             {
-                bool shown = mask != null && i < mask.Length && mask[i];
-                var option = spec.Options[i];
+                var choice = page.Choices[i];
                 Options[i].Index = i;
-                Options[i].Render(shown ? option.Label : "—— 不可选 ——",
-                    shown ? option.Detail : "此刻你不会想到这个选项。",
-                    shown ? Gold : Muted, app.EventChosen && node.OptionChosen == i, shown && !app.EventChosen);
+                Options[i].Render(choice.Shown ? choice.Label : "—— 不可选 ——", choice.Detail ?? "",
+                    choice.Shown ? Gold : Muted, choice.Shown && node != null && node.OptionChosen == i,
+                    choice.Shown && choice.Enabled);
             }
-            SetContinue(app.EventChosen ? "离开房间" : "先选择一种处理方式", "继续前进", app.EventChosen);
+            SetContinue(app.EventCanLeave ? "离开房间" : "先完成这一事件", "继续前进", app.EventCanLeave);
         }
 
         private void SyncBuffRoom(StageOneApp app)

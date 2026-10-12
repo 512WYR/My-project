@@ -8,14 +8,22 @@ using UnityEngine;
 
 namespace Ruin.Tests
 {
-    // 房间内容：开局增益、敌人缩放、事件与祭坛的选项可见性、补给站治疗与义肢掉落。
-    // 这些规则全部住在 NodeContent.cs，不碰战斗模型。
+    // 房间内容：开局增益、敌人缩放、补给站治疗与义肢掉落，以及 EventScripts 里十条事件的流程。
+    // 这些规则住在 NodeContent.cs 与 EventScripts.cs，不碰战斗模型。
     public class ExplorationRulesTests
     {
         private GameCatalog catalog;
         [SetUp] public void SetUp() { catalog = Resources.Load<GameCatalog>("StageOne/GameCatalog"); Assert.NotNull(catalog, "Generate catalog before running tests"); }
         private MapRules Rules() { return catalog.MapRules(); }
-        private RunState Run(double sanity = 50, uint seed = 44972) { return RunState.Create(catalog.Heroes.Select(x => x.ToSpec()).ToArray(), seed, sanity, catalog.Rules()); }
+        // The preset only seeds each hero's own sanity. The shared player sanity is a separate field and is
+        // what the map and every event gate reads, so it is set here too — otherwise a "low sanity" run
+        // still reads 50 and every sanity branch quietly takes the high road.
+        private RunState Run(double sanity = 50, uint seed = 44972)
+        {
+            var run = RunState.Create(catalog.Heroes.Select(x => x.ToSpec()).ToArray(), seed, sanity, catalog.Rules());
+            run.PlayerSanity = sanity;
+            return run;
+        }
 
         // ---------------- 开局增益 ----------------
 
@@ -135,112 +143,300 @@ namespace Ruin.Tests
 
         // ---------------- 事件与祭坛 ----------------
 
-        [Test] public void TheDefaultPoolsHoldTwoEventsAndTwoAltars()
+        // 把房间钉在某一条事件上，其余步骤仍然走真实的代码路径。
+        private NodeState Room(string eventId)
         {
-            var rules = Rules();
-            Assert.AreEqual(2, Exploration.Pool(rules, NodeType.Event).Count);
-            Assert.AreEqual(2, Exploration.Pool(rules, NodeType.Altar).Count);
-            Assert.AreEqual(0, Exploration.Pool(rules, NodeType.Battle).Count, "战斗房间没有内容池");
-            Assert.That(Exploration.Pool(rules, NodeType.Event).All(e => e.Options.Length == 3), "每条内容都有三个选项");
-            Assert.That(Exploration.Pool(rules, NodeType.Altar).All(e => e.Options[0].AppearanceBaseline == 1), "基础选项恒可用");
+            var node = new NodeState { Type = eventId == "EVT-008" ? NodeType.Altar : NodeType.Event };
+            EventScripts.Roll(node, Run(50), Rules(), eventId);
+            return node;
         }
 
-        [Test] public void RollingFreezesTheContentAndTheOptionMask()
+        private bool Pick(NodeState node, int index, RunState run, out EventSession session)
+        {
+            return EventScripts.Choose(node, index, run, Rules(), out session);
+        }
+
+        [Test] public void TheSanityGatesKeepTheTwoSpecialEventsInTheirOwnHalf()
+        {
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, Run(80)).Count, "高理智的事件池含 EVT-H001");
+            Assert.That(EventScripts.Pool(NodeType.Event, Run(80)), Does.Contain("EVT-H001"));
+            Assert.That(EventScripts.Pool(NodeType.Event, Run(80)), Does.Not.Contain("EVT-L001"));
+
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, Run(20)).Count, "低理智的事件池含 EVT-L001");
+            Assert.That(EventScripts.Pool(NodeType.Event, Run(20)), Does.Contain("EVT-L001"));
+            Assert.That(EventScripts.Pool(NodeType.Event, Run(20)), Does.Not.Contain("EVT-H001"));
+
+            Assert.AreEqual(1, EventScripts.Pool(NodeType.Altar, Run(50)).Count);
+            Assert.AreEqual(0, EventScripts.Pool(NodeType.Battle, Run(50)).Count, "战斗房间没有内容池");
+        }
+
+        [Test] public void RollingPinsTheEventAndTheStepDrawsNothingAfterwards()
         {
             var rules = Rules();
+            var run = Run(50);
             var node = new NodeState { Type = NodeType.Event };
-            var random = new RunRandom(7);
-            Exploration.RollEvent(rules, node, random, 50, NodeType.Event);
-            uint state = random.State;
+            EventScripts.Roll(node, run, rules);
 
             Assert.NotNull(node.EventId);
-            Assert.That(node.OptionMask, Is.Not.Null);
-            Assert.IsTrue(node.OptionMask[0], "基础选项永远在");
+            Assert.AreEqual(0, node.EventStep);
             Assert.AreEqual(-1, node.OptionChosen);
 
-            // 再渲染一次页面不会重抽：内容与掩码都冻在节点上。
-            Assert.NotNull(Exploration.Find(rules, node.EventId));
-            Assert.AreEqual(state, random.State, "抽完就不动随机序列");
+            // 页面是纯读：反复渲染既不动随机序列，也不改节点上的任何进度。
+            uint state = run.Random.State;
+            int step = node.EventStep;
+            var first = EventScripts.Page(node, run, rules);
+            var second = EventScripts.Page(node, run, rules);
+            Assert.AreEqual(first.Title, second.Title);
+            Assert.AreEqual(first.Choices.Count, second.Choices.Count);
+            Assert.AreEqual(state, run.Random.State, "渲染页面不抽随机");
+            Assert.AreEqual(step, node.EventStep, "渲染页面不改进度");
         }
 
-        [Test] public void ALowSanityPartySeesTheDangerOptionsMoreOften()
+        [Test] public void AnOutOfRangeOrUnansweredOptionIsRefused()
         {
-            // 单个种子说明不了问题：跨种子统计可见性才站得住。
-            var rules = Rules();
+            var node = Room("EVT-002");
+            var run = Run(50);
+            EventSession session;
+
+            Assert.IsFalse(Pick(node, -1, run, out session));
+            Assert.IsFalse(Pick(node, 99, run, out session));
+            Assert.IsFalse(EventScripts.Choose(null, 0, run, Rules(), out session));
+            Assert.AreEqual(-1, node.OptionChosen);
+
+            Assert.IsTrue(Pick(node, 1, run, out session), "「远离」永远可选");
+            Assert.IsTrue(EventScripts.CanLeave(node), "单步事件选完就结束");
+            Assert.IsFalse(Pick(node, 1, run, out session), "结束之后不能再选");
+        }
+
+        [Test] public void TheAbandonedMineDrainsSanityUntilTheCapThenFights()
+        {
+            // 矿道在进房时就发矿石，所以这里不能用那个扔掉 run 的辅助，得让 Roll 落在被测的 run 上。
+            var run = Run(50);
+            var node = new NodeState { Type = NodeType.Event };
+            EventScripts.Roll(node, run, Rules(), "EVT-001");
+            Assert.AreEqual(3, run.Map.Supplies, "进矿道先拿到 3 点矿石");
+            Assert.That(node.EventLimit, Is.InRange(2, 5), "挖矿上限落在文档给的 2..5");
+
+            double sanity = run.Heroes[0].Sanity;
+            EventSession session = null;
+            for (int i = 0; i < node.EventLimit; i++)
+            {
+                Assert.IsTrue(Pick(node, 0, run, out session), "第 " + (i + 1) + " 次挖矿应该可以选");
+                if (i < node.EventLimit - 1) Assert.IsFalse(session.WantsBattle, "只有最后一次才触发战斗");
+            }
+
+            Assert.IsTrue(session.WantsBattle, "挖到上限会引来战斗");
+            Assert.AreEqual(NodeType.Battle, session.BattleKind);
+            Assert.AreEqual(3 + 4 * node.EventLimit, run.Map.Supplies, "每次挖矿 +4 矿石");
+            Assert.AreEqual(sanity - 3 * node.EventLimit, run.Heroes[0].Sanity, 0.001, "每次挖矿全队理智 -3");
+            Assert.IsTrue(EventScripts.CanLeave(node));
+        }
+
+        [Test] public void TheMedicineChestIsOnlyForALowSanityParty()
+        {
+            var low = Room("EVT-004");
+            var lowRun = Run(10);
+            var page = EventScripts.Page(low, lowRun, Rules());
+            Assert.AreEqual(4, page.Choices.Count);
+            Assert.IsTrue(page.Choices[2].Shown, "低理智才看得到「全部喝下」");
+
+            var high = Room("EVT-004");
+            var highRun = Run(90);
+            Assert.IsFalse(EventScripts.Page(high, highRun, Rules()).Choices[2].Shown);
+            EventSession refused;
+            Assert.IsFalse(Pick(high, 2, highRun, out refused), "看不见的选项选不了");
+            Assert.AreEqual(-1, high.OptionChosen, "被拒绝的选项不改动任何状态");
+        }
+
+        [Test] public void TheBlueAndRedPotionsSetTheChosenMembersSanity()
+        {
+            var blue = Room("EVT-004");
+            var run = Run(50);
+            var hero = run.Heroes[0];
+            hero.Sanity = 60;
+            EventSession session;
+            Assert.IsTrue(Pick(blue, 0, run, out session), "喝蓝药剂");
+            Assert.AreEqual(1, blue.EventStep, "进入选人子步骤");
+            Assert.IsTrue(Pick(blue, 0, run, out session), "选中第一名队员");
+            Assert.AreEqual(0, hero.Sanity);
+            Assert.IsTrue(EventScripts.CanLeave(blue));
+
+            var red = Room("EVT-004");
+            var run2 = Run(50);
+            run2.Heroes[0].Sanity = 40;
+            Assert.IsTrue(Pick(red, 1, run2, out session), "喝红药剂");
+            Assert.IsTrue(Pick(red, 0, run2, out session));
+            Assert.AreEqual(100, run2.Heroes[0].Sanity);
+        }
+
+        [Test] public void DrinkingEverythingIsAThirtyPercentGambleThatRewiresTheHero()
+        {
+            // 30/70 是文档直接给的：跨种子统计成功率，别只看一个种子。
+            int unlocked = 0;
             const int seeds = 400;
-            int lowDanger = 0, highDanger = 0, lowLucid = 0, highLucid = 0;
             for (uint seed = 0; seed < seeds; seed++)
             {
-                var low = new NodeState { Type = NodeType.Altar };
-                Exploration.RollEvent(rules, low, new RunRandom(seed), 15, NodeType.Altar);
-                var high = new NodeState { Type = NodeType.Altar };
-                Exploration.RollEvent(rules, high, new RunRandom(seed), 85, NodeType.Altar);
-
-                lowDanger += CountVisible(rules, low, -1);
-                highDanger += CountVisible(rules, high, -1);
-                lowLucid += CountVisible(rules, low, 1);
-                highLucid += CountVisible(rules, high, 1);
+                var node = new NodeState { Type = NodeType.Event };
+                var run = RunState.Create(catalog.Heroes.Select(x => x.ToSpec()).ToArray(), seed, 10, catalog.Rules());
+                run.PlayerSanity = 10;
+                EventScripts.Roll(node, run, Rules(), "EVT-004");
+                EventSession session;
+                var hero = run.Heroes[0];
+                if (!Pick(node, 2, run, out session)) continue;
+                if (!Pick(node, 0, run, out session)) continue;
+                if (hero.SanitySkillsOnly) unlocked++;
             }
-            Assert.That(lowDanger, Is.GreaterThan(highDanger), "低理智更容易看到危险的扩展选项");
-            Assert.That(highLucid, Is.GreaterThan(lowLucid), "高理智更容易看到清醒的扩展选项");
+            Assert.That(unlocked, Is.GreaterThan(seeds * 0.20), "成功率不该明显低于 30%");
+            Assert.That(unlocked, Is.LessThan(seeds * 0.40), "成功率不该明显高于 30%");
         }
 
-        // 统计出这条内容里倾向为正/负的选项被翻出来的次数。
-        private static int CountVisible(MapRules rules, NodeState node, double sign)
+        [Test] public void TheHiddenForkBuysAProstheticAndAnElevatorPassage()
         {
-            var spec = Exploration.Find(rules, node.EventId);
-            if (spec == null || node.OptionMask == null) return 0;
-            int count = 0;
-            for (int i = 0; i < spec.Options.Length && i < node.OptionMask.Length; i++)
-                if (node.OptionMask[i] && Math.Sign(spec.Options[i].AppearanceAffinity) == Math.Sign(sign)) count++;
-            return count;
+            var node = Room("EVT-H001");
+            var run = Run(80);
+            EventSession session;
+            Assert.IsTrue(Pick(node, 1, run, out session), "探索岔道");
+            Assert.IsTrue(session.WantsBattle);
+            Assert.AreEqual(NodeType.EliteBattle, session.BattleKind, "岔道的守备是精英");
+            Assert.IsFalse(EventScripts.CanLeave(node), "打完才轮到通道的选项");
+
+            int before = run.Prosthetics.Count;
+            EventScripts.ResolveBattleReturn(node, run, Rules(), true);
+            Assert.AreEqual(before + 1, run.Prosthetics.Count, "胜利才发饰品");
+            Assert.IsTrue(EventScripts.CanLeave(node));
+            Assert.IsTrue(Pick(node, 0, run, out session), "进入通道");
+            Assert.IsTrue(node.EventJump, "通道直达本层电梯井");
         }
 
-        [Test] public void AHiddenOptionIsRefusedAndChangesNothing()
+        [Test] public void TheFifthPersonOnlyShowsUpAtLowSanityAndRecordsItsPlaceholders()
         {
-            var rules = Rules();
-            var node = new NodeState { Type = NodeType.Event };
-            // 先抽出内容，再把第二个选项强行藏起来，检验守卫本身。
-            Exploration.RollEvent(rules, node, new RunRandom(3), 50, NodeType.Event);
+            var node = Room("EVT-L001");
+            var run = Run(20);
+            EventSession session;
+            Assert.IsTrue(Pick(node, 0, run, out session), "无视第五个人");
+            Assert.IsTrue(run.Map.NextBattleBonusActions, "占位：下次战斗行动数 +1");
+            Assert.IsTrue(EventScripts.CanLeave(node));
+
+            var fought = Room("EVT-L001");
+            var run2 = Run(20);
+            int before = run2.Prosthetics.Count;
+            Assert.IsTrue(Pick(fought, 1, run2, out session), "查清状况");
+            Assert.IsTrue(session.WantsBattle);
+            EventScripts.ResolveBattleReturn(fought, run2, Rules(), true);
+            Assert.AreEqual(before + 1, run2.Prosthetics.Count);
+            Assert.IsTrue(run2.Map.BattleNodeBonus, "占位：后续战斗节点概率上升");
+        }
+
+        [Test] public void ARetreatFromAnEventFightPaysNothing()
+        {
+            var node = Room("EVT-003");
+            var run = Run(20);
+            EventSession session;
+            Assert.IsTrue(Pick(node, 0, run, out session), "靠近对话");
+            Assert.AreEqual(1, node.EventStep);
+            Assert.IsTrue(Pick(node, 0, run, out session), "开门");
+            Assert.IsTrue(session.WantsBattle, "低理智开门会打起来");
+            Assert.IsFalse(EventScripts.CanLeave(node), "战斗还没结算");
+
+            int supplies = run.Map.Supplies;
+            int stock = run.Prosthetics.Count;
+            EventScripts.ResolveBattleReturn(node, run, Rules(), false);
+            Assert.AreEqual(supplies, run.Map.Supplies, "撤退不发补给");
+            Assert.AreEqual(stock, run.Prosthetics.Count, "撤退不发饰品");
+            Assert.AreEqual(2, node.EventFlag, "记下这是一次撤退");
+            Assert.IsTrue(EventScripts.CanLeave(node));
+        }
+
+        [Test] public void TheRestEventScramblesRanksOnlyOnTheLowSanityBranch()
+        {
+            var low = Room("EVT-006");
+            var lowRun = Run(20);
+            var ranksBefore = lowRun.Heroes.Select(h => h.Rank).OrderBy(r => r).ToArray();
+            EventSession session;
+            Assert.IsTrue(Pick(low, 0, lowRun, out session), "选守夜者");
+            Assert.IsTrue(session.WantsBattle, "休整都会以战斗收尾");
+            Assert.That(lowRun.Heroes.Select(h => h.Rank).OrderBy(r => r).ToArray(), Is.EqualTo(ranksBefore),
+                "打乱的是站位，不是队伍成员");
+
+            var high = Room("EVT-006");
+            var highRun = Run(80);
+            var highRanks = highRun.Heroes.Select(h => h.Rank).ToArray();
+            Assert.IsTrue(Pick(high, 0, highRun, out session), "高理智选守夜者");
+            Assert.IsTrue(session.WantsBattle);
+            Assert.That(highRun.Heroes.Select(h => h.Rank).ToArray(), Is.EqualTo(highRanks), "高理智分支不动站位");
+        }
+
+        [Test] public void TheRunawayMachineHurtsSomeoneOnTheLowSanityBranch()
+        {
+            var high = Room("EVT-002");
+            var highRun = Run(80);
+            var highHp = highRun.Heroes.Select(h => h.Hp).ToArray();
+            EventSession session;
+            Assert.IsTrue(Pick(high, 0, highRun, out session), "专业修理");
+            Assert.That(highRun.Heroes.Select(h => h.Hp).ToArray(), Is.EqualTo(highHp), "高理智修理不伤人");
+            Assert.AreEqual(1, highRun.Prosthetics.Count, "两种手法都给一件义体");
+
+            var low = Room("EVT-002");
+            var lowRun = Run(20);
+            var lowHp = lowRun.Heroes.Select(h => h.Hp).ToArray();
+            Assert.IsTrue(Pick(low, 0, lowRun, out session), "暴力拆解");
+            Assert.That(lowRun.Heroes.Select(h => h.Hp).ToArray(), Is.Not.EqualTo(lowHp), "低理智会伤到一名队员");
+            Assert.That(lowRun.Heroes.All(h => h.Hp >= 1), "事件伤害不会在战斗之外打死人");
+            Assert.AreEqual(1, lowRun.Prosthetics.Count);
+        }
+
+        [Test] public void TheInfirmaryHealsFirstThenHandsOutWhateverItsSanityFound()
+        {
+            var node = Room("EVT-005");
+            var run = Run(80);
+            run.Heroes[0].Hp = 1;
+            EventSession session;
+            Assert.IsTrue(Pick(node, 0, run, out session), "选第一名队员治疗");
+            Assert.That(run.Heroes[0].Hp, Is.GreaterThan(1), "先恢复 40% 生命");
+            Assert.AreEqual(1, node.EventStep);
+
+            int stock = run.Prosthetics.Count;
+            Assert.IsTrue(Pick(node, 0, run, out session), "高理智看到的是义体");
+            Assert.AreEqual(stock + 1, run.Prosthetics.Count);
+
+            var low = Room("EVT-005");
+            var lowRun = Run(20);
+            double sanity = lowRun.PlayerSanity;
+            Assert.IsTrue(Pick(low, 0, lowRun, out session));
+            Assert.IsTrue(Pick(low, 0, lowRun, out session), "低理智看到的是稳定剂");
+            Assert.That(lowRun.PlayerSanity, Is.GreaterThan(sanity), "稳定剂抬的是玩家理智");
+        }
+
+        [Test] public void TheStoryEventChangesNothingAtAll()
+        {
+            var node = Room("EVT-007");
             var run = Run(50);
-            run.Map.Supplies = 10;
-            node.OptionMask[1] = false;
-            double sanity = run.PlayerSanity;
-            string note;
-
-            Assert.IsFalse(Exploration.ApplyOption(rules, node, 1, run, out note), "隐藏选项不能被选");
-            Assert.AreEqual(-1, node.OptionChosen);
-            Assert.AreEqual(sanity, run.PlayerSanity);
-            Assert.AreEqual(10, run.Map.Supplies, "被拒绝的选项不改动任何状态");
+            run.Map.Supplies = 7;
+            var sanity = run.Heroes.Select(h => h.Sanity).ToArray();
+            EventSession session;
+            Assert.AreEqual(1, EventScripts.Page(node, run, Rules()).Choices.Count, "只描述剧情，只有一个继续");
+            Assert.IsTrue(Pick(node, 0, run, out session));
+            Assert.AreEqual(7, run.Map.Supplies);
+            Assert.That(run.Heroes.Select(h => h.Sanity).ToArray(), Is.EqualTo(sanity));
+            Assert.IsFalse(session.WantsBattle);
         }
 
-        [Test] public void AnOutOfRangeOrRepeatedOptionIsRefused()
+        [Test] public void TheWorkshopTradesSanityForSupplies()
         {
-            var rules = Rules();
-            var node = new NodeState { Type = NodeType.Event };
-            Exploration.RollEvent(rules, node, new RunRandom(5), 50, NodeType.Event);
-            var spec = Exploration.Find(rules, node.EventId);
+            var node = Room("EVT-008");
             var run = Run(50);
-            string note;
+            double sanity = run.Heroes[0].Sanity;
+            EventSession session;
+            Assert.IsTrue(Pick(node, 1, run, out session), "议价");
+            Assert.AreEqual(NodeType.Altar, node.Type, "祭坛房只会抽到祭坛内容");
+            Assert.AreEqual(4, run.Map.Supplies);
+            Assert.That(run.Heroes[0].Sanity, Is.LessThan(sanity), "议价要付出理智");
 
-            Assert.IsFalse(Exploration.ApplyOption(rules, node, -1, run, out note));
-            Assert.IsFalse(Exploration.ApplyOption(rules, node, spec.Options.Length, run, out note));
-            Assert.IsFalse(Exploration.ApplyOption(rules, null, 0, run, out note));
-            Assert.AreEqual(-1, node.OptionChosen);
-
-            Assert.IsTrue(Exploration.ApplyOption(rules, node, 0, run, out note), "基础选项一定可以选");
-            Assert.IsFalse(Exploration.ApplyOption(rules, node, 0, run, out note), "一个房间只能结算一次");
-        }
-
-        [Test] public void AltarOptionsTradeSanityForSuppliesOrHealing()
-        {
-            var rules = Rules();
-            var node = new NodeState { Type = NodeType.Altar };
-            Exploration.RollEvent(rules, node, new RunRandom(23), 15, NodeType.Altar);
-            var spec = Exploration.Find(rules, node.EventId);
-            Assert.AreEqual(NodeType.Altar, spec.Kind, "祭坛房只会抽到祭坛内容");
-            // 低理智的祭坛一定有代价换收获的选项，至少基础选项要付出理智。
-            Assert.That(spec.Options.Any(o => o.SuppliesDelta > 0 || o.HealPercent > 0), "祭坛内容必须有收获项");
+            var calm = Room("EVT-008");
+            var calmRun = Run(50);
+            calmRun.Heroes[0].Sanity = 40;
+            Assert.IsTrue(Pick(calm, 2, calmRun, out session), "适配方案");
+            Assert.That(calmRun.Heroes[0].Sanity, Is.GreaterThan(40), "适配方案抬的是全队理智");
         }
 
         // ---------------- 补给站 ----------------

@@ -37,15 +37,13 @@ namespace Ruin.Editor
             var none = Asset<MentalDefinition>(Data + "/MentalStates/Neutral.asset", x => x.Spec = new MentalSpec { State = MentalState.None, Name = "平稳" });
             var composed = Asset<MentalDefinition>(Data + "/MentalStates/Composed.asset", x => x.Spec = new MentalSpec { State = MentalState.Composed, Name = "凝神", TechnicalMultiplier = 1.25 });
             var agitated = Asset<MentalDefinition>(Data + "/MentalStates/Agitated.asset", x => x.Spec = new MentalSpec { State = MentalState.Agitated, Name = "躁动", PrimalMultiplier = 1.25, AccuracyModifier = -0.05 });
-            var events = ExplorationEvents();
             var catalog = Asset<GameCatalog>(Data + "/GameCatalog.asset", x => {
                 // Rank follows array order: front to back, so the shield stands at position 1.
                 x.Heroes = new[] { shield, warrior, medic, gunner };
                 x.Enemies = new[] { cleaver, whisperer, hunter };
                 x.MentalStates = new[] { none, composed, agitated };
-                x.Events = events;
             });
-            Migrate(catalog, events);
+            Migrate(catalog);
             if (!File.Exists(ScenePath))
             {
                 var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -191,24 +189,11 @@ namespace Ruin.Editor
             Debug.Log("STAGE_ONE_BUILD_OK " + target + " size=" + report.summary.totalSize);
         }
 
-        // One asset per default event, so the content is editable in the inspector. An existing asset is
-        // returned untouched, which keeps a designer's edits.
-        private static EventDefinition[] ExplorationEvents()
-        {
-            var list = new System.Collections.Generic.List<EventDefinition>();
-            foreach (var spec in Exploration.DefaultEvents)
-            {
-                var captured = spec;
-                list.Add(Asset<EventDefinition>(Data + "/Events/" + captured.Id + ".asset", x => x.Spec = captured));
-            }
-            return list.ToArray();
-        }
-
         // Asset<T> never overwrites, so a catalog created before these fields existed keeps its old YAML
         // and reads every one of them back as zero. This backfills the blanks in place and leaves anything
         // a designer has already set alone. MapRules() repairs these too; this makes the fix visible in
         // the inspector instead of hiding it.
-        private static void Migrate(GameCatalog catalog, EventDefinition[] events)
+        private static void Migrate(GameCatalog catalog)
         {
             bool dirty = false;
             if (catalog.MapFloors <= 0) { catalog.MapFloors = 3; dirty = true; }
@@ -231,7 +216,6 @@ namespace Ruin.Editor
             if (catalog.EliteAttackScale <= 0) { catalog.EliteAttackScale = 1.25f; dirty = true; }
             if (catalog.BossHealthBonus <= 0) { catalog.BossHealthBonus = 45; dirty = true; }
             if (catalog.BossAttackScale <= 0) { catalog.BossAttackScale = 1.5f; dirty = true; }
-            if (catalog.Events == null || catalog.Events.Length == 0) { catalog.Events = events; dirty = true; }
             if (!dirty) return;
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();

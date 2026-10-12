@@ -59,8 +59,14 @@ namespace Ruin.Runtime
             Require(app.Map.Floor == 1 && app.Map.Current.Index == 0, "Run opens on the first position of the first floor");
             Require(app.Map.Current.Fixed && app.Map.Current.Candidates.Count == 1 && app.Map.Current.Candidates[0].Type == NodeType.Opening,
                 "The opening position is a fixed buff room");
-            app.View.InterfaceFont.RequestCharactersInTexture("界限之间战士盾卫枪手奶妈理智凝神躁动濒死祭坛事件补给站电梯井首领增益坚韧锋锐清明部位义肢断修复重创", 24, FontStyle.Normal);
-            Require("界限之间战士盾卫枪手奶妈理智濒死祭坛事件补给站电梯井首领增益部位义肢断修复".All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
+            // 事件文案里出现的新词也一并探一遍：字体是动态 OS 字体，缺字要在这里就暴露出来。
+            app.View.InterfaceFont.RequestCharactersInTexture("界限之间战士盾卫枪手奶妈理智凝神躁动濒死祭坛事件补给站电梯井首领增益坚韧锋锐清明部位义肢断修复重创"
+                + "矿道挖穿矿脉次数用尽齿轮咬袖子撬外壳弹零件划伤紧闭铁门敲击靠近对话远离药剂箱蓝红全部喝下队员医疗室药柜稳定剂休整守夜角落打乱站位失控机器工坊安装议价适配搏动组织岔道无视探索通道第五个人查清状况"
+                + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤", 24, FontStyle.Normal);
+            Require(("界限之间战士盾卫枪手奶妈理智濒死祭坛事件补给站电梯井首领增益部位义肢断修复"
+                + "矿道挖穿矿脉次数用尽齿轮咬袖子撬外壳弹零件划伤紧闭铁门敲击靠近对话远离药剂箱蓝红全部喝下队员医疗室药柜稳定剂休整守夜角落打乱站位失控机器工坊安装议价适配搏动组织岔道无视探索通道第五个人查清状况"
+                + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤")
+                .All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
             yield return Capture("map-1080.png", 1920, 1080);
             yield return Capture("map-720.png", 1280, 720);
 
@@ -182,45 +188,79 @@ namespace Ruin.Runtime
             Require(!string.IsNullOrEmpty(app.MapNote) && app.MapNote.Contains("撤退"),
                 "The route page reports the retreat");
 
-            // 事件房间：内容与可见选项在进房时冻结，隐藏选项不能选，也改不动任何状态。
+            // 理智预设要同时设定队员与玩家理智：事件闸门和地图读的是后者，不设就永远走不到低理智分支。
+            app.NewRun(15); yield return null;
+            Require(Math.Abs(app.Run.PlayerSanity - 15) < 0.000001 && app.Run.Heroes.All(h => h.Sanity == 15),
+                "The sanity preset moves the player sanity the events and the map read");
+            app.DebugForceEvent("EVT-L001"); yield return null;
+            Require(app.ActiveNode != null && app.ActiveNode.EventId == "EVT-L001",
+                "The acceptance tool pins the script it was given, not a rolled one");
+            Click("EventOption_0"); yield return null;
+            Require(app.EventCanLeave && app.Run.Map.NextBattleBonusActions,
+                "The low sanity event ends on its own and records its placeholder");
+            Click("LeaveRoom"); yield return null;
+            Require(app.Room == RoomView.Map, "Leaving a pinned event returns to the route");
+
+            // 事件房间：每一步都由 EventScripts.Page 纯粹地重建，看不见的选项不能选，也改不动任何状态。
+            app.NewRun(50); yield return null;
             Click("Laboratory"); yield return null; Click("ForceEvent"); yield return null;
             Require(app.Room == RoomView.Event && app.Battle == null, "The event room opens the event page");
             yield return Capture("event-1080.png", 1920, 1080);
+            // 随后换成内容确定的一条，下面的断言才站得住。
+            app.DebugForceEvent("EVT-004"); yield return null;
             var eventNode = app.ActiveNode;
-            Require(eventNode != null && !string.IsNullOrEmpty(eventNode.EventId) && eventNode.OptionMask != null && eventNode.OptionMask[0],
-                "The event rolls content and always offers the base option");
-            var eventSpec = Exploration.Find(app.Catalog.MapRules(), eventNode.EventId);
-            Require(eventSpec != null && eventSpec.Options.Length == eventNode.OptionMask.Length,
-                "The frozen option mask matches the rolled content");
-            for (int i = 0; i < eventNode.OptionMask.Length; i++)
+            Require(eventNode != null && eventNode.EventId == "EVT-004", "The acceptance tool can pin one script");
+            var eventPage = EventScripts.Page(eventNode, app.Run, app.Catalog.MapRules());
+            Require(eventPage.Choices.Count == 4, "The medicine chest offers four options");
+            for (int i = 0; i < eventPage.Choices.Count; i++)
             {
                 var option = FindObjectsOfType<Button>().FirstOrDefault(b => b.name == "EventOption_" + i);
-                if (option == null)
-                {
-                    // Every option is rendered, even the frozen-out ones, so a hidden option is visible as
-                    // a disabled card rather than vanishing.
-                    throw new Exception("Event option card missing: " + i);
-                }
-                if (option.interactable != eventNode.OptionMask[i]) throw new Exception("A frozen-out option is still selectable: " + i);
+                // Every option is rendered, even the ones this step cannot take, so an unavailable option
+                // shows up as a disabled card rather than vanishing.
+                if (option == null) throw new Exception("Event option card missing: " + i);
+                bool usable = eventPage.Choices[i].Shown && eventPage.Choices[i].Enabled;
+                if (option.interactable != usable) throw new Exception("An unavailable option is still selectable: " + i);
             }
             double sanityBefore = app.Run.PlayerSanity;
-            int hidden = Array.FindIndex(eventNode.OptionMask, m => !m);
+            int hidden = eventPage.Choices.FindIndex(c => !c.Shown);
             if (hidden >= 0)
             {
                 app.ChooseEventOption(hidden); yield return null;
-                Require(!app.EventChosen && Math.Abs(app.Run.PlayerSanity - sanityBefore) < 0.000001,
-                    "A frozen-out option is refused and changes nothing");
+                Require(Math.Abs(app.Run.PlayerSanity - sanityBefore) < 0.000001 && eventNode.EventStep == 0
+                    && eventNode.OptionChosen == -1, "An unavailable option is refused and changes nothing");
             }
-            app.ChooseEventOption(eventSpec.Options.Length); yield return null;
-            Require(!app.EventChosen, "An out-of-range option is refused");
-            int open = Array.FindIndex(eventNode.OptionMask, m => m);
-            var picked = eventSpec.Options[open];
-            Click("EventOption_" + open); yield return null;
-            Require(app.EventChosen && eventNode.OptionChosen == open, "A visible option resolves the room");
-            Require(Math.Abs(app.Run.PlayerSanity - SanityProbability.Clamp(sanityBefore + picked.SanityDelta, 0, 100)) < 0.000001,
-                "The chosen option applies its sanity cost");
+            app.ChooseEventOption(eventPage.Choices.Count); yield return null;
+            Require(eventNode.EventStep == 0 && eventNode.OptionChosen == -1, "An out-of-range option is refused");
+            Require(!app.EventCanLeave, "A step that still owes a choice keeps the room shut");
+
+            Click("EventOption_0"); yield return null;
+            Require(eventNode.EventStep == 1, "Picking a potion opens the member sub-step");
+            Require(!app.EventCanLeave, "The member sub-step still owes a choice");
+            Click("EventOption_0"); yield return null;
+            Require(app.Run.Heroes[0].Sanity == 0, "The blue potion empties the chosen member's sanity");
+            Require(app.EventCanLeave, "The script is over once the member is chosen");
             Click("LeaveRoom"); yield return null;
             Require(app.AwaitingNode && app.Room == RoomView.Map, "Leaving the event returns to the route");
+
+            // 多步事件：废弃矿道会一路挖到上限，然后开一场战斗；胜利的奖励回到事件页发放，路线不前进。
+            app.DebugForceEvent("EVT-001"); yield return null;
+            var mine = app.ActiveNode;
+            int stepBefore = app.Map.StepIndex;
+            int guard = 0;
+            while (app.AwaitingNode && guard++ < 10) { Click("EventOption_0"); yield return null; }
+            Require(!app.AwaitingNode && app.Battle != null && app.EventBattle == mine,
+                "Digging to the cap starts a fight owned by the event");
+            yield return Capture("event-battle-1080.png", 1920, 1080);
+            int mineSupplies = app.Map.Supplies;
+            app.DebugWinBattle(); yield return null;
+            Click("ContinueBattle"); yield return null;
+            Require(app.Room == RoomView.Event && app.Map.StepIndex == stepBefore,
+                "An event fight settles back into the event and does not advance the route");
+            Require(app.Map.Supplies == mineSupplies + 2, "The event pays its own reward");
+            Require(app.EventCanLeave, "The event is over once the fight settles");
+            Click("LeaveRoom"); yield return null;
+            Require(app.AwaitingNode && app.Room == RoomView.Map && app.Map.StepIndex == stepBefore + 1,
+                "Leaving the event walks on");
 
             // 补给站：治疗、修复重伤部位、为断肢安装义肢。工坊的全部职责都并进了这一页。
             app.DebugInjureLimb(LimbPart.Arm); yield return null;

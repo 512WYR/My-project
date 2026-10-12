@@ -18,6 +18,9 @@ namespace Ruin.Runtime
         private readonly Dictionary<string, Image> cardImages = new Dictionary<string, Image>();
         private static readonly Color Bg = Hex("10151B"), Panel = Hex("192129"), Raised = Hex("222D35"), Ink = Hex("E6E0D4"), Muted = Hex("99A6AC");
         private static readonly Color Gold = Hex("D2AD70"), Cyan = Hex("81C1C8"), Rust = Hex("CE8875"), LineColor = Hex("39454C");
+        // The event page's option band: the full content width, split evenly between however many options
+        // the current step carries.
+        private const float EventArea = 1532f, EventGap = 30f, EventTop = 344f;
         public Font InterfaceFont { get { return font; } }
 
         public void Initialize(StageOneApp owner)
@@ -492,40 +495,52 @@ namespace Ruin.Runtime
                 x, 52, 272, 48, () => app.InstallProsthetic(hero.Id, item.Id), false, true, 15);
         }
 
-        // Events and altars share one page. The visible options were frozen when the party walked in, so a
-        // re-render never re-rolls the room and never widens the choice.
+        // Events and altars share one page. The whole page is rebuilt from EventScripts.Page on every
+        // render, and that call is a pure read of the node's step: re-rendering never re-rolls a step and
+        // never widens or narrows the visible options. A step can carry one to four options; four is the
+        // widest the scripts go (the workshop), so four options get a 2x2 grid and the rest a single row.
         private void EventRoom(RectTransform root)
         {
             var node = app.ActiveNode;
             bool altar = node != null && node.Type == NodeType.Altar;
             Label(root, "EventHeading", altar ? "祭坛房间" : "事件房间", 34, 190, 900, 38, 29, Ink);
-            var spec = node == null ? null : Exploration.Find(app.Catalog.MapRules(), node.EventId);
-            if (spec == null)
+            var page = EventScripts.Page(node, app.Run, app.Catalog.MapRules());
+            if (page == null)
             {
                 Label(root, "EventNote", "这里什么也没有留下。", 36, 232, 1240, 24, 15, Muted);
                 Button(root, "LeaveRoom", "离开", "继续前进", 34, 806, 1532, 54, app.LeaveRoom, false, true, 19);
                 return;
             }
-            Label(root, "EventTitle", spec.Title, 34, 232, 1240, 34, 23, Gold);
-            Label(root, "EventBody", spec.Body, 36, 274, 1240, 56, 16, Ink);
-            var mask = node.OptionMask;
-            float start = (1600 - (spec.Options.Length * 480 + (spec.Options.Length - 1) * 30)) / 2;
-            for (int i = 0; i < spec.Options.Length; i++)
+            string title = page.Step > 0 && page.StepCount > 0
+                ? page.Title + "　步骤 " + page.Step + "/" + page.StepCount : page.Title;
+            Label(root, "EventTitle", title, 34, 232, 1240, 34, 23, Gold);
+            Label(root, "EventBody", page.Body ?? "", 36, 272, 1240, 44, 16, Ink);
+
+            int n = page.Choices.Count;
+            int cols = n <= 3 ? n : 2;
+            int rows = n <= 3 ? 1 : 2;
+            float width = cols > 0 ? (EventArea - (cols - 1) * EventGap) / cols : EventArea;
+            float height = rows == 1 ? 140f : 110f;
+            for (int i = 0; i < n; i++)
             {
-                bool shown = mask != null && i < mask.Length && mask[i];
-                var option = spec.Options[i];
-                string detail = shown ? option.Detail : "此刻你不会想到这个选项。";
+                var choice = page.Choices[i];
                 int index = i;
-                Button(root, "EventOption_" + i, shown ? option.Label : "—— 不可选 ——", detail,
-                    start + i * 510, 350, 480, 140,
-                    shown && !app.EventChosen ? () => app.ChooseEventOption(index) : (Action)(() => { }),
-                    app.EventChosen && node.OptionChosen == i, shown && !app.EventChosen, 18);
+                float x = 34 + (i % cols) * (width + EventGap);
+                float y = EventTop + (i / cols) * (height + 20);
+                Button(root, "EventOption_" + i, choice.Shown ? choice.Label : "—— 不可选 ——",
+                    choice.Detail ?? "", x, y, width, height,
+                    choice.Enabled && choice.Shown ? () => app.ChooseEventOption(index) : (Action)(() => { }),
+                    choice.Shown && node != null && node.OptionChosen == i,
+                    choice.Shown && choice.Enabled, 18);
             }
-            Label(root, "EventResult", app.RoomNote ?? "", 34, 520, 1532, 60, 19, app.EventChosen ? Gold : Muted);
+
+            float below = EventTop + rows * (height + 20) + 12;
+            Label(root, "EventResult", app.RoomNote ?? "", 34, below, 1532, 44, 19, app.EventCanLeave ? Gold : Muted);
             Label(root, "EventSanity", "玩家理智 " + app.Run.PlayerSanity.ToString("0.0") + "   ·   补给 " + app.Map.Supplies,
-                34, 584, 1532, 24, 15, Muted);
-            Button(root, "LeaveRoom", app.EventChosen ? "离开房间" : "先选择一种处理方式", "继续前进",
-                34, 806, 1532, 54, app.LeaveRoom, false, app.EventChosen, 19);
+                34, below + 50, 1532, 24, 15, Muted);
+            Button(root, "LeaveRoom", app.EventCanLeave ? "离开房间" : "先完成这一事件", "继续前进",
+                34, 806, 1532, 54, app.LeaveRoom, false, app.EventCanLeave, 19);
+            if (!string.IsNullOrEmpty(page.Hint)) Label(root, "EventHint", page.Hint, 34, 770, 1532, 24, 14, Muted);
         }
 
         // A pure transition page: no fight, no draw, just the floor summary and the way down.
@@ -720,13 +735,14 @@ namespace Ruin.Runtime
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private void Laboratory(RectTransform root)
         {
+            if (app.LabEvents) { EventLab(root); return; }
             var p = Modal(root, "LabModal", 1040, 890);
             Label(p, "LabTitle", "第一阶段验收工具", 34, 23, 960, 44, 28, Ink);
             Label(p, "LabCaption", "仅开发版提供。新建队伍会重置演练；单人调整会计入本场理智净变化。", 36, 76, 968, 28, 15, Muted);
-            Label(p, "PresetHeading", "新建固定理智队伍", 36, 128, 920, 26, 17, Gold);
-            Button(p, "Preset15", "理智 15", "只可能触发低理智技能变化", 36, 171, 310, 66, () => app.NewRun(15), false, true, 20);
+            Label(p, "PresetHeading", "新建固定理智队伍（队员与玩家理智同时设定）", 36, 128, 920, 26, 17, Gold);
+            Button(p, "Preset15", "理智 15", "低理智事件分支与技能变化", 36, 171, 310, 66, () => app.NewRun(15), false, true, 20);
             Button(p, "Preset50", "理智 50", "稳定区 · 仅常态技能", 365, 171, 310, 66, () => app.NewRun(50), false, true, 20);
-            Button(p, "Preset85", "理智 85", "只可能解锁高理智技能", 694, 171, 310, 66, () => app.NewRun(85), false, true, 20);
+            Button(p, "Preset85", "理智 85", "高理智事件分支与技能解锁", 694, 171, 310, 66, () => app.NewRun(85), false, true, 20);
             var actor = app.Battle == null ? null : app.Battle.Find(app.InspectedId);
             string selected = actor != null && actor.Player ? actor.Name : "第一位存活队员";
             Label(p, "ChangeHeading", "调整选中队员 / " + selected + "    （不会重抽本回合技能）", 36, 262, 968, 27, 16, Ink);
@@ -744,13 +760,14 @@ namespace Ruin.Runtime
             Button(p, "RestParty", "整备全队生命", "验收便利 · 不改理智", 36, 542, 310, 54, app.DebugRestParty, false, true, 18);
             Button(p, "SkipFloor", "跳到本层末端", "末位是电梯井或首领", 365, 542, 310, 54, app.DebugSkipToFloorEnd, false, true, 18);
             Button(p, "JumpBoss", "跳到首领层", "查看结束流程", 694, 542, 310, 54, () => app.DebugEnterFloor(app.Catalog.MapRules().Floors), false, true, 18);
-            // Five buttons share the row the four used to, so the widths shrink by 43 px each. The chest
-            // room has no weight on the route yet, which makes this the only way to look at its page.
-            Button(p, "ForceSupply", "进入补给站", "替换当前候选", 36, 602, 184, 50, () => app.DebugForceRoom(NodeType.Supply), false, true, 15);
-            Button(p, "ForceEvent", "进入事件房间", "替换当前候选", 232, 602, 184, 50, () => app.DebugForceRoom(NodeType.Event), false, true, 15);
-            Button(p, "ForceAltar", "进入祭坛房间", "替换当前候选", 428, 602, 184, 50, () => app.DebugForceRoom(NodeType.Altar), false, true, 15);
-            Button(p, "ForceTreasure", "进入宝箱房", "内容待定", 624, 602, 184, 50, () => app.DebugForceRoom(NodeType.Treasure), false, true, 15);
-            Button(p, "ForceElevator", "进入电梯井", "替换当前候选", 820, 602, 184, 50, () => app.DebugForceRoom(NodeType.Elevator), false, true, 15);
+            // Six buttons share this row, so each is 151 wide with a 12 px gap. The chest room has no
+            // weight on the route yet, which makes this the only way to look at its page.
+            Button(p, "ForceSupply", "进入补给站", "替换当前候选", 36, 602, 151, 50, () => app.DebugForceRoom(NodeType.Supply), false, true, 15);
+            Button(p, "ForceEvent", "进入事件房间", "随机一条", 199, 602, 151, 50, () => app.DebugForceRoom(NodeType.Event), false, true, 15);
+            Button(p, "ForceAltar", "进入祭坛房间", "替换当前候选", 362, 602, 151, 50, () => app.DebugForceRoom(NodeType.Altar), false, true, 15);
+            Button(p, "ForceTreasure", "进入宝箱房", "内容待定", 525, 602, 151, 50, () => app.DebugForceRoom(NodeType.Treasure), false, true, 15);
+            Button(p, "ForceElevator", "进入电梯井", "替换当前候选", 688, 602, 151, 50, () => app.DebugForceRoom(NodeType.Elevator), false, true, 15);
+            Button(p, "LabEvents", "事件验收", "十条事件各钉一条", 851, 602, 151, 50, app.ToggleLabEvents, false, true, 15);
             Label(p, "LimbLabHeading", "身体与义肢   （作用于选中队员，可在房间页使用）", 36, 664, 968, 26, 17, Gold);
             Button(p, "InjureHead", "击伤·头部", "命中 −10%", 36, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Head), false, true, 16);
             Button(p, "InjureTorso", "击伤·躯干", "防御 −20%", 283, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Torso), false, true, 16);
@@ -760,6 +777,46 @@ namespace Ruin.Runtime
             Button(p, "SeverLeg", "断肢·腿部", "两次击伤的效果", 350, 764, 294, 54, () => app.DebugSeverLimb(LimbPart.Leg), false, true, 16);
             Button(p, "GrantAllProsthetics", "发放全部义肢", "进入补给站前先领好", 664, 764, 340, 54, app.DebugGrantAllProsthetics, false, true, 16);
             Button(p, "CloseLab", "返回", "F3 / Esc", 36, 830, 968, 52, app.ToggleLab, true, true, 18);
+        }
+
+        // The per-event page of the acceptance tool. Every script gets a button, because four of the ten
+        // only show a branch inside a sanity range and two of them fight before they pay out.
+        private void EventLab(RectTransform root)
+        {
+            var p = Modal(root, "EventLabModal", 1040, 890);
+            Label(p, "EventLabTitle", "事件验收工具", 34, 23, 960, 44, 28, Ink);
+            Label(p, "EventLabCaption",
+                "钉住一条事件并把当前候选换成它。理智 15 / 85 两个预设同时设定队员与玩家理智，"
+                + "高／低理智分支、EVT-004 的「全部喝下」和 EVT-L001 都靠它切换。", 36, 76, 968, 46, 15, Muted);
+
+            Label(p, "EventLabBasic", "全部理智", 36, 134, 920, 26, 17, Gold);
+            EventButton(p, "Force001", "废弃矿道", "EVT-001 · 挖矿循环→战斗", 36, 177, "EVT-001");
+            EventButton(p, "Force002", "失控的机器", "EVT-002 · 理智判定·义体", 281, 177, "EVT-002");
+            EventButton(p, "Force003", "铁门后的敲击声", "EVT-003 · 两层选择·开门", 526, 177, "EVT-003");
+            EventButton(p, "Force004", "破损的药剂箱", "EVT-004 · 低理智可全喝", 771, 177, "EVT-004");
+            EventButton(p, "Force005", "应急医疗室", "EVT-005 · 选人治疗·判定", 36, 271, "EVT-005");
+            EventButton(p, "Force006", "安全角落休整", "EVT-006 · 守夜·打乱站位", 281, 271, "EVT-006");
+            EventButton(p, "Force007", "剧情事件", "EVT-007 · 纯文案·无效果", 526, 271, "EVT-007");
+            EventButton(p, "Force008", "废弃义肢工坊", "EVT-008 · 祭坛房·四选项", 771, 271, "EVT-008");
+
+            Label(p, "EventLabSpecial", "理智限定（高 ≥ 50 / 低 < 50）", 36, 369, 920, 26, 17, Gold);
+            EventButton(p, "ForceH001", "隐藏的岔道", "EVT-H001 · 高理智 · 电梯通道", 36, 412, "EVT-H001");
+            EventButton(p, "ForceL001", "第五个人", "EVT-L001 · 低理智 · 两条占位", 526, 412, "EVT-L001");
+
+            Label(p, "EventLabFight", "事件里的战斗", 36, 510, 920, 26, 17, Gold);
+            Button(p, "LabWinBattle", "直接打赢", "胜利后奖励回到事件页发放", 36, 553, 478, 62, app.DebugWinBattle, false, true, 18);
+            Button(p, "LabRetreatBattle", "结束当前战斗", "撤退不发事件奖励", 526, 553, 478, 62, app.DebugSettle, false, true, 18);
+            Label(p, "EventLabNote",
+                "钉住的事件只替换当前位置的候选，之后仍然按正常流程离开并前进。"
+                + "撤退只记录结果，不发奖励：EVT-001／003／006／H001／L001 的奖励都在胜利之后发放。",
+                36, 630, 968, 46, 14, Muted);
+            Button(p, "CloseEventLab", "返回验收工具", "F3 / Esc 关闭", 36, 800, 968, 52, app.ToggleLabEvents, true, true, 18);
+        }
+
+        // DebugForceEvent closes the tool on its way in, so the room page is what the owner lands on.
+        private void EventButton(RectTransform p, string id, string title, string detail, float x, float y, string eventId)
+        {
+            Button(p, id, title, detail, x, y, 233, 82, () => app.DebugForceEvent(eventId), false, true, 19);
         }
 #endif
 

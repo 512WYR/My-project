@@ -187,6 +187,10 @@ namespace Ruin.Core
         public double DefenseBuff;    // Temporary team defence bump.
         public double AccuracyBuff;   // Temporary team accuracy bump.
         public double SelfVulnerable; // Damage taken is raised by this share for the round.
+        // Set by the medicine-chest event (EVT-004) when the gamble succeeds: this hero may only ever use
+        // the high-sanity and low-sanity lists, never the plain four. It is a run-long trait, so it is
+        // deliberately not cleared by ResetBattleEffects the way the per-battle flags above are.
+        public bool SanitySkillsOnly;
         // Four parts, hero side only. Read the effective attributes through BattleEngine so the limb
         // penalties are applied; Speed below stays the raw character value.
         public List<LimbState> Limbs = new List<LimbState>();

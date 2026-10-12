@@ -28,8 +28,17 @@ namespace Ruin.Core
         public NodeType Type;
         public int OptionIndex;   // Which candidate of the step this node came from.
         public string EventId;    // Set on an event or altar once its content has been rolled.
-        public bool[] OptionMask; // Option visibility frozen at roll time, so re-rendering never re-rolls it.
-        public int OptionChosen = -1;
+        public int OptionChosen = -1; // Which option of the current step was taken; -1 while unanswered.
+        // Scripted-event progress. A documented event is a short run of steps; the node remembers which
+        // step is on screen and the few numbers a step needs, so a re-render never has to re-roll or guess.
+        // Option visibility is not stored: EventScripts.Page rebuilds it from the step alone, which is what
+        // keeps a re-render from re-rolling anything.
+        public int EventStep;      // Which step of the script is showing; EventScripts.DoneStep means over.
+        public int EventCount;     // How many times a repeatable option has already been taken.
+        public int EventLimit;     // The cap rolled once on entry (the abandoned mine's 2..5 digs).
+        public string EventTarget; // The hero a "choose a member" step settled on.
+        public int EventFlag;      // Free slot for one-off outcomes: potion colour, a 30/70 roll, a retreat.
+        public bool EventJump;     // EVT-H001: leaving this room should go straight to the floor's elevator.
         public string Name { get { return MapGenerator.Name(Type); } }
     }
 
@@ -65,6 +74,11 @@ namespace Ruin.Core
         public bool BuffChosen;
         public bool SupplyHealed;                  // This supply room already healed the team.
         public bool SupplyCalmed;                  // This supply room already steadied the team.
+        // Placeholders raised by EVT-L001. The document asks for +1 action in the next fight and a higher
+        // battle-node rate afterwards; neither rule exists in the engine yet, so the event only records the
+        // request and the notes say so. Nothing reads these two fields today.
+        public bool NextBattleBonusActions;
+        public bool BattleNodeBonus;
 
         public StepState Current
         {
@@ -106,7 +120,6 @@ namespace Ruin.Core
         public double BranchAffinity = 1.5;       // One candidate uses -a, three candidates use +a.
         public double[] BranchWeights = { 0.31, 0.38, 0.31 };
         public NodeOddsSpec[] NodeOdds;           // Null falls back to MapGenerator.DefaultOdds.
-        public EventSpec[] Events;                // Null or empty falls back to Exploration.DefaultEvents.
         public GrowthBuff[] OpeningBuffs = { GrowthBuff.Toughness, GrowthBuff.Sharpness, GrowthBuff.Clarity };
         public double SupplyHealRatio = 0.35;     // Share of a hero's max health restored by one supply heal.
         public int SuppliesPerBattle = 2;

@@ -52,6 +52,20 @@ namespace Ruin.Core
         public double[] FormProbabilities(ActorState actor)
         {
             var mental = Rules.Mental(actor.Mental);
+            // A hero the medicine chest rewired (EVT-004) never falls back on the plain kit, so the basic
+            // row is pinned to zero instead of being offered. Dropping the row would change the shape the
+            // inspector and the tests read, and zeroing the weight while keeping the 30/70 gates would make
+            // every row disabled in the stable band and throw inside Distribution. The two remaining rows
+            // are therefore drawn without gates, which keeps the middle row exactly 0 and the outer two
+            // strictly positive at every sanity.
+            if (actor != null && actor.SanitySkillsOnly)
+            {
+                var split = SanityProbability.Distribution(actor.Sanity, new[] {
+                    new WeightedOutcome(Rules.TechnicalWeight * mental.TechnicalMultiplier, 1),
+                    new WeightedOutcome(Rules.PrimalWeight * mental.PrimalMultiplier, -1)
+                }, Rules.ProbabilityStrength);
+                return new[] { split[0], 0.0, split[1] };
+            }
             return SanityProbability.Distribution(actor.Sanity, new[] {
                 new WeightedOutcome(Rules.TechnicalWeight * mental.TechnicalMultiplier, 1, SanityGate.High),
                 new WeightedOutcome(Rules.BasicWeight, 0),
@@ -120,7 +134,18 @@ namespace Ruin.Core
 
         public SkillSpec[] SkillsFor(ActorState actor)
         {
-            return actor == null ? ActorSpec.EmptySkills : actor.Definition.SkillsFor(actor.Form);
+            if (actor == null) return ActorSpec.EmptySkills;
+            // The restricted hero skips the plain kit entirely. FormProbabilities never hands out Basic for
+            // them, but the form also starts as Basic in ResetBattleEffects, so this guards that first turn
+            // and keeps the action row from ever being empty.
+            if (actor.SanitySkillsOnly && actor.Form == SkillForm.Basic)
+            {
+                var list = actor.Sanity >= 50 ? actor.Definition.TechnicalSkills : actor.Definition.PrimalSkills;
+                if (list != null && list.Length > 0) return list;
+                var other = actor.Sanity >= 50 ? actor.Definition.PrimalSkills : actor.Definition.TechnicalSkills;
+                if (other != null && other.Length > 0) return other;
+            }
+            return actor.Definition.SkillsFor(actor.Form);
         }
 
         public SkillSpec SkillFor(ActorState actor, int index)

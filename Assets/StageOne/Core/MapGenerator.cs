@@ -45,7 +45,6 @@ namespace Ruin.Core
                 BranchAffinity = Positive(source.BranchAffinity) ? source.BranchAffinity : 1.5,
                 BranchWeights = Usable(source.BranchWeights) ? (double[])source.BranchWeights.Clone() : (double[])DefaultBranchWeights.Clone(),
                 NodeOdds = Usable(source.NodeOdds) ? Clone(source.NodeOdds) : Clone(DefaultOdds),
-                Events = source.Events != null && source.Events.Length > 0 ? (EventSpec[])source.Events.Clone() : null,
                 OpeningBuffs = Usable(source.OpeningBuffs) ? (GrowthBuff[])source.OpeningBuffs.Clone() : DefaultBuffs(),
                 SupplyHealRatio = Positive(source.SupplyHealRatio) ? source.SupplyHealRatio : 0.35,
                 SuppliesPerBattle = source.SuppliesPerBattle > 0 ? source.SuppliesPerBattle : 2,

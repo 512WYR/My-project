@@ -164,41 +164,65 @@ namespace Ruin.Tests
             Assert.IsTrue(app.Run.Prosthetics.Any(p => p.Part == LimbPart.Leg), "没用到的义肢留在仓库");
         }
 
-        [UnityTest] public IEnumerator AnEventRoomFreezesItsOptionsAndRefusesTheFrozenOutOnes()
+        [UnityTest] public IEnumerator AnEventRoomWalksItsSubStepsAndStaysShutUntilTheScriptEnds()
         {
-            app.DebugForceRoom(NodeType.Event); yield return null;
+            // EVT-004 的第二步要挑人选，正好覆盖「选人子步骤」和多步闸门。
+            app.DebugForceEvent("EVT-004"); yield return null;
             Assert.AreEqual(RoomView.Event, app.Room);
             var node = app.ActiveNode;
-            Assert.NotNull(node.EventId);
-            Assert.IsTrue(node.OptionMask[0], "基础选项永远在");
+            Assert.AreEqual("EVT-004", node.EventId);
+            Assert.IsFalse(app.EventCanLeave, "第一步还没选，房间不能离开");
+            Assert.IsTrue(Object.FindObjectsOfType<Text>().Any(t => t.name == "EventTitle" && t.text.Contains("步骤 1/2")));
 
-            var spec = Exploration.Find(app.Catalog.MapRules(), node.EventId);
-            for (int i = 0; i < node.OptionMask.Length; i++)
-            {
-                var button = Object.FindObjectsOfType<Button>().First(b => b.name == "EventOption_" + i);
-                Assert.AreEqual(node.OptionMask[i], button.interactable, "选项能不能点必须和冻结的掩码一致");
-            }
+            // 越界的下标被拒绝，而且不改动任何状态。
+            double before = app.Run.PlayerSanity;
+            app.ChooseEventOption(9); yield return null;
+            Assert.AreEqual(before, app.Run.PlayerSanity);
+            Assert.IsFalse(app.EventCanLeave);
+            Assert.IsTrue(Object.FindObjectsOfType<Button>().First(b => b.name == "LeaveRoom").interactable == false,
+                "事件没走完时离开按钮不可点");
 
-            // 藏起来的选项即使被直接调用也不能结算，而且不改动任何状态。
-            app.ChooseEventOption(node.OptionMask.Length); yield return null;
-            Assert.IsFalse(app.EventChosen, "越界的选项要被拒绝");
-            int hidden = System.Array.FindIndex(node.OptionMask, m => !m);
-            if (hidden >= 0)
-            {
-                double before = app.Run.PlayerSanity;
-                app.ChooseEventOption(hidden); yield return null;
-                Assert.IsFalse(app.EventChosen);
-                Assert.AreEqual(before, app.Run.PlayerSanity);
-            }
+            Click("EventOption_0"); yield return null;
+            Assert.AreEqual(1, node.EventStep, "喝下药剂后进入选人子步骤");
+            Assert.IsFalse(app.EventCanLeave, "还没选人，房间仍然关着");
+            Assert.IsTrue(Object.FindObjectsOfType<Text>().Any(t => t.name == "EventTitle" && t.text.Contains("步骤 2/2")));
 
-            int open = System.Array.FindIndex(node.OptionMask, m => m);
-            double sanity = app.Run.PlayerSanity;
-            Click("EventOption_" + open); yield return null;
-            Assert.IsTrue(app.EventChosen);
-            Assert.AreEqual(SanityProbability.Clamp(sanity + spec.Options[open].SanityDelta, 0, 100), app.Run.PlayerSanity);
+            Click("EventOption_0"); yield return null;
+            Assert.AreEqual(0, app.Run.Heroes[0].Sanity, "蓝药剂把选中队员的理智清零");
+            Assert.IsTrue(app.EventCanLeave);
 
             Click("LeaveRoom"); yield return null;
             Assert.AreEqual(RoomView.Map, app.Room);
+        }
+
+        [UnityTest] public IEnumerator AnEventFightComesBackToTheEventAndPaysItsReward()
+        {
+            // EVT-001 挖到上限会打一场，胜利之后奖励要回到事件页发，路线本身不前进。
+            app.DebugForceEvent("EVT-001"); yield return null;
+            var node = app.ActiveNode;
+            int stepBefore = app.Map.StepIndex;
+
+            int guard = 0;
+            while (app.AwaitingNode && guard++ < 10) { Click("EventOption_0"); yield return null; }
+            Assert.IsFalse(app.AwaitingNode, "挖到上限会切到战斗页面");
+            Assert.NotNull(app.Battle);
+            Assert.AreEqual(node, app.EventBattle, "战斗记住自己是这个事件发起的");
+
+            int supplies = app.Map.Supplies;
+            int stock = app.Run.Prosthetics.Count;
+            app.DebugWinBattle(); yield return null;
+            Click("ContinueBattle"); yield return null;
+
+            Assert.AreEqual(RoomView.Event, app.Room, "结算回到事件页，而不是继续前进");
+            Assert.AreEqual(stepBefore, app.Map.StepIndex, "事件没结束时路线不推进");
+            Assert.IsNull(app.Battle);
+            Assert.AreEqual(supplies + 2, app.Map.Supplies, "胜利奖励由事件发放");
+            Assert.AreEqual(stock, app.Run.Prosthetics.Count, "矿道的奖励是矿石而不是义体");
+            Assert.IsTrue(app.EventCanLeave, "结算之后事件才结束");
+
+            Click("LeaveRoom"); yield return null;
+            Assert.AreEqual(RoomView.Map, app.Room);
+            Assert.AreEqual(stepBefore + 1, app.Map.StepIndex, "离开事件才前进一格");
         }
 
         [UnityTest] public IEnumerator TheElevatorGoesDownOneFloorWithoutHealing()

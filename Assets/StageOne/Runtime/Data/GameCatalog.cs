@@ -30,9 +30,9 @@ namespace Ruin.Runtime
         // Relative weights for drawing 1, 2 or 3 candidates. The leans are fixed at -a / 0 / +a.
         public double[] MapBranchWeights = { 0.31, 0.38, 0.31 };
         [Header("探索内容")]
-        // Empty falls back to Exploration.DefaultEvents, for the same reason the node weight table stays
-        // in MapGenerator.DefaultOdds: an older asset never receives newly added array fields.
-        public EventDefinition[] Events;
+        // Event and altar content lives in EventScripts as code, not here: the documented events need steps,
+        // a chosen member and fights, which a flat array of ScriptableObjects cannot carry. Everything below
+        // is the supply room's numbers.
         [Range(0.05f, 1)] public float SupplyHealRatio = 0.35f;
         public int SuppliesPerBattle = 2;
         public int SuppliesPerElite = 4;
@@ -98,7 +98,6 @@ namespace Ruin.Runtime
                 // let a room page write back into the catalog.
                 BranchWeights = MapBranchWeights,
                 NodeOdds = MapNodeOdds,
-                Events = Events == null ? null : Events.Where(e => e != null && e.Spec != null).Select(e => e.Spec).ToArray(),
                 SupplyHealRatio = SupplyHealRatio,
                 SuppliesPerBattle = SuppliesPerBattle,
                 SuppliesPerElite = SuppliesPerElite,

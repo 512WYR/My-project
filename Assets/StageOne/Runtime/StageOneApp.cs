@@ -25,6 +25,8 @@ namespace Ruin.Runtime
         public bool Busy { get; private set; }
         public bool HelpOpen { get; private set; }
         public bool LabOpen { get; private set; }
+        // Which page of the acceptance tool is up: the general one, or the per-event list.
+        public bool LabEvents { get; private set; }
         public string Hint { get; private set; }
         // True while the battle page is not in charge, which is also when Battle is null.
         public bool AwaitingNode { get; private set; }
@@ -33,7 +35,12 @@ namespace Ruin.Runtime
         // The room the party walked into, kept so a battle settlement and a room page both know which
         // node on the route they belong to.
         public NodeState ActiveNode { get; private set; }
-        public bool EventChosen { get; private set; }
+        // The event node that started the fight currently on the battle page, if any. When ContinueBattle
+        // sees it, the settlement goes back to the event instead of walking the route forward.
+        public NodeState EventBattle { get; private set; }
+        // A scripted event runs as a short series of steps; the room only opens up once the script itself
+        // says so, and the answer is recomputed rather than stored, so a step can never un-finish itself.
+        public bool EventCanLeave { get { return ActiveNode == null || EventScripts.CanLeave(ActiveNode); } }
         public string RoomNote { get; private set; }
         // A one-line report of the fight that just settled, shown on the route page. It outlives the walk
         // forward, which is why it is not RoomNote: RevealStep clears that one on every step.
@@ -52,6 +59,9 @@ namespace Ruin.Runtime
         public bool InRoom { get { return AwaitingNode && Room != RoomView.Map; } }
 
         private MapRules Rules() { return Catalog.MapRules(); }
+
+        // Debug only: an event id the next room roll must take instead of the weighted draw.
+        private string ForcedEvent;
 
         private void Start()
         {
@@ -75,6 +85,8 @@ namespace Ruin.Runtime
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (HelpOpen) ToggleHelp();
+                // Back out of the event list first, so one Esc does not lose the whole tool.
+                else if (LabOpen && LabEvents) ToggleLabEvents();
                 else if (LabOpen) ToggleLab();
                 else { ClearPending(); Refresh(); }
             }
@@ -83,11 +95,16 @@ namespace Ruin.Runtime
         public void NewRun(double? preset = null)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); HelpOpen = false; LabOpen = false;
-            Room = RoomView.Map; ActiveNode = null; EventChosen = false; RoomNote = null; MapNote = null;
+            Room = RoomView.Map; ActiveNode = null; EventBattle = null; RoomNote = null; MapNote = null;
             RunEndNote = null;
             // The limb rules travel with the rest of the combat rules, so the catalog's part ratios and
             // penalties seed every hero's limb table.
             Run = RunState.Create(Catalog.Heroes.Select(a => a.ToSpec()).ToArray(), DefaultSeed, preset, Catalog.Rules());
+            // The seed preset only writes each hero's own sanity. The shared player sanity is a different
+            // field, and it is what the map odds and every event's high/low gate read, so the debug
+            // presets have to move it too — otherwise "sanity 15" still reads 50 and every event quietly
+            // takes its high-sanity branch. A normal run passes no preset and stays at 50.
+            if (preset.HasValue) Run.PlayerSanity = SanityProbability.Clamp(preset.Value, 0, 100);
             Run.Map.Floor = 1;
             RevealStep();
             Hint = "路线开局是一间初始增益房，先选一项全队增益。";
@@ -99,7 +116,7 @@ namespace Ruin.Runtime
         private void RevealStep()
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            Room = RoomView.Map; ActiveNode = null; EventChosen = false; RoomNote = null;
+            Room = RoomView.Map; ActiveNode = null; EventBattle = null; RoomNote = null;
             AwaitingNode = true;
             MapGenerator.Advance(Run.Map, Rules(), Run.Random, Run.PlayerSanity);
             Hint = "选择一条路线前进。已通过的房间固定不变，前方候选只有在走到跟前才会出现。";
@@ -132,7 +149,7 @@ namespace Ruin.Runtime
                 case NodeType.Battle:
                 case NodeType.EliteBattle:
                 case NodeType.Boss:
-                    StartBattle(node); return;
+                    StartBattle(node, node.Type); return;
                 case NodeType.Opening:
                     EnterBuffRoom(); return;
                 case NodeType.Supply:
@@ -158,7 +175,7 @@ namespace Ruin.Runtime
         private void EnterBuffRoom()
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            Room = RoomView.Buff; AwaitingNode = true; EventChosen = false; RoomNote = null;
+            Room = RoomView.Buff; AwaitingNode = true; RoomNote = null;
             Hint = "选择一项全队增益。选定之后本次冒险不再更改。";
             Refresh();
         }
@@ -179,7 +196,7 @@ namespace Ruin.Runtime
         private void EnterSupplyRoom()
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            Room = RoomView.Supply; AwaitingNode = true; EventChosen = false; RoomNote = null;
+            Room = RoomView.Supply; AwaitingNode = true; RoomNote = null;
             Run.Map.SupplyHealed = false; Run.Map.SupplyCalmed = false;
             Hint = "补给站：治疗全队、修复重伤部位、为断肢安装义肢、静养恢复理智。离开后继续前进。";
             Refresh();
@@ -225,24 +242,29 @@ namespace Ruin.Runtime
             Refresh();
         }
 
-        // Events and altars share one page. The content and the visible options are frozen when the party
-        // walks in, so re-rendering never re-rolls the room.
+        // Events and altars share one page. Which event the room holds, and everything that event rolled on
+        // entry, is frozen here; EventScripts.Page then rebuilds the current step on every render without
+        // drawing anything, so re-rendering never re-rolls the room.
         private void EnterEventRoom(NodeState node)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            Room = RoomView.Event; AwaitingNode = true; EventChosen = false; RoomNote = null;
-            Exploration.RollEvent(Rules(), node, Run.Random, Run.PlayerSanity, node.Type);
+            Room = RoomView.Event; AwaitingNode = true; EventBattle = null; RoomNote = null;
+            EventScripts.Roll(node, Run, Rules(), ForcedEvent);
+            ForcedEvent = null;
             Hint = node.Type == NodeType.Altar ? "祭坛房间：选择一种处理方式。" : "事件房间：选择一种处理方式。";
             Refresh();
         }
 
+        // One option listener call. A step that asks for a fight hands the room over to the battle page and
+        // keeps EventBattle pointing at this node, so the settlement knows where to come back to.
         public void ChooseEventOption(int index)
         {
-            if (Run == null || Room != RoomView.Event || ActiveNode == null || EventChosen) return;
-            string note;
-            if (!Exploration.ApplyOption(Rules(), ActiveNode, index, Run, out note))
+            if (Run == null || Room != RoomView.Event || ActiveNode == null) return;
+            EventSession session;
+            if (!EventScripts.Choose(ActiveNode, index, Run, Rules(), out session))
             { Hint = "这个选项现在不可用。"; Refresh(); return; }
-            EventChosen = true; RoomNote = note; Hint = note;
+            RoomNote = session.Note; Hint = session.Note;
+            if (session.WantsBattle) { StartBattle(ActiveNode, session.BattleKind); return; }
             Refresh();
         }
 
@@ -250,7 +272,7 @@ namespace Ruin.Runtime
         private void EnterElevator()
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            Room = RoomView.Elevator; AwaitingNode = true; EventChosen = false; RoomNote = null;
+            Room = RoomView.Elevator; AwaitingNode = true; RoomNote = null;
             Hint = "电梯井：本层到此为止。下行之后不会自动整备生命。";
             Refresh();
         }
@@ -261,7 +283,7 @@ namespace Ruin.Runtime
         private void EnterTreasureRoom()
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            Room = RoomView.Treasure; AwaitingNode = true; EventChosen = false;
+            Room = RoomView.Treasure; AwaitingNode = true;
             RoomNote = "宝箱房的内容还没有确定，这里暂时不发放任何东西。";
             Hint = "宝箱房：内容待定。离开会继续前进。";
             Refresh();
@@ -279,7 +301,7 @@ namespace Ruin.Runtime
         {
             if (Run == null || !InRoom) return;
             if (Room == RoomView.Buff && !Run.Map.BuffChosen) { Hint = "先选择一项增益再离开。"; Refresh(); return; }
-            if (Room == RoomView.Event && !EventChosen) { Hint = "先选择一种处理方式再离开。"; Refresh(); return; }
+            if (Room == RoomView.Event && !EventCanLeave) { Hint = "这个事件还没有走完。"; Refresh(); return; }
             ResolveCurrent();
         }
 
@@ -290,7 +312,28 @@ namespace Ruin.Runtime
             var step = Run.Map.Current;
             if (step == null) return;
             step.Resolved = true;
+            // EVT-H001's passage drops the party at this floor's elevator instead of one position along.
+            if (ActiveNode != null && ActiveNode.EventJump) { JumpToFloorEnd(); return; }
             WalkForward();
+        }
+
+        // The hidden passage shortcut. Rather than writing StepIndex ahead of the party on its own, this
+        // walks the same positions Advance would have built, so the draw contract and the shown steps are
+        // exactly what a walked route would have produced. Onto the last floor it does nothing: there is no
+        // elevator down there, only the boss.
+        private void JumpToFloorEnd()
+        {
+            var rules = Rules();
+            int floor = Math.Min(Math.Max(Run.Map.Floor, 1), rules.Floors);
+            if (floor >= rules.Floors) { WalkForward(); return; }
+            int start = 0;
+            for (int f = 1; f < floor; f++) start += MapGenerator.StepsOnFloor(rules, f);
+            int target = start + MapGenerator.StepsOnFloor(rules, floor) - 1;
+            if (target <= Run.Map.StepIndex) { WalkForward(); return; }
+            Run.Map.StepIndex = target;
+            RevealStep();
+            Hint = "通道把队伍直接送到了第 " + floor + " 层的电梯井。";
+            Refresh();
         }
 
         // ---------------- battles ----------------
@@ -302,6 +345,9 @@ namespace Ruin.Runtime
 
             var node = ActiveNode;
             bool won = Battle.Outcome == BattleOutcome.Victory;
+            // A fight started by a scripted event goes back to that event rather than forward along the
+            // route: the event still owes the party its reward text and its last step.
+            if (node != null && node == EventBattle) { ReturnToEvent(node, won); return; }
             if (node != null)
             {
                 // Written to MapNote rather than RoomNote: the walk forward right below clears the room
@@ -329,25 +375,43 @@ namespace Ruin.Runtime
             ResolveCurrent();
         }
 
+        // Comes back from an event fight. The fight is torn down by hand rather than through RevealStep,
+        // because that would wipe ActiveNode, the room and the event's own progress and leave no way back.
+        // The engine is dropped before Refresh so the enemy coroutine cannot run against a dead battle.
+        private void ReturnToEvent(NodeState node, bool won)
+        {
+            StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
+            Battle = null; EventBattle = null;
+            AwaitingNode = true; Room = RoomView.Event; ActiveNode = node;
+            RoomNote = EventScripts.ResolveBattleReturn(node, Run, Rules(), won);
+            Hint = RoomNote;
+            Refresh();
+        }
+
         private void FinishRun(string note, bool cleared)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
-            AwaitingNode = true; Room = RoomView.Map; ActiveNode = null;
+            AwaitingNode = true; Room = RoomView.Map; ActiveNode = null; EventBattle = null;
             Run.Map.Finished = true; Run.Map.Cleared = cleared;
             RunEndNote = note;
             Hint = note;
             Refresh();
         }
 
-        private void StartBattle(NodeState node)
+        // The battle kind is passed in rather than read off the node: an event node is NodeType.Event, so
+        // the elite branch of a scripted fight would otherwise never scale anything.
+        private void StartBattle(NodeState node, NodeType kind)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
             AwaitingNode = false;
             // Scaling builds brand new specs, so an elite or a boss never leaks back into the enemy asset.
-            var enemies = Encounter.Scale(Catalog.Enemies.Select(a => a.ToSpec()).ToArray(), node.Type, Rules());
+            var enemies = Encounter.Scale(Catalog.Enemies.Select(a => a.ToSpec()).ToArray(), kind, Rules());
             Battle = new BattleEngine(Run, enemies, Catalog.Rules());
+            // Only a fight the event asked for comes back to the event; a route battle resolves the position.
+            EventBattle = Room == RoomView.Event ? node : null;
             InspectedId = Battle.Current != null && Battle.Current.Player ? Battle.Current.Id : Run.Heroes[0].Id;
-            Hint = "第 " + node.Floor + " 层 · " + node.Name + "。选择技能，再点击高亮目标；右侧可查看理智与技能概率。";
+            Hint = "第 " + node.Floor + " 层 · " + (kind == node.Type ? node.Name : MapGenerator.Name(kind))
+                + "。选择技能，再点击高亮目标；右侧可查看理智与技能概率。";
             Refresh();
             if (Battle.Current != null && !Battle.Current.Player) StartCoroutine(ContinueEnemies(Battle.Events.Count));
         }
@@ -420,9 +484,18 @@ namespace Ruin.Runtime
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // Closing always wins: a forced room can open a page while the tool is up, and without this the
             // tool would be stuck open because the room page blocks the reopen path.
-            if (LabOpen) { LabOpen = false; ClearPending(); Refresh(); return; }
+            if (LabOpen) { LabOpen = false; LabEvents = false; ClearPending(); Refresh(); return; }
             if (Busy || InRoom) return;
-            LabOpen = true; HelpOpen = false; ClearPending(); Refresh();
+            LabOpen = true; HelpOpen = false; LabEvents = false; ClearPending(); Refresh();
+#endif
+        }
+
+        // The acceptance tool's second page: one button per event script, so a branch that hides behind a
+        // sanity gate or a 30/70 does not have to be rolled for.
+        public void ToggleLabEvents()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            LabEvents = !LabEvents; ClearPending(); Refresh();
 #endif
         }
         // Everything that changes state funnels through Refresh(), so this is the one place a second UI can
@@ -456,6 +529,14 @@ namespace Ruin.Runtime
         {
             if (Battle == null) return;
             StopAllCoroutines(); Busy = false; LabOpen = false; Battle.Finish(BattleOutcome.Retreat); Refresh();
+        }
+
+        // Forcing a win matters for one flow above all: an event fight has to come back to the event and
+        // pay its reward, and that path is unreachable without a victory.
+        public void DebugWinBattle()
+        {
+            if (Battle == null) return;
+            StopAllCoroutines(); Busy = false; LabOpen = false; Battle.Finish(BattleOutcome.Victory); Refresh();
         }
 
         public void DebugFeedbackExample()
@@ -575,11 +656,34 @@ namespace Ruin.Runtime
             Refresh();
         }
 
+        // Forces the current position to hold one named event, so a script with a hidden branch (a sanity
+        // gate, a 30/70, a repeatable loop) can be reached on demand instead of rolled for.
+        public void DebugForceEvent(string eventId)
+        {
+            if (Run == null || Run.Map.Finished) return;
+            // SelectNode refuses while a modal is up, and this button is only ever pressed *from* the tool,
+            // so the tool has to stand down first or the forced room silently never opens.
+            LabOpen = false;
+            var step = MapGenerator.Advance(Run.Map, Rules(), Run.Random, Run.PlayerSanity);
+            if (step == null) return;
+            bool altar = eventId == "EVT-008";
+            step.Candidates.Clear();
+            step.Candidates.Add(new NodeState
+            {
+                Floor = step.Floor, Index = step.Index,
+                Type = altar ? NodeType.Altar : NodeType.Event, OptionIndex = 0
+            });
+            ForcedEvent = eventId;
+            SelectNode(0);
+        }
+
         // Replaces the current position with one forced room type and walks into it, so the supply room,
         // an event, an altar and the elevator are all reachable on demand.
         public void DebugForceRoom(NodeType type)
         {
             if (Run == null || Run.Map.Finished) return;
+            // Same reason as DebugForceEvent: the button lives inside the tool, so the tool has to close.
+            LabOpen = false;
             var step = MapGenerator.Advance(Run.Map, Rules(), Run.Random, Run.PlayerSanity);
             if (step == null) return;
             step.Candidates.Clear();
