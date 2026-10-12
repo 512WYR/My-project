@@ -128,14 +128,16 @@ namespace GameMake.GothicHUD
             bool live = battle != null && !app.AwaitingNode && battle.Outcome == BattleOutcome.Active
                 && !app.HelpOpen && !app.LabOpen;
             foreach (var chrome in ChromeRoots) if (chrome) chrome.SetActive(live);
-            if (DebugRoot) DebugRoot.SetActive(live && debugOpen);
+            // The sheet follows the button rather than the battle: the route and the rooms are drawn by
+            // GothicNodeHudController, so this is the only place 新开演练 stays reachable from there.
+            if (DebugRoot) DebugRoot.SetActive(debugOpen);
+            if (debugOpen) SyncDebug(app, battle);
             if (!live) return;
 
             SyncPresentation(app);
             if (Counter) Counter.SetRound(battle.Round);
             SyncSkills(app, battle);
             SyncStage(app, battle);
-            if (debugOpen) SyncDebug(app, battle);
         }
 
         private void SyncPresentation(StageOneApp app)
@@ -260,19 +262,23 @@ namespace GameMake.GothicHUD
         }
 
         // The readouts and commands that have nowhere to live on the authored layout yet. Kept on one sheet
-        // so the battle page only shows positions, vitals and skills.
+        // so the battle page only shows positions, vitals and skills. It also opens outside a battle, where
+        // the battle-only rows say so instead of reading as if a fight were running.
         private void SyncDebug(StageOneApp app, BattleEngine battle)
         {
             if (PlayerSanityText) PlayerSanityText.text = "玩家理智  " + app.Run.PlayerSanity.ToString("0.0") + " / 100";
             if (FloorText)
-                FloorText.text = "第 " + app.Map.Floor + " 层  ·  第 " + app.Run.Battles + " 场  ·  第 " + battle.Round + " 回合";
+                FloorText.text = "第 " + app.Map.Floor + " 层  ·  第 " + app.Run.Battles + " 场"
+                    + (battle == null ? "" : "  ·  第 " + battle.Round + " 回合");
             if (TurnText)
-                TurnText.text = battle.Current == null ? "本场已结束"
+                TurnText.text = battle == null ? "路线 · 不在战斗中"
+                    : battle.Current == null ? "本场已结束"
                     : (battle.Current.Player ? "我方行动  ·  " : "敌方行动  ·  ") + battle.Current.Name;
             if (HintText) HintText.text = app.Hint ?? "";
             if (DebugIntentText)
-                DebugIntentText.text = string.Join("\n",
-                    battle.Enemies.Where(e => !e.Dead).Select(e => e.Name + "  ·  " + battle.Intent(e)));
+                DebugIntentText.text = battle == null ? "（不在战斗中）"
+                    : string.Join("\n",
+                        battle.Enemies.Where(e => !e.Dead).Select(e => e.Name + "  ·  " + battle.Intent(e)));
         }
     }
 }

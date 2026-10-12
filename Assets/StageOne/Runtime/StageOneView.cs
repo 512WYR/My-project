@@ -41,14 +41,14 @@ namespace Ruin.Runtime
 
         public void Render()
         {
-            // A scene that draws its own battle page keeps this canvas for the modals only. The background has
-            // to stay transparent then, or it would cover the external UI sitting underneath.
-            bool externalBattle = app.ExternalBattleUi && !app.AwaitingNode;
+            // A scene that draws its own pages keeps this canvas for the modals only. The background has to
+            // stay transparent then, or it would cover the external UI sitting underneath.
+            bool external = app.ExternalBattleUi;
             if (page) { page.SetActive(false); Destroy(page); }
-            if (!externalBattle) cardImages.Clear();
+            if (!external) cardImages.Clear();
             page = new GameObject("Page", typeof(RectTransform)); page.transform.SetParent(canvas.transform, false);
             var root = page.GetComponent<RectTransform>(); root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
-            if (externalBattle)
+            if (external)
             {
                 if (app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
                 if (app.HelpOpen) Help(root);

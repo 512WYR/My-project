@@ -41,9 +41,10 @@ namespace Ruin.Runtime
         public string RunEndNote { get; private set; }
         public MapState Map { get { return Run == null ? null : Run.Map; } }
         public bool AutomationMode { get; set; }
-        // Off by default, so StageOne.unity, the smoke run and the play mode tests keep the built-in battle
-        // page. A scene that supplies its own battle UI turns this on and StageOneView stops drawing the
-        // battle half of the page (rooms, route, settlement and the modals are never suppressed).
+        // Off by default, so StageOne.unity, the smoke run and the play mode tests keep the built-in pages.
+        // A scene that supplies its own UI turns this on, and StageOneView then stops drawing every page —
+        // battle and nodes alike — keeping only the settlement, help and lab modals, which still have to
+        // cover the external UI (that is what the canvas sorting order is for).
         public bool ExternalBattleUi;
         public const uint DefaultSeed = 44972;
 

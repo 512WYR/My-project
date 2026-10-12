@@ -12,9 +12,9 @@ using UnityEngine.EventSystems;
 namespace GameMake.GothicHUDEditor
 {
     /// <summary>
-    /// Builds the scene where the Gothic HUD owns the battle page. The built-in page stays exactly as it is
-    /// in StageOne.unity; this one only turns StageOneApp.ExternalBattleUi on so StageOneView keeps the
-    /// route, the rooms, the settlement and the modals but stops painting the battle half.
+    /// Builds the scene where the Gothic HUD owns every page. The built-in pages stay exactly as they are
+    /// in StageOne.unity; this one turns StageOneApp.ExternalBattleUi on so StageOneView keeps only the
+    /// settlement, help and lab modals, while the HUD draws the battle page, the route and the six rooms.
     /// </summary>
     public static class ModularSceneBuilder
     {
@@ -65,6 +65,11 @@ namespace GameMake.GothicHUDEditor
             if (chrome) chrome.BattleSource = app;
             else Debug.LogError("The HUD prefab has no GothicBattleHudController, so nothing will feed the " +
                 "battle into it. Run GameMake/Gothic HUD/Rebuild Modular HUD first, then build this scene again.");
+            var node = hud.GetComponent<GothicNodeHudController>();
+            if (node) node.Source = app;
+            else Debug.LogError("The HUD prefab has no GothicNodeHudController, so the route and the six rooms " +
+                "would have no page at all. Run GameMake/Gothic HUD/Rebuild Modular HUD first, then build " +
+                "this scene again.");
 
             if (!AssetDatabase.IsValidFolder("Assets/Scenes")) AssetDatabase.CreateFolder("Assets", "Scenes");
             Directory.CreateDirectory("Assets/Scenes");
