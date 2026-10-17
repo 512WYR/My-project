@@ -1,13 +1,34 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Ruin.Core;
 using UnityEngine;
 namespace Ruin.Runtime
 {
+    // One battle formation. Slot index is the starting rank (0 = enemy rank 1), so a null slot is an empty
+    // position rather than a compaction: the combination boss keeps the machine at slots 1-2 and the
+    // operator at slot 3. A multi-rank unit is listed once at its front slot.
+    [Serializable]
+    public sealed class EnemyLineup
+    {
+        public string Id;
+        public CharacterDefinition[] Slots = new CharacterDefinition[4];
+    }
+
     [CreateAssetMenu(menuName = "GameMake/Stage One Catalog")]
     public sealed class GameCatalog : ScriptableObject
     {
         public CharacterDefinition[] Heroes;
+        // Legacy scripted enemies. Kept for the stage-one rule tests and as the fallback when no
+        // formation table has been generated yet.
         public CharacterDefinition[] Enemies;
+        // The 11 designed non-boss monsters plus the three bosses, listed for inspection and for the
+        // random-summoner pool. Formations below point at these assets.
+        public CharacterDefinition[] Monsters;
+        [Header("战斗搭配")]
+        public EnemyLineup[] NormalEncounters;
+        public EnemyLineup[] EliteEncounters;
+        public EnemyLineup[] BossEncounters;
         public MentalDefinition[] MentalStates;
         [Range(0, 3)] public float ProbabilityStrength = 1.5f;
         [Range(0, 1)] public float FeedbackFactor = 0.5f;
@@ -58,6 +79,33 @@ namespace Ruin.Runtime
         [Range(0, 1)] public float LimbArmSevered = 0.45f;
         [Range(0, 1)] public float LimbLegInjured = 0.2f;
         [Range(0, 1)] public float LimbLegSevered = 0.45f;
+
+        // Picks one formation for the room type and hands back fresh ActorSpecs with explicit start ranks.
+        // The draw is part of the run's own random sequence, so a save/restore reproduces the same fight.
+        // An empty table means the catalog has not been regenerated yet; the caller falls back to the
+        // legacy three enemies scaled by Encounter.Scale.
+        public ActorSpec[] BuildEnemyLineup(NodeType type, RunRandom random)
+        {
+            EnemyLineup[] table = type == NodeType.EliteBattle ? EliteEncounters
+                : type == NodeType.Boss ? BossEncounters : NormalEncounters;
+            if (table == null || table.Length == 0) return new ActorSpec[0];
+            int seed = random == null ? 0 : (int)Math.Min(int.MaxValue, random.NextUnit() * table.Length);
+            var lineup = table[Math.Max(0, Math.Min(table.Length - 1, seed))];
+            if (lineup == null || lineup.Slots == null) return new ActorSpec[0];
+            var specs = new List<ActorSpec>();
+            for (int rank = 0; rank < lineup.Slots.Length && rank < 4; rank++)
+            {
+                var slot = lineup.Slots[rank];
+                if (!slot) continue;
+                var spec = slot.ToSpec();
+                spec.StartRank = rank;
+                // 首领房的每个单位都沿用旧缩放路径的命名，验收里用“首领”前缀识别首领战。
+                if (type == NodeType.Boss && !spec.Name.StartsWith("首领"))
+                    spec.Name = "首领·" + spec.Name;
+                specs.Add(spec);
+            }
+            return specs.ToArray();
+        }
 
         public CombatRules Rules()
         {

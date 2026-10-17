@@ -404,8 +404,12 @@ namespace Ruin.Runtime
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
             AwaitingNode = false;
-            // Scaling builds brand new specs, so an elite or a boss never leaks back into the enemy asset.
-            var enemies = Encounter.Scale(Catalog.Enemies.Select(a => a.ToSpec()).ToArray(), kind, Rules());
+            // Designed formations name their own ranks and already carry their final numbers, so they are
+            // not scaled again. The legacy three-enemy fallback is kept for a catalog that has not been
+            // regenerated since the monster pass.
+            var enemies = Catalog.BuildEnemyLineup(kind, Run.Random);
+            if (enemies.Length == 0)
+                enemies = Encounter.Scale(Catalog.Enemies.Select(a => a.ToSpec()).ToArray(), kind, Rules());
             Battle = new BattleEngine(Run, enemies, Catalog.Rules());
             // Only a fight the event asked for comes back to the event; a route battle resolves the position.
             EventBattle = Room == RoomView.Event ? node : null;

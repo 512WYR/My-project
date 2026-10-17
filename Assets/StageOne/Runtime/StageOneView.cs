@@ -136,7 +136,7 @@ namespace Ruin.Runtime
                 ActorCard(field, actor, x, 56, 112, 252);
             }
             foreach (var actor in app.Battle.Enemies)
-                ActorCard(field, actor, 682 + actor.Rank * 122, 56, 112, 252);
+                ActorCard(field, actor, 682 + actor.Rank * 122, 56, 112 + (actor.Width - 1) * 122, 252);
             Label(field, "Rear", "后排", 26, 324, 100, 21, 12, Muted);
             Label(field, "Front", "前排  →", 395, 324, 115, 21, 12, Muted, TextAnchor.MiddleRight);
             Label(field, "EnemyFront", "←  前排", 684, 324, 130, 21, 12, Muted);
@@ -158,7 +158,8 @@ namespace Ruin.Runtime
             var cb = button.colors; cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1); cb.pressedColor = Color.gray; button.colors = cb;
             button.onClick.AddListener(() => app.SelectActor(actor.Id));
             if (active || possible || app.InspectedId == actor.Id) Outline(rect, possible ? Gold : active ? Gold : accent, 1.5f);
-            Label(rect, "Rank", "位置 " + (actor.Rank + 1), 9, 6, 94, 21, 11, Muted);
+            string rankText = actor.Width > 1 ? "位置 " + (actor.Rank + 1) + "～" + (actor.Rank + actor.Width) : "位置 " + (actor.Rank + 1);
+            Label(rect, "Rank", rankText, 9, 6, Math.Max(94, 94 + (actor.Width - 1) * 122), 21, 11, Muted);
             var art = NewRect(rect, "Silhouette", 6, 34, 100, 119).gameObject.AddComponent<SilhouetteGraphic>();
             art.Silhouette = actor.Definition.Silhouette; art.Enemy = actor.Definition.Pattern; art.IsEnemy = !actor.Player;
             art.color = actor.Dead ? Hex("41484B") : Hex("080E13"); art.Accent = actor.Dead ? Hex("5A5E5D") : accent; art.raycastTarget = false;
@@ -214,7 +215,7 @@ namespace Ruin.Runtime
                 // Three lines once the threat warning is appended, so the box grew with the panel.
                 Label(box, "EnemyIntentDetail", app.Battle.Intent(actor), 20, 220, 295, 84, 20, Rust);
                 Label(box, "EnemyHint", "换位、掩护或打断可改变受到的威胁。", 20, 310, 300, 25, 12, Muted);
-                Label(box, "EnemyLimbNote", "敌人没有部位。只有执斧者的重劈与追猎者的追猎会重创我方部位。", 20, 344, 300, 62, 12, Muted);
+                Label(box, "EnemyLimbNote", "敌人没有部位。旧演练中的执斧者与追猎者仍会重创我方部位。", 20, 344, 300, 62, 12, Muted);
             }
         }
 

@@ -1,0 +1,86 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: steam_machine
+  m_EditorClassIdentifier: 
+  Id: steam_machine
+  DisplayName: "\u84B8\u6C7D\u673A\u5668"
+  Subtitle: "\u5360\u636E2\uFF5E3\u53F7\u4F4D\uFF0C\u7D2F\u8BA1\u64CD\u4F5C2\u6B21\u540E\u7206\u53D1"
+  Silhouette: enemy
+  MaxHp: 100
+  Speed: 2
+  SanityOffset: 0
+  EnemyPattern: 0
+  Attack: 12
+  Accuracy: 0.9
+  CritChance: 0
+  Dodge: 0
+  Defense: 0
+  BasicSkills: []
+  PrimalSkills: []
+  TechnicalSpecial: {fileID: 0}
+  Behavior: 9
+  EnemySkills:
+  - Id: e_steam_blast
+    Name: "\u84B8\u6C7D\u7206\u53D1"
+    Description: "\u84B8\u6C7D\u7206\u53D1"
+    Effect: 0
+    Target: 0
+    Multiplier: 1
+    ActorRanks: 15
+    TargetRanks: 15
+    Uses: 0
+    Bleed: 0
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 0
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: 0
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 0
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0
+    FollowupPercent: 50
+    SanityDamage: 0
+    SanityAdjacent: 0
+    TargetCount: 4
+    TargetRule: 0
+    GuardReduction: 0
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 0
+      Area: 0
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 0
+  RankWidth: 2
+  Immobile: 1
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

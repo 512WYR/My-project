@@ -26,12 +26,40 @@ namespace Ruin.Runtime
         public SkillDefinition[] BasicSkills;
         public SkillDefinition[] PrimalSkills;
         public SkillDefinition TechnicalSpecial;
+        // ---- designed-monster data ----
+        // Enemy skills are plain serializable SkillSpecs rather than the hero-side SkillDefinition assets:
+        // each one is bound to one monster's AI rule, and keeping the pair on the same asset avoids a
+        // second lookup table. When this list is non-empty it replaces BasicSkills for the enemy.
+        public EnemyBehavior Behavior;
+        public SkillSpec[] EnemySkills;
+        public int RankWidth = 1;
+        public bool Immobile;
+        public int ActionInterval = 1;
+        public int ActionPhase;
+        public int BossHealOnHeroDeath;
+        public double GuardReduction;
+        // RandomSummoner only: the normal monsters it may turn into at battle start.
+        public CharacterDefinition[] SummonPool;
         public ActorSpec ToSpec()
         {
+            var enemySkills = EnemySkills != null && EnemySkills.Length > 0 ? EnemySkills : Specs(BasicSkills);
             return new ActorSpec { Id = Id, Name = DisplayName, Subtitle = Subtitle, Silhouette = Silhouette, MaxHp = MaxHp, Speed = Speed,
                 Attack = Attack, Accuracy = Accuracy, CritChance = CritChance, Dodge = Dodge, Defense = Defense,
                 SanityOffset = SanityOffset, Pattern = EnemyPattern,
-                BasicSkills = Specs(BasicSkills), PrimalSkills = Specs(PrimalSkills), TechnicalSkills = Technical(BasicSkills, TechnicalSpecial) };
+                Behavior = Behavior, RankWidth = Mathf.Max(1, RankWidth), Immobile = Immobile,
+                ActionInterval = Mathf.Max(1, ActionInterval), ActionPhase = ActionPhase,
+                BossHealOnHeroDeath = BossHealOnHeroDeath, GuardReduction = GuardReduction,
+                SummonPool = Specs(SummonPool),
+                BasicSkills = enemySkills, PrimalSkills = Specs(PrimalSkills), TechnicalSkills = Technical(BasicSkills, TechnicalSpecial) };
+        }
+
+        private static ActorSpec[] Specs(CharacterDefinition[] definitions)
+        {
+            if (definitions == null || definitions.Length == 0) return new ActorSpec[0];
+            var list = new List<ActorSpec>();
+            foreach (var definition in definitions)
+                if (definition) list.Add(definition.ToSpec());
+            return list.ToArray();
         }
 
         private static SkillSpec[] Specs(SkillDefinition[] definitions)
