@@ -132,6 +132,7 @@ namespace Ruin.Runtime
             view.Choices.Add(new RoomPageChoice(
                 "部位与义肢",
                 "查看每名队员的四个部位，修复重伤或安装义肢"));
+            view.Choices.Add(new RoomPageChoice("商店", "使用补给购买义体、饰品与药品"));
 
             view.Choose = index =>
             {
@@ -142,6 +143,7 @@ namespace Ruin.Runtime
                     case 2: app.OpenAccessoryEditor(); break;
                     case 3: app.OpenConsumableEditor(); break;
                     case 4: context.Reset(); context.Section = 1; break;
+                    case 5: app.OpenSupplyShop(); break;
                 }
             };
             view.CanLeave = true;

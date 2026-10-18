@@ -39,6 +39,8 @@ namespace GameMake.ExplorationUI
         public ExplorationRouteGraphic Connections;
         public ExplorationSelectionEvent OnCharacterSelected = new ExplorationSelectionEvent();
         public int SelectedCharacter;
+        public MapPageEntrance Entrance;
+        bool wasVisible;
         StageOneApp bound;
         bool hooked;
         StepState shownStep;
@@ -51,6 +53,8 @@ namespace GameMake.ExplorationUI
         void Start() { Bind(); Sync(); }
         void OnDisable()
         {
+            wasVisible=false;
+            if(Entrance) Entrance.Finish();
             if (bound) bound.Changed -= Sync;
             bound = null;
             if (popup != null) StopCoroutine(popup);
@@ -88,6 +92,7 @@ namespace GameMake.ExplorationUI
         }
         void Choose(int index)
         {
+            if(Entrance && Entrance.IsRunning) return;
             if (!Source || Source.Run == null || !Page.activeSelf || Source.Busy || Source.HelpOpen || Source.LabOpen) return;
             Source.SelectNode(index);
         }
@@ -96,9 +101,16 @@ namespace GameMake.ExplorationUI
             if (!Source || Source.Run == null) return;
             bool visible = Source.AwaitingNode && Source.Room == RoomView.Map && !Source.Map.Finished
                 && Source.Map.Current != null && !Source.HelpOpen && !Source.LabOpen;
-            bool reopening = !Page.activeSelf && visible;
+            bool reopening = (!wasVisible || !Page.activeSelf) && visible;
+            wasVisible=visible;
             Page.SetActive(visible);
-            if (!visible) return;
+            if (!visible)
+            {
+                if(Entrance) Entrance.Finish();
+                if(popup!=null) StopCoroutine(popup); popup=null;
+                return;
+            }
+            if(reopening && Entrance && Application.isPlaying) Entrance.Enter();
             RenderMap(Source.Map, Source.Catalog.MapRules(), reopening);
             Stock.text = "补给  " + Source.Map.Supplies.ToString("D2") + "     /     玩家理智  " + Source.Run.PlayerSanity.ToString("0");
             UpdateParty();
@@ -149,6 +161,8 @@ namespace GameMake.ExplorationUI
         }
         IEnumerator Popup()
         {
+            ChoiceFade.alpha=0;
+            if(Entrance && Entrance.IsRunning) yield return new WaitForSecondsRealtime(.28f);
             float started = Time.realtimeSinceStartup;
             while (Time.realtimeSinceStartup - started < .24f)
             {

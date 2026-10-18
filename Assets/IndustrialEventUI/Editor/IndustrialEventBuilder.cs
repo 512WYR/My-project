@@ -118,6 +118,10 @@ namespace GameMake.EventEditor
                 view.Continue=Button(advance); view.ContinueFade=advance.gameObject.AddComponent<CanvasGroup>();
                 view.ContinueLabel=Label(advance.transform,"Label","继续  →",24,19,264,54,27,Cream,TextAnchor.MiddleCenter);
                 view.ContinuePosition=advance.rectTransform.anchoredPosition;
+                SupplyStationBuilder.Attach(view);
+                var existing=AssetDatabase.LoadAssetAtPath<GameObject>(Prefab);
+                if(existing && existing.GetComponent<IndustrialEventPage>().SupplyView)
+                    view.SupplyView.Mascot.sprite=existing.GetComponent<IndustrialEventPage>().SupplyView.Mascot.sprite;
                 view.Page.SetActive(false);
                 PrefabUtility.SaveAsPrefabAsset(root,Prefab);
             }

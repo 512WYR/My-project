@@ -16,6 +16,8 @@ namespace GameMake.EventUI
         public GameObject Page;
         public Text Header, ScreenTitle, ScreenCode, ScreenLocation, Body, ReadingStatus, ChoiceHeading;
         public Image EventIllustration;
+        public SupplyStationView SupplyView;
+        bool IsSupply=>SupplyView && Source && Source.Room==RoomView.Supply && !Source.Map.Finished;
         public ScrollRect StoryScroll;
         public RectTransform StoryContent, ChoiceColumn;
         public EventChoiceView[] Choices=new EventChoiceView[0];
@@ -38,6 +40,9 @@ namespace GameMake.EventUI
         bool leave, hooked;
         Coroutine reveal;
         float measuredScale=-1, measuredWidth=-1;
+        bool supplyPresented;
+        NodeState supplyNode;
+        RunState supplyRun;
 
         void OnEnable() { Canvas.willRenderCanvases+=ResizeStory; Bind(); Sync(); }
         void Start() { Bind(); Sync(); }
@@ -65,7 +70,7 @@ namespace GameMake.EventUI
         void Hook(EventChoiceView choice)
         {
             choice.Hit.onClick.AddListener(()=>{
-                if(!ActionsReady || !choice.Available || !Live()) return;
+                if(!ActionsReady || !choice.Available || !Live() || Source.SupplyShopOpen) return;
                 ActionsReady=false; Lock();
                 // The route, the buff, the supply station and the chest all speak through their own
                 // page object; only the event branch falls back to the scripted event command.
@@ -77,7 +82,7 @@ namespace GameMake.EventUI
         bool Live()=>RoomPages.Visible(Source);
         void Advance()
         {
-            if(!ActionsReady || !Live()) return;
+            if(!ActionsReady || !Live() || Source.SupplyShopOpen) return;
             ActionsReady=false; Lock();
             if(leave && current!=null && current.Advance!=null) current.Advance();
             else if(leave) Source.LeaveRoom();
@@ -86,8 +91,17 @@ namespace GameMake.EventUI
         }
         void Lock()
         {
+            if(SupplyView) SupplyView.Lock();
             foreach(var choice in Choices) if(choice && choice.Hit) choice.Hit.interactable=false;
             if(Continue) Continue.interactable=false;
+        }
+        public void UseSupply(bool sanity)
+        {
+            if(!ActionsReady || !Live() || !IsSupply || Source.SupplyShopOpen) return;
+            if(sanity?Source.Map.SupplyCalmed:Source.Map.SupplyHealed) return;
+            ActionsReady=false; Lock();
+            if(sanity) Source.SupplyCalm(); else Source.SupplyHeal();
+            Sync();
         }
         void Cancel()
         {
@@ -97,8 +111,14 @@ namespace GameMake.EventUI
         public void Sync()
         {
             if(!Page || !Body) return;
-            if(!Live()) { Cancel(); Page.SetActive(false); context.Reset(); shownNode=null; return; }
+            if(!Live())
+            {
+                Cancel(); Page.SetActive(false);
+                if(!IsSupply) { context.Reset(); shownNode=null; supplyPresented=false; }
+                return;
+            }
             var node=Source.ActiveNode;
+            bool keepSupply=IsSupply && supplyPresented && supplyNode==node && supplyRun==Source.Run;
 
             // Every non-battle node is drawn as an event page now, so the header, location and action set
             // come from RoomPages instead of from the event script alone. The supply subpages (hero, limb)
@@ -122,6 +142,7 @@ namespace GameMake.EventUI
             if(!changed && !reopening && (reveal!=null || ActionsReady)) return;
             current=content;
             Cancel();
+            if(SupplyView) SupplyView.Prepare(IsSupply,Source,!keepSupply);
             Header.text=content.Header??"事件终端";
             ScreenTitle.text=content.Title??"";
             ScreenCode.text=content.Code??"";
@@ -135,8 +156,9 @@ namespace GameMake.EventUI
                 measuredScale=-1; ResizeStory();
                 Body.text=""; StoryScroll.StopMovement(); StoryScroll.verticalNormalizedPosition=1;
             }
-            PrepareActions(content);
-            reveal=StartCoroutine(Reveal());
+            PrepareActions(content,!keepSupply);
+            if(keepSupply) FinishActions();
+            else reveal=StartCoroutine(Reveal());
         }
         void ResizeStory()
         {
@@ -151,9 +173,12 @@ namespace GameMake.EventUI
             StoryContent.sizeDelta=new Vector2(StoryContent.sizeDelta.x,height);
             StoryScroll.verticalNormalizedPosition=position;
         }
-        void PrepareActions(RoomPageView content)
+        void PrepareActions(RoomPageView content,bool animate)
         {
-            var visible=content.Choices.Select((c,i)=>new { Choice=c,Index=i }).Where(x=>x.Choice.Shown).ToArray();
+            // Supply recovery actions live under the mascot display; keep their original command indices
+            // out of the left menu, without removing hero/limb choices on supply subpages.
+            var visible=content.Choices.Select((c,i)=>new { Choice=c,Index=i })
+                .Where(x=>x.Choice.Shown && !(IsSupply && context.Section==0 && x.Index<2)).ToArray();
             leave=content.CanLeave; continueChoice=-1;
             // The event scripts use a single closing choice where the other rooms use an advance button.
             if(!leave && Source.Room==RoomView.Event && visible.Length==1
@@ -178,12 +203,12 @@ namespace GameMake.EventUI
                 item.Number.text=(i+1).ToString("D2"); item.Title.text=visible[i].Choice.Label;
                 item.Detail.text=visible[i].Choice.Detail??"";
                 var rect=(RectTransform)item.transform;
-                rect.sizeDelta=new Vector2(680,height); rect.anchoredPosition=new Vector2(SlideDistance(),-i*(height+18));
-                item.Fade.alpha=0; item.Fade.blocksRaycasts=false; item.Hit.interactable=false;
+                rect.sizeDelta=new Vector2(680,height); rect.anchoredPosition=new Vector2(animate?SlideDistance():0,-i*(height+18));
+                item.Fade.alpha=animate?0:(item.Available?1:.42f); item.Fade.blocksRaycasts=false; item.Hit.interactable=false;
             }
             ChoiceHeading.text=count>0?"行动选择":"";
-            ChoiceHeading.gameObject.SetActive(false);
-            Continue.gameObject.SetActive(false); ContinueFade.alpha=0; ContinueFade.blocksRaycasts=false;
+            ChoiceHeading.gameObject.SetActive(!animate && count>0);
+            Continue.gameObject.SetActive(!animate && (leave || continueChoice>=0)); ContinueFade.alpha=animate?0:1; ContinueFade.blocksRaycasts=false;
             ContinueLabel.text=leave?(content.AdvanceLabel??"离开  →"):"继续  →";
             Continue.interactable=false;
         }
@@ -194,6 +219,8 @@ namespace GameMake.EventUI
         }
         IEnumerator Reveal()
         {
+            // The supply station has no narrative box to wait for.
+            if(IsSupply) revealed=characterStarts.Length;
             TextComplete=false; float progress=revealed;
             ReadingStatus.text="正在读取事件记录…";
             while(revealed<characterStarts.Length)
@@ -217,9 +244,18 @@ namespace GameMake.EventUI
                 float elapsed=Time.unscaledTime-started;
                 for(int i=0;i<shown.Length;i++) AnimateChoice(shown[i],Mathf.Clamp01((elapsed-i*.07f)/.32f));
                 if(showContinue) AnimateContinue(Mathf.Clamp01(elapsed/.32f));
+                if(IsSupply) SupplyView.SetProgress(1-Mathf.Pow(1-Mathf.Clamp01(elapsed/.32f),3));
                 yield return null;
             }
-            foreach(var choice in shown)
+            FinishActions();
+        }
+        void FinishActions()
+        {
+            TextComplete=true;
+            ChoiceHeading.gameObject.SetActive(Choices.Any(c=>c.gameObject.activeSelf));
+            bool showContinue=leave || continueChoice>=0;
+            Continue.gameObject.SetActive(showContinue);
+            foreach(var choice in Choices.Where(c=>c.gameObject.activeSelf))
             { AnimateChoice(choice,1); choice.Fade.blocksRaycasts=choice.Available; choice.Hit.interactable=choice.Available; }
             if(showContinue)
             {
@@ -228,6 +264,11 @@ namespace GameMake.EventUI
                     && current.Choices[continueChoice].Enabled);
             }
             ActionsReady=true; reveal=null;
+            if(IsSupply)
+            {
+                supplyPresented=true; supplyNode=Source.ActiveNode; supplyRun=Source.Run;
+                SupplyView.SetProgress(1);
+            }
         }
         void AnimateChoice(EventChoiceView choice,float progress)
         {
