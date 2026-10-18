@@ -29,7 +29,7 @@ namespace GameMake.ExplorationEditor
         }
         public static void Run()
         {
-            ExplorationSceneIntegration.Apply();
+            MapEntranceBuilder.Apply();
             Directory.CreateDirectory(ExplorationMapBuilder.Output);
             File.WriteAllText(Report,"Game entry map integration verification\n");
             Check(EditorBuildSettings.scenes.First(s=>s.enabled).path==ExplorationSceneIntegration.MainScene,"Wrong default startup scene");
@@ -75,29 +75,57 @@ namespace GameMake.ExplorationEditor
                 Check(apps.Length==1 && maps.Length==1 && hud,"Missing or duplicate UI in "+path);
                 var app=apps[0]; var map=maps[0];
                 Check(map.Source==app && hud.BattleSource==app,"Mismatched game state in "+path);
+                Check(map.Entrance && map.Entrance.MapPanel && map.Entrance.CounterPanel,"Missing map entrance in "+path);
                 if(app.Battle==null)
                 {
                     Check(map.Page.activeInHierarchy,"Map is not visible in "+path);
-                    yield return .4f;
+                    yield return .75f;
                     if(path==ExplorationSceneIntegration.MainScene)
+                    {
+                        var entrance=map.Entrance;
+                        app.ToggleHelp(); app.ToggleHelp();
+                        Check(entrance.IsRunning && !entrance.MapFade.blocksRaycasts,"Entry has no animation/input guard");
+                        Check(entrance.MapPanel.anchoredPosition.x>entrance.MapHome.x+entrance.MapPanel.rect.width,"Map did not begin outside the right edge");
+                        Check(entrance.CounterPanel.anchoredPosition.y>entrance.CounterPanel.rect.height,"Counter did not begin above the screen");
+                        int entries=entrance.EntranceCount; var step=app.Map.Current;
+                        map.Options[0].Hit.onClick.Invoke(); Check(app.Map.Current==step && app.Room==RoomView.Map,"Early click entered a room during slide");
+                        app.Refresh(); Check(entrance.EntranceCount==entries,"Refresh restarted entrance");
+                        float startX=entrance.MapPanel.anchoredPosition.x;
+                        Time.timeScale=0; yield return .2f;
+                        Check(entrance.IsRunning && entrance.MapPanel.anchoredPosition.x<startX && entrance.MapPanel.anchoredPosition.x>entrance.MapHome.x,"Unscaled slide does not progress");
+                        ExplorationMapBuilder.Render(map.GetComponent<Canvas>(),Camera.main,"Map-Entrance-Moving",1920,1080);
+                        double deadline=EditorApplication.timeSinceStartup+3;
+                        while(entrance.IsRunning && EditorApplication.timeSinceStartup<deadline) yield return .1f;
+                        Time.timeScale=1;
+                        Check(!entrance.IsRunning && entrance.MapFade.blocksRaycasts && Vector2.Distance(entrance.MapPanel.anchoredPosition,entrance.MapHome)<.05f && Vector2.Distance(entrance.CounterPanel.anchoredPosition,entrance.CounterHome)<.05f,"Entrance does not finish at authored positions: running="+entrance.IsRunning+" map="+entrance.MapPanel.anchoredPosition+" home="+entrance.MapHome+" counter="+entrance.CounterPanel.anchoredPosition+" home="+entrance.CounterHome);
+                        app.OpenCharacterPanel(0); app.CloseCharacterPanel(); app.Refresh();
+                        Check(entrance.EntranceCount==entries,"Character popup/state refresh restarted map slide");
+                        app.ToggleHelp(); app.ToggleHelp(); yield return .1f; app.ToggleHelp();
+                        Check(!entrance.IsRunning,"Hidden map left animation running");
+                        app.ToggleHelp(); yield return .75f;
+                        Check(Vector2.Distance(entrance.MapPanel.anchoredPosition,entrance.MapHome)<.05f && Vector2.Distance(entrance.CounterPanel.anchoredPosition,entrance.CounterHome)<.05f,"Interrupted entrance accumulated offset");
+                        File.AppendAllText(Report,"PASS: right-edge map + top-edge counter, unscaled easing, delayed options, input guard, no refresh replay, interrupted reopen restores positions\n");
                         ExplorationMapBuilder.Render(map.GetComponent<Canvas>(),Camera.main,"MainScene-NewMap",1920,1080);
+                    }
                     map.Options[0].Hit.onClick.Invoke();
                     Check(app.Room==RoomView.Buff && !map.Page.activeSelf,"Opening room handover failed");
-                    app.ChooseBuff(app.Catalog.MapRules().OpeningBuffs[0]); app.LeaveRoom(); yield return .4f;
+                    app.ChooseBuff(app.Catalog.MapRules().OpeningBuffs[0]); app.LeaveRoom(); yield return .75f;
                     Check(app.AwaitingNode && app.Room==RoomView.Map && map.Page.activeInHierarchy,"Room did not return to new map");
                     app.Map.Current.Candidates.Clear();
                     app.Map.Current.Candidates.Add(new NodeState{Floor=app.Map.Current.Floor,Index=app.Map.Current.Index,Type=NodeType.Battle});
                     app.Refresh(); map.Options[0].Hit.onClick.Invoke(); yield return .3f;
                 }
                 Check(app.Battle!=null && !map.Page.activeSelf && hud.ChromeRoots.All(r=>r.activeInHierarchy),"New battle page not active in "+path);
-                app.DebugWinBattle(); app.ContinueBattle(); yield return .4f;
+                app.DebugWinBattle(); app.ContinueBattle();
+                Check(map.Entrance.IsRunning,"Returning from battle did not start map entrance");
+                yield return .75f;
                 Check(app.Battle==null && map.Page.activeInHierarchy,"Battle did not return to the map in "+path);
                 Check(hud.ChromeRoots.All(r=>!r.activeSelf),"Battle UI overlaps returned map");
                 app.ToggleHelp(); Check(!map.Page.activeSelf,"Map blocks help");
                 app.ToggleHelp(); Check(map.Page.activeSelf,"Map did not reopen after help");
                 if(path==ExplorationSceneIntegration.MainScene)
                 {
-                    yield return .4f;
+                    yield return .75f;
                     ExplorationMapBuilder.Render(map.GetComponent<Canvas>(),Camera.main,"MainScene-MapAfterBattle",1920,1080);
                 }
                 File.AppendAllText(Report,"PASS: "+path+" -> new map / room / battle / new map; shared state; old route hidden\n");
@@ -105,3 +133,4 @@ namespace GameMake.ExplorationEditor
         }
     }
 }
+

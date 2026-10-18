@@ -93,6 +93,11 @@ namespace Ruin.Runtime
 
         private void Update()
         {
+            if (SupplyShopOpen)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) CloseSupplyShop();
+                return;
+            }
             if (CharacterPanelOpen)
             {
                 if (Input.GetKeyDown(KeyCode.Escape)) CloseCharacterPanel();
@@ -117,6 +122,7 @@ namespace Ruin.Runtime
 
         public void NewRun(double? preset = null, uint? seed = null)
         {
+            SupplyShopOpen = false; SupplyShopNote = null;
             CharacterPanelOpen = false; CharacterHeroId = null;
             StopAllCoroutines(); Busy = false; ClearPending(); HelpOpen = false; LabOpen = false;
             AccessoryEditorOpen = false; AccessoryHeroId = null;
@@ -141,6 +147,7 @@ namespace Ruin.Runtime
         // re-rendering or reloading never re-rolls them and never consumes a draw.
         private void RevealStep()
         {
+            SupplyShopOpen = false;
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
             AccessoryEditorOpen = false; AccessoryHeroId = null;
             ConsumableEditorOpen = false; ConsumableHeroId = null; Battle = null;
@@ -163,6 +170,7 @@ namespace Ruin.Runtime
 
         public void SelectNode(int index)
         {
+            if (SupplyShopOpen) return;
             if (CharacterPanelOpen) return;
             if (Busy || HelpOpen || LabOpen || AccessoryEditorOpen || ConsumableEditorOpen
                 || Run == null || Run.Map.Finished) return;
@@ -234,6 +242,7 @@ namespace Ruin.Runtime
 
         public void SupplyHeal()
         {
+            if (SupplyShopOpen) return;
             if (Run == null || Room != RoomView.Supply || Run.Map.SupplyHealed) return;
             int healed = Exploration.SupplyHealParty(Rules(), Run);
             Run.Map.SupplyHealed = true;
@@ -243,6 +252,7 @@ namespace Ruin.Runtime
 
         public void SupplyCalm()
         {
+            if (SupplyShopOpen) return;
             if (Run == null || Room != RoomView.Supply || Run.Map.SupplyCalmed) return;
             double gained = Exploration.SupplyCalm(Run);
             Run.Map.SupplyCalmed = true;
@@ -278,6 +288,7 @@ namespace Ruin.Runtime
         // that is standing on a node, so it works on the route page and inside a room alike.
         public void OpenAccessoryEditor(string heroId = null)
         {
+            if (SupplyShopOpen) return;
             if (CharacterPanelOpen) return;
             if (Run == null || Busy || !AwaitingNode || ConsumableEditorOpen) return;
             var hero = !string.IsNullOrEmpty(heroId) ? Run.Heroes.FirstOrDefault(h => h.Id == heroId) : null;
@@ -342,6 +353,7 @@ namespace Ruin.Runtime
 
         public void OpenConsumableEditor(string heroId = null)
         {
+            if (SupplyShopOpen) return;
             if (CharacterPanelOpen) return;
             if (Run == null || Busy || HelpOpen || LabOpen) return;
             if (!AwaitingNode && (Battle == null || Battle.Outcome != BattleOutcome.Active
@@ -475,6 +487,7 @@ namespace Ruin.Runtime
         // The one button every room page ends on. A room that still owes a decision refuses to close.
         public void LeaveRoom()
         {
+            if (SupplyShopOpen) return;
             if (Run == null || !InRoom || AccessoryEditorOpen || ConsumableEditorOpen) return;
             if (Room == RoomView.Buff && !Run.Map.BuffChosen) { Hint = "先选择一项增益再离开。"; Refresh(); return; }
             if (Room == RoomView.Event && !EventCanLeave) { Hint = "这个事件还没有走完。"; Refresh(); return; }
@@ -675,12 +688,14 @@ namespace Ruin.Runtime
 
         public void ToggleHelp()
         {
+            if (SupplyShopOpen) return;
             if (CharacterPanelOpen) return;
             if (AccessoryEditorOpen || ConsumableEditorOpen) return;
             HelpOpen = !HelpOpen; LabOpen = false; ClearPending(); Refresh();
         }
         public void ToggleLab()
         {
+            if (SupplyShopOpen) return;
             if (CharacterPanelOpen) return;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // Closing always wins: a forced room can open a page while the tool is up, and without this the

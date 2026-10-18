@@ -4739,6 +4739,7 @@ GameObject:
   - component: {fileID: 9091578324729167832}
   - component: {fileID: 5758824920451465866}
   - component: {fileID: 5445987678927675365}
+  - component: {fileID: 7519145733061184931}
   m_Layer: 0
   m_Name: MapExploration
   m_TagString: Untagged
@@ -4939,6 +4940,25 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   SelectedCharacter: 0
+  Entrance: {fileID: 7519145733061184931}
+--- !u!114 &7519145733061184931
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3533259226169751045}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e8974c122aee61429308249fded1148, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  MapPanel: {fileID: 3549329097410374262}
+  CounterPanel: {fileID: 4237411462113040069}
+  MapFade: {fileID: 578876195826433250}
+  CounterFade: {fileID: 6700904050600889951}
+  MapHome: {x: 480, y: -16}
+  CounterHome: {x: 16, y: -58}
 --- !u!1 &3544847132516887739
 GameObject:
   m_ObjectHideFlags: 0
@@ -6325,6 +6345,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4237411462113040069}
   - component: {fileID: 1364813944344866446}
+  - component: {fileID: 6700904050600889951}
   m_Layer: 0
   m_Name: Floor and Room Counter
   m_TagString: Untagged
@@ -6408,6 +6429,18 @@ MonoBehaviour:
   Floor: 1
   Room: 1
   Animate: 1
+--- !u!225 &6700904050600889951
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4580556586315898901}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &4603850582349685593
 GameObject:
   m_ObjectHideFlags: 0
@@ -6967,6 +7000,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3549329097410374262}
+  - component: {fileID: 578876195826433250}
   m_Layer: 0
   m_Name: Map Panel
   m_TagString: Untagged
@@ -7015,6 +7049,18 @@ RectTransform:
   m_AnchoredPosition: {x: 480, y: -16}
   m_SizeDelta: {x: -496, y: -32}
   m_Pivot: {x: 0, y: 1}
+--- !u!225 &578876195826433250
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5118008213199555972}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &5252652748451864326
 GameObject:
   m_ObjectHideFlags: 0

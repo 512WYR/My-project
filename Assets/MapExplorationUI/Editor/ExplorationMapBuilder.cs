@@ -146,6 +146,7 @@ namespace GameMake.ExplorationEditor
             view.Note=Text(map,"Exploration Hint","选择一间房继续探索",60,974,1280,25,18,Muted);
             var sample=new MapState(); MapGenerator.Advance(sample,catalog.MapRules(),new RunRandom(44972),50); view.RenderMap(sample,catalog.MapRules());
             GameMake.SharedUI.Editor.RetroScreenStyling.ApplyMap(go);
+            MapEntranceBuilder.Attach(go);
             PrefabUtility.SaveAsPrefabAssetAndConnect(go,PrefabPath,InteractionMode.AutomatedAction);
 
             // Keep existing rooms, combat and settlement playable in this new scene. The debug console is
