@@ -141,7 +141,12 @@ namespace Ruin.Runtime
                 ActorCard(field, actor, x, 56, 112, 252);
             }
             foreach (var actor in app.Battle.Enemies)
+            {
+                // Corpses keep their old rank so the log can still name it, but drawing them would put
+                // a second card on top of the living unit that has since stepped into that slot.
+                if (actor.Dead) continue;
                 ActorCard(field, actor, 682 + actor.Rank * 122, 56, 112 + (actor.Width - 1) * 122, 252);
+            }
             Label(field, "Rear", "后排", 26, 324, 100, 21, 12, Muted);
             Label(field, "Front", "前排  →", 395, 324, 115, 21, 12, Muted, TextAnchor.MiddleRight);
             Label(field, "EnemyFront", "←  前排", 684, 324, 130, 21, 12, Muted);

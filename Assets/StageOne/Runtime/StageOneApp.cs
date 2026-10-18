@@ -594,7 +594,16 @@ namespace Ruin.Runtime
             if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
             string reason = Battle.SkillDisabledReason(index);
             if (reason != null) { Hint = reason; Refresh(); return; }
-            PendingSwap = false; PendingSkill = index;
+            PendingSwap = false;
+            // Group and self skills have no target to click. Targets() is empty for them by design, so
+            // leaving them in PendingSkill would strand the skill with no submit path. Cast immediately,
+            // exactly like Battle Lab does with target = null.
+            if (!Battle.Targets(index).Any())
+            {
+                Submit(new ActionRequest(ActionKind.Skill, null, index));
+                return;
+            }
+            PendingSkill = index;
             Hint = "点击高亮目标以执行「" + Battle.SkillFor(Battle.Current, index).Name + "」。Esc取消选择。";
             Refresh();
         }

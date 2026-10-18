@@ -198,6 +198,110 @@ namespace Ruin.Tests
             cleaver.Definition.Attack = 20; Assert.AreEqual(10, battle.EnemyDamage(cleaver));
         }
 
+        [Test] public void DeadEnemyReleasesItsRankAndSurvivorsStepForward()
+        {
+            var run = Run();
+            foreach (var hero in run.Heroes) hero.Definition.Speed = 100;
+            var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(3).ToArray();
+            for (int i = 0; i < specs.Length; i++)
+            {
+                specs[i].StartRank = i;
+                specs[i].Speed = 1;
+                specs[i].MaxHp = 100;
+                specs[i].Dodge = 0;
+                specs[i].Defense = 0;
+                specs[i].Accuracy = 0;
+                specs[i].RankWidth = 1;
+                specs[i].Immobile = false;
+                specs[i].Behavior = EnemyBehavior.Simple;
+                specs[i].BasicSkills = ActorSpec.EmptySkills;
+            }
+            var battle = new BattleEngine(run, specs, catalog.Rules());
+            var front = battle.Enemies.Single(e => e.Rank == 0);
+            var middle = battle.Enemies.Single(e => e.Rank == 1);
+            var back = battle.Enemies.Single(e => e.Rank == 2);
+
+            battle.Damage(front, 1000);
+            Assert.IsTrue(front.Dead);
+
+            string note;
+            Assert.IsTrue(battle.SkipCurrentTurn(out note), note);
+            Assert.AreEqual(0, middle.Rank, "中间的敌人补上头排空位");
+            Assert.AreEqual(1, back.Rank, "后排依次前移一格");
+            Assert.AreEqual(2, battle.Enemies.Count(e => !e.Dead), "尸体保留在名单里，但不参与站位");
+            Assert.AreEqual(2, battle.Enemies.Where(e => !e.Dead).Select(e => e.Rank).Distinct().Count(),
+                "存活敌人不能共享同一个站位");
+        }
+
+        [Test] public void TwoDeathsInOneActionReleaseBothRanks()
+        {
+            var run = Run();
+            foreach (var hero in run.Heroes) hero.Definition.Speed = 100;
+            var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(4).ToArray();
+            for (int i = 0; i < specs.Length; i++)
+            {
+                specs[i].StartRank = i;
+                specs[i].Speed = 1;
+                specs[i].MaxHp = 100;
+                specs[i].Dodge = 0;
+                specs[i].Defense = 0;
+                specs[i].Accuracy = 0;
+                specs[i].RankWidth = 1;
+                specs[i].Immobile = false;
+                specs[i].Behavior = EnemyBehavior.Simple;
+                specs[i].BasicSkills = ActorSpec.EmptySkills;
+            }
+            var battle = new BattleEngine(run, specs, catalog.Rules());
+            var front = battle.Enemies.Single(e => e.Rank == 0);
+            var second = battle.Enemies.Single(e => e.Rank == 1);
+            var third = battle.Enemies.Single(e => e.Rank == 2);
+            var last = battle.Enemies.Single(e => e.Rank == 3);
+
+            // 同一次范围攻击击杀两具尸体，存活单位应连续补上两个空位。
+            battle.Damage(front, 1000);
+            battle.Damage(second, 1000);
+
+            string note;
+            Assert.IsTrue(battle.SkipCurrentTurn(out note), note);
+            Assert.AreEqual(0, third.Rank, "3 号位的敌人补到 1 号位");
+            Assert.AreEqual(1, last.Rank, "4 号位的敌人补到 2 号位");
+        }
+
+        [Test] public void SummonedCopiesDoNotShareARankWithEachOther()
+        {
+            var run = Run();
+            foreach (var hero in run.Heroes) hero.Definition.Speed = 100;
+            var strike = new SkillSpec
+            {
+                Id = "test_copy_strike", Name = "复制打击", Effect = SkillEffect.Attack,
+                Target = TargetSide.Enemy, Multiplier = 1.0, ActorRanks = 15, TargetRanks = 15, Accuracy = 0.9
+            };
+            var specs = new[]
+            {
+                new ActorSpec
+                {
+                    Id = "copy_boss", Name = "复制者", MaxHp = 500, Speed = 1, StartRank = 0,
+                    Attack = 1, Accuracy = 0, Behavior = EnemyBehavior.CopyBoss,
+                    BasicSkills = new[] { strike }
+                }
+            };
+            var battle = new BattleEngine(run, specs, catalog.Rules());
+
+            // Walk to the start of round two. CopyBoss refills its three copies before the turn queue
+            // is built, which is exactly the moment the old corpse/slot overlap used to appear.
+            int guard = 0;
+            while (battle.Round < 2 && battle.Outcome == BattleOutcome.Active && guard++ < 32)
+            {
+                if (battle.Current != null && battle.Current.Player) battle.SkipCurrentTurn(out _);
+                else battle.ExecuteEnemy();
+            }
+
+            var livingCopies = battle.Enemies.Where(e => !e.Dead && e.IsCopy).ToArray();
+            Assert.AreEqual(3, livingCopies.Length);
+            Assert.AreEqual(3, livingCopies.Select(e => e.Rank).Distinct().Count(), "复制体各占一个站位");
+            Assert.IsFalse(livingCopies.Any(e => e.Rank == 0), "复制体不会和首领挤在同一格");
+        }
+
         [Test] public void CertainHitAndZeroDodgeConsumeNoRandomDraw()
         {
             var run = Run(); run.Heroes[1].Definition.Speed = 100; // 战士先动：「斩劈」打得到 1 号位的敌人
@@ -313,6 +417,90 @@ namespace Ruin.Tests
                 }
             }
             Assert.That(actions, Is.LessThan(240)); Assert.NotNull(battle.Settlement);
+        }
+
+        [Test] public void ImbalanceIsShownOnTheIntentAndImmuneReapplicationIsLogged()
+        {
+            var run = Run();
+            var skill = new SkillSpec
+            {
+                Id = "test_bash", Name = "测试猛击", Effect = SkillEffect.Attack,
+                Target = TargetSide.Enemy, Multiplier = 0.1, ActorRanks = 15, TargetRanks = 15,
+                Accuracy = 0.9, Imbalance = true
+            };
+            for (int i = 0; i < run.Heroes.Count; i++)
+            {
+                run.Heroes[i].Definition.Speed = 100 - i;
+                run.Heroes[i].Definition.BasicSkills = new[] { skill };
+                run.Heroes[i].Definition.CritChance = 0;
+            }
+            var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
+            specs[0].Speed = 1; specs[0].MaxHp = 1000; specs[0].Defense = 0; specs[0].Dodge = 0;
+            specs[0].Accuracy = 0; specs[0].Behavior = EnemyBehavior.Simple;
+            specs[0].BasicSkills = ActorSpec.EmptySkills;
+            var battle = new BattleEngine(run, specs, catalog.Rules());
+            var target = battle.Enemies.Single();
+
+            string error;
+            Assert.AreSame(run.Heroes[0], battle.Current);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
+            Assert.AreEqual(1, target.Imbalance, "失衡应让敌人跳过下一次行动");
+            Assert.That(battle.Intent(target), Does.Contain("失衡"), "敌人卡片要能看到行动被跳过");
+            Assert.IsTrue(battle.Events.Any(e => e.Message.Contains("下一次行动将被跳过")));
+
+            // 同回合内再次施加失衡：免疫应当有明确反馈，而不是静默失败。
+            target.ImbalanceImmuneRound = battle.Round;
+            Assert.AreSame(run.Heroes[1], battle.Current);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
+            Assert.IsTrue(battle.Events.Any(e => e.Message.Contains("失衡免疫")), "免疫回合要写明本次失衡未生效");
+        }
+
+        [Test] public void PullMovesTheChosenEnemyEvenWhenAGuardTakesTheDamage()
+        {
+            var rules = catalog.Rules();
+            var hero = new ActorSpec
+            {
+                Id = "test_gunner", Name = "测试枪手", MaxHp = 40, Speed = 100, Attack = 10,
+                Accuracy = 1, CritChance = 0, Dodge = 0, Defense = 0
+            };
+            var pull = new SkillSpec
+            {
+                Id = "test_pull", Name = "测试拖拽射击", Effect = SkillEffect.Attack,
+                Target = TargetSide.Enemy, Targeting = SkillTargeting.Choose,
+                Multiplier = 1.0, ActorRanks = 15, TargetRanks = 15, Accuracy = 0.9,
+                PullToFront = true, PullChance = 1.0
+            };
+            hero.BasicSkills = new[] { pull };
+            var run = RunState.Create(new[] { hero }, 1, 50, rules);
+            var enemies = new[]
+            {
+                new ActorSpec
+                {
+                    Id = "test_tank", Name = "测试守护", MaxHp = 200, Speed = 1, StartRank = 0,
+                    Attack = 0, Accuracy = 0, Behavior = EnemyBehavior.Simple,
+                    BasicSkills = ActorSpec.EmptySkills
+                },
+                new ActorSpec
+                {
+                    Id = "test_ward", Name = "测试被守护者", MaxHp = 50, Speed = 1, StartRank = 2,
+                    Attack = 0, Accuracy = 0, Behavior = EnemyBehavior.Simple,
+                    BasicSkills = ActorSpec.EmptySkills
+                }
+            };
+            var battle = new BattleEngine(run, enemies, rules);
+            var tank = battle.Enemies.Single(e => e.Definition.Id == "test_tank");
+            var ward = battle.Enemies.Single(e => e.Definition.Id == "test_ward");
+            ward.ProtectorId = tank.Id;
+            Assert.IsTrue(battle.Targets(0).Any(a => a == ward), "被守护者应当在可选目标里");
+
+            string error;
+            int tankHp = tank.Hp;
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, ward.Id, 0), out error), error);
+
+            Assert.Less(tank.Hp, tankHp, "守护者应当承担这次伤害");
+            Assert.AreEqual(ward.Definition.MaxHp, ward.Hp, "被守护者不应掉血");
+            Assert.AreEqual(0, ward.Rank, "拖拽仍然作用于玩家选中的目标，而不是挡刀者");
+            Assert.AreEqual(1, tank.Rank, "挡刀者被让到 2 号位");
         }
     }
 }

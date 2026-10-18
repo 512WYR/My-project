@@ -277,11 +277,24 @@ namespace GameMake.GothicHUD
                 // fills StageOneView's card map, and nothing else would on this page.
                 if (hero != null && app.View) app.View.RegisterCardImage(hero.Id, card.Background);
             }
+            // One card per living enemy. Matching by rank keeps the formation readable; anything that
+            // has no free rank slot (a rank collision left by debug tools, or a rank outside 1-4) is
+            // placed in the first empty card instead of silently disappearing. Corpses own no slot.
+            var living = battle.Enemies.Where(e => !e.Dead)
+                .OrderBy(e => e.Rank).ThenBy(e => e.Id, StringComparer.Ordinal).ToArray();
+            var slots = new ActorState[Enemies.Length];
+            foreach (var enemy in living)
+            {
+                int slot = enemy.Rank >= 0 && enemy.Rank < slots.Length ? enemy.Rank : -1;
+                if (slot < 0 || slots[slot] != null)
+                    slot = Array.FindIndex(slots, s => s == null);
+                if (slot >= 0) slots[slot] = enemy;
+            }
             for (int rank = 0; rank < Enemies.Length; rank++)
             {
                 var card = Enemies[rank];
                 if (!card) continue;
-                var enemy = battle.Enemies.FirstOrDefault(e => e.Rank == rank);
+                var enemy = slots[rank];
                 card.Render(enemy, enemy != null && battle.Current == enemy, enemy != null && possible.Contains(enemy.Id),
                     enemy != null && app.InspectedId == enemy.Id, enemy == null ? null : battle.Intent(enemy));
                 if (enemy != null && app.View) app.View.RegisterCardImage(enemy.Id, card.Background);

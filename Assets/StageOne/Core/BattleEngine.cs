@@ -17,6 +17,10 @@ namespace Ruin.Core
         private readonly Dictionary<string, double> startSanity = new Dictionary<string, double>();
         private readonly List<ActorState> roster = new List<ActorState>();
         private readonly Queue<ActorState> turns = new Queue<ActorState>();
+        // Ranks vacated by enemies that died since the last action resolved. The survivors behind each
+        // one step forward when the action is over, so the formation never leaves the dead unit's slot
+        // as a hole and a later summon cannot share a rank with a corpse.
+        private readonly List<int> deathRanks = new List<int>();
 
         public BattleEngine(RunState run, ActorSpec[] enemies, CombatRules rules)
         {
@@ -127,6 +131,7 @@ namespace Ruin.Core
 
         private void Advance()
         {
+            ResolveEnemyRanksAfterDeaths();
             Current = null;
             while (Outcome == BattleOutcome.Active)
             {
@@ -171,6 +176,9 @@ namespace Ruin.Core
                     Damage(next, next.BleedDamage, null, true);
                     Log(next.Name + " 流血，剩余 " + next.BleedTurns + " 次。", "bleed", null, next.Id);
                     if (CheckEnd()) return;
+                    // Bleed can kill an enemy inside Advance, outside any Execute call. Close that gap
+                    // before the turn queue picks the next actor.
+                    ResolveEnemyRanksAfterDeaths();
                     if (next.Dead) continue;
                 }
                 if (next.Interrupted > 0)
@@ -182,7 +190,7 @@ namespace Ruin.Core
                 if (next.Imbalance > 0)
                 {
                     next.Imbalance--;
-                    Log(next.Name + " 陷入失衡，本回合无法行动。", "control", null, next.Id);
+                    Log(next.Name + " 因失衡跳过行动。", "control", null, next.Id);
                     continue;
                 }
                 Current = next;
@@ -377,6 +385,9 @@ namespace Ruin.Core
                 Damage(victim, amount, actor.Id);
                 dealt += amount;
                 if (!victim.Dead) ApplyOnHit(actor, victim, skill, target == main);
+                // A guard only intercepts damage. Position effects still belong to the target the player
+                // selected, otherwise the tank at rank one is "pulled" to rank one and nothing happens.
+                if (target == main && skill.PullToFront && !target.Dead) TryPull(actor, target, skill);
             }
             ApplyRider(actor, primary, skill, dealt);
             TryFollowups(actor, main, false);
@@ -519,11 +530,19 @@ namespace Ruin.Core
 
         private void ApplyOnHit(ActorState actor, ActorState target, SkillSpec skill, bool isMain)
         {
-            if (isMain && skill.Imbalance && target.ImbalanceImmuneRound != Round)
+            if (isMain && skill.Imbalance)
             {
-                target.Imbalance = 1;
-                target.ImbalanceImmuneRound = Round + Rules.ImbalanceImmuneRounds;
-                Log(target.Name + " 失衡，本回合无法行动。", "control", actor.Id, target.Id);
+                if (target.ImbalanceImmuneRound != Round)
+                {
+                    target.Imbalance = 1;
+                    target.ImbalanceImmuneRound = Round + Rules.ImbalanceImmuneRounds;
+                    Log(target.Name + " 失衡：下一次行动将被跳过。", "control", actor.Id, target.Id);
+                }
+                else
+                {
+                    // The immunity is intentional, but silently refusing a second bash reads like a bug.
+                    Log(target.Name + " 处于失衡免疫，本次失衡未生效。", "control", actor.Id, target.Id);
+                }
             }
             if (skill.Bleed > 0 && (skill.BleedChance <= 0 || Roll(skill.BleedChance)))
             {
@@ -537,7 +556,20 @@ namespace Ruin.Core
                 target.Interrupted = Math.Max(1, target.Interrupted);
                 Log(target.Name + " 下一次行动被打断。", "control", actor.Id, target.Id);
             }
-            if (skill.PullToFront && !target.Player && Roll(skill.PullChance)) PullToFront(target);
+        }
+
+        // The pull roll lives outside ApplyOnHit so a guarded hit cannot move the guard instead of the
+        // selected target, and so a failed roll leaves a readable log line.
+        private void TryPull(ActorState actor, ActorState target, SkillSpec skill)
+        {
+            if (target == null || target.Dead || target.Player) return;
+            if (!Roll(skill.PullChance))
+            {
+                Log(actor.Name + " · " + skill.Name + " 的拖拽未生效（"
+                    + Math.Round(skill.PullChance * 100) + "% 概率未触发）。", "move", actor.Id, target.Id);
+                return;
+            }
+            PullToFront(target);
         }
 
         private void ApplySupport(ActorState actor, ActorState target, SkillSpec skill)
@@ -682,7 +714,11 @@ namespace Ruin.Core
                 return;
             }
             int from = enemy.Rank;
-            if (from <= 0) return;
+            if (from <= 0)
+            {
+                Log(enemy.Name + " 已经在 1 号位，无需拖拽。", "move", null, enemy.Id);
+                return;
+            }
             // Wide and immobile units do not step aside, so a pull either finds room or fails.
             int shift = enemy.Width;
             foreach (var other in Enemies.Where(e => e != enemy && !e.Dead && e.Rank < from && !e.Definition.Immobile).ToArray())
@@ -758,6 +794,9 @@ namespace Ruin.Core
         public string Intent(ActorState enemy)
         {
             if (enemy.Dead) return "已被击败";
+            // Imbalance has to be visible on the enemy card; otherwise a skipped turn looks like the
+            // skill did nothing at all.
+            if (enemy.Imbalance > 0) return "失衡：下次行动跳过";
             if (enemy.Interrupted > 0) return "下一次行动被打断";
             bool noSkills = enemy.Definition.BasicSkills == null || enemy.Definition.BasicSkills.Length == 0;
             return noSkills && enemy.Definition.Behavior == EnemyBehavior.Simple
@@ -1407,6 +1446,36 @@ namespace Ruin.Core
             };
         }
 
+        // Survivors behind a fallen enemy take one step toward the front. Processing front-to-back
+        // keeps two survivors from claiming the same destination, and immobile or multi-rank units
+        // keep their ground so the giant boss and the steam machine are not dragged around by adds.
+        // Dead actors are deliberately not consulted for occupancy: they are corpses, not obstacles.
+        private void ResolveEnemyRanksAfterDeaths()
+        {
+            if (deathRanks.Count == 0) return;
+            // Process from the back so a survivor can fill every rank vacated in the same action.
+            // Front-to-back would move it into the first hole and then stop counting it as "behind".
+            foreach (int deathRank in deathRanks.OrderByDescending(r => r))
+            {
+                var behind = Enemies
+                    .Where(e => !e.Dead && e.Rank > deathRank)
+                    .OrderBy(e => e.Rank).ThenBy(e => e.Id, StringComparer.Ordinal)
+                    .ToArray();
+                foreach (var enemy in behind)
+                {
+                    if (enemy.Definition.Immobile || enemy.Width != 1) continue;
+                    int destination = enemy.Rank - 1;
+                    if (destination < 0) continue;
+                    bool blocked = Enemies.Any(e => e != enemy && !e.Dead
+                        && e.Rank < destination + enemy.Width && destination < e.Rank + e.Width);
+                    if (blocked) continue;
+                    enemy.Rank = destination;
+                    Log(enemy.Name + " 向前移动到 " + (destination + 1) + " 号位。", "move", enemy.Id);
+                }
+            }
+            deathRanks.Clear();
+        }
+
         private bool MoveEnemy(ActorState enemy, int delta)
         {
             int destination = enemy.Rank + delta;
@@ -1588,6 +1657,10 @@ namespace Ruin.Core
         {
             if (actor == null || actor.Dead) return;
             actor.Dead = true;
+            // The rank is resolved after the current action finishes, not here: an area attack may
+            // still be iterating over its captured target list and moving the survivors mid-swing
+            // would make rank-dependent riders see a different formation.
+            if (!actor.Player) deathRanks.Add(actor.Rank);
             Log(actor.Name + (actor.Player ? " 死亡，本局无法恢复。" : " 被击败。"), "death", null, actor.Id);
             if (!actor.Player)
             {

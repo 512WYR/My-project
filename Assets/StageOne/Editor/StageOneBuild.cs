@@ -134,8 +134,8 @@ namespace Ruin.Editor
                 s.Area = SkillArea.Party; s.Multiplier = 0;
                 s.Rider = new SkillRider { Kind = RiderKind.SanityRestore, Area = RiderArea.Chosen, Amount = 10 };
             });
-            var grapple = Skill("g_grapple", "拖拽射击", "○○●●/○○●●\n造成攻击力75%的伤害，预计8点；命中后30%把目标拖到敌方1号位", 12, 12, s => {
-                s.Multiplier = 0.75; s.PullToFront = true; s.PullChance = 0.3;
+            var grapple = Skill("g_grapple", "拖拽射击", "○○●●/○○●●\n造成攻击力75%的伤害，预计8点；命中后40%把目标拖到敌方1号位", 12, 12, s => {
+                s.Multiplier = 0.75; s.PullToFront = true; s.PullChance = 0.4;
             });
             var primalShot = Skill("g_primal_shot", "指定射击·散乱", "○○●●/○●●●\n主目标受攻击力125%的伤害，预计13点；2名溅射各受主目标伤害的50%，预计7点；命中降至75%", 12, 14, s => {
                 s.Multiplier = 1.25; s.Area = SkillArea.Splash; s.AreaMax = 2; s.AreaRatio = 0.5; s.Accuracy = 0.75;
