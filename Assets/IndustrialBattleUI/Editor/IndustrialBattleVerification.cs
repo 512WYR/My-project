@@ -80,9 +80,14 @@ namespace GameMake.IndustrialBattleEditor
                 hud.Panel.PartyButtons[0].onClick.Invoke(); limb.Hp=limb.MaxHp; app.Refresh();
                 Check(presentation.Limbs[part].Icon.sprite==presentation.Limbs[part].HealthySprite && presentation.Limbs[part].Fill.fillAmount==1,"Limb restore failed");
             }
+            Check(presentation.HealthFill.sprite && presentation.SanityFill.sprite && hud.Allies[0].HealthFill.sprite && hud.Allies[0].SanityFill.sprite,"Fill bar has no sprite; Image ignores fillAmount without one");
             app.Run.Heroes[0].Hp=23; app.Run.Heroes[0].Sanity=67; app.Refresh();
             Check(Mathf.Abs(presentation.HealthFill.fillAmount-23f/app.Run.Heroes[0].Definition.MaxHp)<.001f && Mathf.Abs(presentation.SanityFill.fillAmount-.67f)<.001f,"Vitals are not bound");
+            Check(hud.Panel.AttributeValues!=null && hud.Panel.AttributeValues.Length==6 && hud.Panel.AttributeValues.All(t=>t && t.text!="—") && hud.Panel.AttributeValues.Any(t=>t.text.EndsWith("%")),"Bottom attributes were not filled");
+            Check(hud.Allies[0].SanityFill && Mathf.Abs(hud.Allies[0].SanityFill.fillAmount-.67f)<.001f && hud.Allies[0].SanityValue.text=="67 / 100","Stage sanity bar is not bound");
+            string attack=hud.Panel.AttributeValues[0].text;
             LimbSystem.Get(app.Run.Heroes[0],LimbPart.Arm).Hp=0; app.Refresh();
+            Check(hud.Panel.AttributeValues[0].text!=attack,"Attack attribute ignores limb damage");
             hud.Counter.SetRound(12); yield return .5f; Capture(hud,"Battle-BrokenArm-Round12");
             LimbSystem.Get(app.Run.Heroes[0],LimbPart.Arm).Hp=LimbSystem.Get(app.Run.Heroes[0],LimbPart.Arm).MaxHp; app.Refresh();
             Pass("all four healthy/broken pairs, limb bars, character isolation and actual health/sanity updates");

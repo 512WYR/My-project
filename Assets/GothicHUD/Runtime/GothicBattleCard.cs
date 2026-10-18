@@ -19,6 +19,8 @@ namespace GameMake.GothicHUD
         public Text Name;
         public Image HealthFill;
         public Text HealthValue;
+        public Image SanityFill;
+        public Text SanityValue;
         public Text Intent;
         public Text Status;
         public GameObject ActiveBadge;
@@ -76,6 +78,12 @@ namespace GameMake.GothicHUD
                 HealthValue.text = actor.Dead ? "已死亡"
                     : actor.DeathDoor ? "濒死 · 需要治疗"
                     : actor.Hp + " / " + actor.Definition.MaxHp;
+
+            // Sanity sits directly under the health bar so a hero's other vital is visible on the stage,
+            // not only on the selected-character panel.
+            if (SanityFill) SanityFill.fillAmount = Mathf.Clamp01((float)actor.Sanity / 100f);
+            if (SanityValue)
+                SanityValue.text = Mathf.Clamp((float)actor.Sanity, 0f, 100f).ToString("0") + " / 100";
 
             // A card carries one status line: the intent for enemies, the limb/state summary for allies.
             // They share a slot because a position card only has room for one.

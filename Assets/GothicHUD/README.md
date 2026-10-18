@@ -90,12 +90,14 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 
 | 区域 | 来源 | 内容 |
 |---|---|---|
-| 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、状态行（我方）或敌人意图（敌方）、行动/可选标记、阵亡叉 |
+| 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、生命条下方的理智条、状态行（我方）或敌人意图（敌方）、行动/可选标记、阵亡叉 |
 | 血量 | ModularHudController / Vitals | 当前被查看角色的生命与理智 |
 | 技能 | ModularHudController / Skills | 五个技能槽、位移键、技能说明 |
 | 调试台 | IndustrialDebugConsole | 九个页签：概览、队伍、战斗、地图与房间、事件、部位与义肢、物品与饰品、规则与目录、日志；包含新开演练、玩家/队员理智拖动条与输入框、常态/技术/原始形态按钮、生命、强制房间与事件、战斗结算、义肢与饰品管理 |
 
-位置卡不显示理智，理智看 Vitals 区。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
+位置卡的生命条下方各有一条理智条（`GothicBattleCard.SanityFill / SanityValue`），与 Vitals 区的数值同步；敌方卡同样显示，但敌方理智通常不参与战斗。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
+
+底部右侧的六行属性预留（攻击、防御、速度、闪避、命中、暴击）由 `GothicHudPanel.AttributeValues` 提供，当前由 `IndustrialBattleDetails` 写入选中队员的有效值：攻击、防御、速度取 `BattleEngine.Effective*`（含肢体重伤惩罚与临时增益），命中计入头部重伤与饰品下限，暴击计入必暴饰品；数值为空时显示 `—`。
 
 ### 节点页（已移除）
 

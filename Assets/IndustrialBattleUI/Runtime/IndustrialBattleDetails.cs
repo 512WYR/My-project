@@ -51,6 +51,7 @@ namespace GameMake.IndustrialBattleUI
             }
             int selected=Mathf.Clamp(BattleHud.Presentation.SelectedCharacter,0,bound.Run.Heroes.Count-1);
             Figure(MainFigure,bound.Run.Heroes[selected]);
+            SyncAttributes(battle,bound.Run.Heroes[selected]);
             MainFigure.enabled=!BattleHud.Panel.MainPortrait.sprite;
             // Card geometry is authored separately from its body, so keep the silhouettes legible.
             foreach(var card in BattleHud.Allies) TintCard(card);
@@ -71,6 +72,29 @@ namespace GameMake.IndustrialBattleUI
                 else { wheelAngle=targetWheelAngle; Wheel.localEulerAngles=new Vector3(0,0,wheelAngle); }
             }
             lastRound=battle.Round;
+        }
+        // The bottom panel describes the selected hero, so the six reserved rows read the same effective
+        // values the engine uses: limb damage, temporary defence/accuracy buffs and accessories included.
+        void SyncAttributes(BattleEngine battle,ActorState hero)
+        {
+            var values=BattleHud&&BattleHud.Panel?BattleHud.Panel.AttributeValues:null;
+            if(values==null || hero==null) return;
+            var limbs=battle.Rules.Limbs;
+            SetAttribute(0,Mathf.RoundToInt((float)battle.EffectiveAttack(hero)).ToString());
+            SetAttribute(1,Percent(battle.EffectiveDefense(hero)));
+            SetAttribute(2,battle.EffectiveSpeed(hero).ToString());
+            SetAttribute(3,Percent(hero.Definition.Dodge));
+            SetAttribute(4,Percent(Math.Max(hero.Definition.Accuracy*LimbSystem.AccuracyFactor(hero,limbs)+hero.AccuracyBuff,AccessorySystem.AccuracyFloor(hero))));
+            SetAttribute(5,Percent(AccessorySystem.AlwaysCrit(hero)?1:hero.Definition.CritChance));
+        }
+        void SetAttribute(int index,string text)
+        {
+            var values=BattleHud&&BattleHud.Panel?BattleHud.Panel.AttributeValues:null;
+            if(values!=null && index<values.Length && values[index]) values[index].text=text;
+        }
+        static string Percent(double value)
+        {
+            return Mathf.RoundToInt((float)Math.Max(0,Math.Min(1,value))*100)+"%";
         }
         static void Figure(SilhouetteGraphic figure,ActorState hero)
         {

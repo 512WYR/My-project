@@ -58,8 +58,9 @@ namespace GameMake.ExplorationEditor
             Import("楼层计数器","Counter"); Import("角色框","Party");
             Import("通用边框","Option",new Vector4(72,72,72,100));
             for(int i=0;i<10;i++) Import("计数标"+i,"Digit"+i);
-            font=AssetDatabase.LoadAssetAtPath<Font>("Assets/GothicHUD/Art/HudChinese.ttf");
-            white=AssetDatabase.LoadAllAssetsAtPath("Assets/GothicHUD/Art/SolidFill.asset").OfType<Sprite>().First();
+            font=AssetDatabase.LoadAssetAtPath<Font>("Assets/IndustrialBattleUI/Art/HudChinese.ttf");
+            // Shared solid sprite; Image needs an assigned sprite before fillAmount changes its mesh.
+            white=AssetDatabase.LoadAssetAtPath<Sprite>("Assets/IndustrialBattleUI/Art/SolidFill.png");
             Directory.CreateDirectory(Output);
         }
         [MenuItem("GameMake/Map Exploration/Build New Scene")]

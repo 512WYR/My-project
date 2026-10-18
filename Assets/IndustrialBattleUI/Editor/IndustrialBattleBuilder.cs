@@ -49,8 +49,10 @@ namespace GameMake.IndustrialBattleEditor
             SlicePanel("CounterLeftRail",0,0,810,217,new Vector4(150,0,50,0),"蒸汽朋克机械回合计数器");
             SlicePanel("CounterCenterFrame",810,0,472,217,default,"蒸汽朋克机械回合计数器");
             SlicePanel("CounterRightRail",1282,0,810,217,new Vector4(50,0,150,0),"蒸汽朋克机械回合计数器");
-            font=AssetDatabase.LoadAssetAtPath<Font>("Assets/GothicHUD/Art/HudChinese.ttf");
-            white=AssetDatabase.LoadAllAssetsAtPath("Assets/GothicHUD/Art/SolidFill.asset").OfType<Sprite>().First();
+            font=AssetDatabase.LoadAssetAtPath<Font>("Assets/IndustrialBattleUI/Art/HudChinese.ttf");
+            // A real sprite is required: Image only clips to fillAmount when a sprite is assigned,
+            // otherwise it falls back to a full-rect quad and the bars never move.
+            white=AssetDatabase.LoadAssetAtPath<Sprite>("Assets/IndustrialBattleUI/Art/SolidFill.png");
             var go=PrefabUtility.LoadPrefabContents(Prefab);
             try { Restyle(go); PrefabUtility.SaveAsPrefabAsset(go,Prefab); }
             finally { PrefabUtility.UnloadPrefabContents(go); }
@@ -108,10 +110,11 @@ namespace GameMake.IndustrialBattleEditor
             var attributes=Group(stats,"Attributes - 属性预留",614,29,142,225);
             Label(attributes,"Heading","角色属性",0,0,142,27,19,Cream);
             string[] attributeNames={"攻击","防御","速度","闪避","命中","暴击"};
+            panel.AttributeValues=new Text[attributeNames.Length];
             for(int i=0;i<attributeNames.Length;i++)
             {
                 Label(attributes,"Attribute Label "+i,attributeNames[i],0,35+i*29,76,25,17,Muted);
-                Label(attributes,"Attribute Value "+i,"—",82,35+i*29,60,25,17,Cream,TextAnchor.MiddleRight);
+                panel.AttributeValues[i]=Label(attributes,"Attribute Value "+i,"—",82,35+i*29,60,25,17,Cream,TextAnchor.MiddleRight);
             }
             string[] healthy={"肢体1","肢体 2","肢体 3","肢体 4"}, broken={"肢体破损1","肢体破损2","肢体破损3","肢体破损 4"};
             for(int i=0;i<4;i++)
@@ -189,17 +192,30 @@ namespace GameMake.IndustrialBattleEditor
             // Keep the new portrait frame at card scale, and leave enough space for readable target data.
             foreach(var card in chrome.Allies.Concat(chrome.Enemies))
             {
-                var rt=(RectTransform)card.transform; rt.sizeDelta=new Vector2(160,270);
-                SetRect(card.Background.transform,0,0,160,270);
+                var rt=(RectTransform)card.transform; rt.sizeDelta=new Vector2(160,292);
+                SetRect(card.Background.transform,0,0,160,292);
                 Image(card.transform,"Industrial Card Frame","人物头像框",0,0,160,166).transform.SetSiblingIndex(1);
                 if(!card.Art.GetComponent<CanvasRenderer>()) card.Art.gameObject.AddComponent<CanvasRenderer>();
                 SetRect(card.Art.transform,37,18,86,128);
                 SetRect(card.Name.transform,3,172,154,28); Type(card.Name,20,Cream,TextAnchor.MiddleCenter);
-                SetRect(card.HealthFill.transform.parent,6,206,148,20);
-                foreach(var g in card.HealthFill.transform.parent.GetComponentsInChildren<RectTransform>()) if(g!=card.HealthFill.transform.parent) g.sizeDelta=new Vector2(148,20);
+                var health=card.HealthFill.transform.parent;
+                SetRect(health,6,206,148,20);
+                foreach(var g in health.GetComponentsInChildren<RectTransform>()) if(g!=health) g.sizeDelta=new Vector2(148,20);
                 Type(card.HealthValue,16,Cream,TextAnchor.MiddleCenter);
-                SetRect(card.Status.transform,6,231,148,38); Type(card.Status,15,Muted,TextAnchor.UpperLeft);
-                if(card.Intent) { SetRect(card.Intent.transform,6,231,148,38); Type(card.Intent,15,Muted,TextAnchor.UpperLeft); }
+                // Sanity sits under the stage health bar; the card grows by the height of the second bar.
+                var sanity=Group(card.transform,"Sanity",6,230,148,20);
+                var trackSprite=Find(health,"Track").GetComponent<Image>().sprite;
+                SpriteImage(sanity,"Track",trackSprite,0,0,148,20);
+                card.SanityFill=SpriteImage(sanity,"Fill",white,1,1,148,20);
+                ConfigureFill(card.SanityFill,new Color32(205,205,205,255));
+                card.SanityValue=Label(sanity,"Value","100 / 100",0,0,148,20,16,Cream,TextAnchor.MiddleCenter);
+                // The sanity fill is light grey, so cream text needs the same dark outline the bottom
+                // vitals text uses; without it the digits wash out against a full bar.
+                var cardSanityOutline=card.SanityValue.GetComponent<Outline>();
+                if(!cardSanityOutline) cardSanityOutline=card.SanityValue.gameObject.AddComponent<Outline>();
+                cardSanityOutline.effectColor=new Color(0,0,0,.95f); cardSanityOutline.effectDistance=new Vector2(1,-1);
+                SetRect(card.Status.transform,6,254,148,36); Type(card.Status,15,Muted,TextAnchor.UpperLeft);
+                if(card.Intent) { SetRect(card.Intent.transform,6,254,148,36); Type(card.Intent,15,Muted,TextAnchor.UpperLeft); }
                 SetRect(card.ActiveBadge.transform,7,-29,52,23); SetRect(card.TargetBadge.transform,102,-29,52,23);
                 Type(card.ActiveBadge.GetComponent<Text>(),16,Cream); Type(card.TargetBadge.GetComponent<Text>(),16,Cream,TextAnchor.MiddleRight);
                 card.Art.color=Cream;
@@ -256,6 +272,12 @@ namespace GameMake.IndustrialBattleEditor
         {
             var rt=Group(p,name,x,y,w,h); var image=rt.GetComponent<Image>(); if(!image) image=rt.gameObject.AddComponent<Image>();
             Skin(rt,key,sliced,multiplier); image.raycastTarget=false; return image;
+        }
+        static Image SpriteImage(Transform p,string name,Sprite sprite,float x,float y,float w,float h)
+        {
+            var rt=Group(p,name,x,y,w,h); var image=rt.GetComponent<Image>(); if(!image) image=rt.gameObject.AddComponent<Image>();
+            image.sprite=sprite; image.type=UnityEngine.UI.Image.Type.Sliced; image.pixelsPerUnitMultiplier=1;
+            image.color=Color.white; image.raycastTarget=false; return image;
         }
         static Text Label(Transform p,string name,string value,float x,float y,float w,float h,int size,Color color,TextAnchor align=TextAnchor.MiddleLeft)
         {
