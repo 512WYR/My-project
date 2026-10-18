@@ -95,6 +95,8 @@ namespace GameMake.GothicHUD
             string state = actor.BleedTurns > 0 ? "流血 " + actor.BleedDamage + "×" + actor.BleedTurns
                 : actor.Form == SkillForm.Technical ? "高理智技能"
                 : actor.Form == SkillForm.Primal ? "低理智变化" : "";
+            if (limb.Length == 0 && state.Length == 0)
+                return AccessorySystem.ShortSummary(actor);
             if (limb.Length == 0) return state;
             return state.Length == 0 ? limb : limb + " · " + state;
         }

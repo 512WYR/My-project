@@ -79,13 +79,69 @@ namespace Ruin.Core
     public sealed class RunRandom
     {
         public uint State;
+
+        // Debug-only draw overrides. [NonSerialized] keeps them out of Unity serialization, so a saved
+        // run can never come back with a forced draw still armed. Off by default: debugForcedDraws == 0
+        // means NextUnit behaves exactly as the plain xorshift below.
+        [NonSerialized] private int debugForcedDraws;
+        [NonSerialized] private double debugForcedValue;
+        [NonSerialized] private bool debugConsumeState = true;
+
         public RunRandom(uint seed) { State = seed == 0 ? 0x9e3779b9u : seed; }
+
+        public bool DebugOverrideActive { get { return debugForcedDraws > 0; } }
+        public int DebugForcedDrawsRemaining { get { return debugForcedDraws; } }
+
+        // Forces the next N draws to return value. By default the xorshift state still advances, so the
+        // draws after the override line up with an unforced run; pass false to peek at a result without
+        // consuming the sequence. The debug tool records which mode was used when it replays.
+        public void ForceNextDraw(double value, int times = 1, bool consumeState = true)
+        {
+            debugForcedValue = ClampUnit(value);
+            debugForcedDraws = Math.Max(1, times);
+            debugConsumeState = consumeState;
+        }
+
+        // Keeps returning value until ClearDebugOverrides is called.
+        public void LockDraw(double value, bool consumeState = true)
+        {
+            debugForcedValue = ClampUnit(value);
+            debugForcedDraws = int.MaxValue;
+            debugConsumeState = consumeState;
+        }
+
+        public void ClearDebugOverrides()
+        {
+            debugForcedDraws = 0;
+            debugForcedValue = 0;
+            debugConsumeState = true;
+        }
+
         public double NextUnit()
+        {
+            if (debugForcedDraws > 0)
+            {
+                debugForcedDraws--;
+                if (debugConsumeState) AdvanceState();
+                return debugForcedValue;
+            }
+            return AdvanceState() / 4294967296.0;
+        }
+
+        private uint AdvanceState()
         {
             uint x = State == 0 ? 0x9e3779b9u : State;
             x ^= x << 13; x ^= x >> 17; x ^= x << 5;
             State = x;
-            return x / 4294967296.0;
+            return x;
+        }
+
+        // NextUnit has always returned [0, 1); keep a forced value inside that range.
+        private static double ClampUnit(double value)
+        {
+            if (double.IsNaN(value) || value <= 0) return 0;
+            if (value >= 1) return 0.999999999;
+            return value;
         }
     }
 }

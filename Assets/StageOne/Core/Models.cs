@@ -263,6 +263,14 @@ namespace Ruin.Core
         // Four parts, hero side only. Read the effective attributes through BattleEngine so the limb
         // penalties are applied; Speed below stays the raw character value.
         public List<LimbState> Limbs = new List<LimbState>();
+        // Run-long equipment. Unequipping moves the item back to RunState.AccessoryStock.
+        public List<AccessorySpec> EquippedAccessories = new List<AccessorySpec>();
+        // Per-battle accessory flags and stacks, reset at the start of every battle.
+        public AccessoryBattleState AccessoryBattle = new AccessoryBattleState();
+        // 理智锁定药剂. SanityLocked is the live battle lock; SanityLockPending is a lock bought outside
+        // battle that activates when the next one starts. Both are cleared when a battle settles.
+        public bool SanityLocked;
+        public bool SanityLockPending;
         public int Speed { get { return Definition.Speed; } }
         public string Name { get { return Definition.Name; } }
         public bool DeathDoor { get { return Player && !Dead && Hp <= 0; } }
@@ -302,6 +310,10 @@ namespace Ruin.Core
         public MapState Map = new MapState();
         // Prosthetics the party owns but has not fitted yet.
         public List<ProstheticSpec> Prosthetics = new List<ProstheticSpec>();
+        // Accessories the party owns but has not equipped yet.
+        public List<AccessorySpec> AccessoryStock = new List<AccessorySpec>();
+        // Single-use items the party owns. A successful use removes one entry.
+        public List<ConsumableSpec> Consumables = new List<ConsumableSpec>();
 
         public static RunState Create(ActorSpec[] heroes, uint seed, double? sanityPreset = null, CombatRules rules = null)
         {

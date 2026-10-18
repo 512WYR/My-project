@@ -32,6 +32,10 @@ namespace GameMake.GothicHUD
         public GothicBattleCard[] Allies = new GothicBattleCard[4];
         public GothicBattleCard[] Enemies = new GothicBattleCard[4];
 
+        [Header("Quick items / 快捷物品")]
+        [Tooltip("The four authored Item slots. Resolved at runtime when left empty.")]
+        public Button[] QuickItems = new Button[4];
+
         [Header("Debug sheet / 调试页")]
         [Tooltip("Readouts and commands that have no place on the authored layout yet. Off by default.")]
         public GameObject DebugRoot;
@@ -64,6 +68,7 @@ namespace GameMake.GothicHUD
             if (!Panel) Panel = GetComponent<GothicHudPanel>();
             if (!Presentation) Presentation = GetComponent<ModularHudController>();
             if (!Counter) Counter = GetComponentInChildren<MechanicalRoundCounter>(true);
+            if (QuickItems == null || QuickItems.Length < 4 || QuickItems.All(b => !b)) ResolveQuickItems();
             if (bound != BattleSource)
             {
                 if (bound) bound.Changed -= Sync;
@@ -88,6 +93,27 @@ namespace GameMake.GothicHUD
             if (NewRunButton) NewRunButton.onClick.AddListener(NewRun);
             foreach (var card in Cards())
                 if (card && card.Hit) card.Hit.onClick.AddListener(() => SelectCard(card));
+            for (int i = 0; i < QuickItems.Length; i++)
+            {
+                var button = QuickItems[i];
+                if (button) button.onClick.AddListener(OpenConsumables);
+            }
+        }
+
+        // The authored quick-item slots carry a Button on their "Item Frame" child. They are found by name
+        // rather than referenced from the prefab so the prefab keeps its existing shape.
+        private void ResolveQuickItems()
+        {
+            QuickItems = new Button[4];
+            var group = GetComponentsInChildren<Transform>(true)
+                .FirstOrDefault(t => t.name == "Items - 快捷物品");
+            if (group == null) return;
+            for (int i = 0; i < 4; i++)
+            {
+                var slot = group.GetComponentsInChildren<Transform>(true)
+                    .FirstOrDefault(t => t.name == "Item " + (i + 1));
+                if (slot != null) QuickItems[i] = slot.GetComponentInChildren<Button>(true);
+            }
         }
 
         private IEnumerable<GothicBattleCard> Cards()
@@ -99,6 +125,7 @@ namespace GameMake.GothicHUD
         // ---- input, routed straight into the existing app commands ----
         private void SelectSkill(int index) { if (BattleSource) BattleSource.SelectSkill(index); }
         private void SelectSwap() { if (BattleSource) BattleSource.SelectSwap(); }
+        private void OpenConsumables() { if (BattleSource) BattleSource.OpenConsumableEditor(); }
         private void SelectCard(GothicBattleCard card)
         {
             if (BattleSource && card && !string.IsNullOrEmpty(card.ActorId)) BattleSource.SelectActor(card.ActorId);
@@ -126,8 +153,10 @@ namespace GameMake.GothicHUD
             if (!app || app.Run == null) return;
             var battle = app.Battle;
             bool live = battle != null && !app.AwaitingNode && battle.Outcome == BattleOutcome.Active
-                && !app.HelpOpen && !app.LabOpen;
+                && !app.HelpOpen && !app.LabOpen && !app.ConsumableEditorOpen;
             foreach (var chrome in ChromeRoots) if (chrome) chrome.SetActive(live);
+            bool quickItems = live && battle.Current != null && battle.Current.Player && !app.Busy;
+            foreach (var button in QuickItems) if (button) button.interactable = quickItems;
             // The sheet follows the button rather than the battle: the route and the rooms are drawn by
             // GothicNodeHudController, so this is the only place 新开演练 stays reachable from there.
             if (DebugRoot) DebugRoot.SetActive(debugOpen);

@@ -300,9 +300,9 @@ namespace Ruin.Tests
             Assert.AreEqual(NodeType.EliteBattle, session.BattleKind, "岔道的守备是精英");
             Assert.IsFalse(EventScripts.CanLeave(node), "打完才轮到通道的选项");
 
-            int before = run.Prosthetics.Count;
+            int before = run.AccessoryStock.Count;
             EventScripts.ResolveBattleReturn(node, run, Rules(), true);
-            Assert.AreEqual(before + 1, run.Prosthetics.Count, "胜利才发饰品");
+            Assert.AreEqual(before + 1, run.AccessoryStock.Count, "胜利才发饰品");
             Assert.IsTrue(EventScripts.CanLeave(node));
             Assert.IsTrue(Pick(node, 0, run, out session), "进入通道");
             Assert.IsTrue(node.EventJump, "通道直达本层电梯井");
@@ -319,11 +319,11 @@ namespace Ruin.Tests
 
             var fought = Room("EVT-L001");
             var run2 = Run(20);
-            int before = run2.Prosthetics.Count;
+            int before = run2.AccessoryStock.Count;
             Assert.IsTrue(Pick(fought, 1, run2, out session), "查清状况");
             Assert.IsTrue(session.WantsBattle);
             EventScripts.ResolveBattleReturn(fought, run2, Rules(), true);
-            Assert.AreEqual(before + 1, run2.Prosthetics.Count);
+            Assert.AreEqual(before + 1, run2.AccessoryStock.Count);
             Assert.IsTrue(run2.Map.BattleNodeBonus, "占位：后续战斗节点概率上升");
         }
 
@@ -339,10 +339,10 @@ namespace Ruin.Tests
             Assert.IsFalse(EventScripts.CanLeave(node), "战斗还没结算");
 
             int supplies = run.Map.Supplies;
-            int stock = run.Prosthetics.Count;
+            int stock = run.AccessoryStock.Count;
             EventScripts.ResolveBattleReturn(node, run, Rules(), false);
             Assert.AreEqual(supplies, run.Map.Supplies, "撤退不发补给");
-            Assert.AreEqual(stock, run.Prosthetics.Count, "撤退不发饰品");
+            Assert.AreEqual(stock, run.AccessoryStock.Count, "撤退不发饰品");
             Assert.AreEqual(2, node.EventFlag, "记下这是一次撤退");
             Assert.IsTrue(EventScripts.CanLeave(node));
         }

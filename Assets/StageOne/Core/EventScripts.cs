@@ -101,6 +101,15 @@ namespace Ruin.Core
             return item;
         }
 
+        // The three event rewards whose text says 饰品 now hand out an accessory instead of a prosthetic.
+        // The item is a fresh copy from the code table, so the run stock never aliases it.
+        public AccessorySpec GrantAccessory()
+        {
+            var item = Encounter.DropAccessory(Run.Random);
+            if (item != null) Run.AccessoryStock.Add(item);
+            return item;
+        }
+
         // Outside a fight nothing performs the death check, so an event wound is never lethal: health stops
         // at 1. The document leaves the exact number and the "what if it runs out" case open.
         public int DamageHero(ActorState hero, int percent)
@@ -289,16 +298,16 @@ namespace Ruin.Core
                     run.Map.Supplies += 2;
                     return "矿道深处的响动终于停了。你在碎石里又挑出了一些矿石：补给 +2。";
                 case "EVT-003":
-                    return "门后确实有人，只是已经不说话了。你们取下了他身上的饰品：" + NameProsthetic(run);
+                    return "门后确实有人，只是已经不说话了。你们取下了他身上的饰品：" + NameAccessory(run);
                 case "EVT-006":
                     run.Map.Supplies += 3;
                     return "休整被打断了，但敌人留下了能用的东西：补给 +3。";
                 case "EVT-H001":
-                    return "岔道尽头的东西安静下来。你们得到一件饰品：" + NameProsthetic(run)
+                    return "岔道尽头的东西安静下来。你们得到一件饰品：" + NameAccessory(run)
                         + "　岔道后面有一部还能用的电梯井。";
                 case "EVT-L001":
                     run.Map.BattleNodeBonus = true;
-                    return "第五个人已经不在了，只留下一件饰品：" + NameProsthetic(run)
+                    return "第五个人已经不在了，只留下一件饰品：" + NameAccessory(run)
                         + "　（占位：后续战斗节点概率增加尚未实现。）";
                 default:
                     return "战斗结束。";
@@ -310,6 +319,14 @@ namespace Ruin.Core
             var item = Encounter.DropProsthetic(null, run.Random);
             if (item == null) return "什么都没有。";
             run.Prosthetics.Add(item);
+            return item.Name;
+        }
+
+        private static string NameAccessory(RunState run)
+        {
+            var item = Encounter.DropAccessory(run.Random);
+            if (item == null) return "什么都没有。";
+            run.AccessoryStock.Add(item);
             return item.Name;
         }
 
@@ -384,7 +401,7 @@ namespace Ruin.Core
             {
                 if (s.HighSanity)
                 {
-                    s.GrantProsthetic();
+                    s.GrantAccessory();
                     s.End("门后没有人，只有一具早就没了的尸体和它身上的饰品。获得一件饰品。");
                     return;
                 }

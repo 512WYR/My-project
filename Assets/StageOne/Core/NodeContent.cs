@@ -198,5 +198,12 @@ namespace Ruin.Core
             var pick = pool[index];
             return new ProstheticSpec(pick.Id, pick.Name, pick.Part, pick.Description);
         }
+
+        // Chest rooms and the "饰品" event rewards draw from the code table. A fresh copy is returned so
+        // the stock never aliases AccessorySystem.Defaults.
+        public static AccessorySpec DropAccessory(RunRandom random)
+        {
+            return AccessorySystem.Drop(random);
+        }
     }
 }

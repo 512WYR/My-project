@@ -58,6 +58,8 @@ namespace Ruin.Runtime
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (app.LabOpen) Laboratory(root);
 #endif
+                if (app.AccessoryEditorOpen) AccessoryEditor(root);
+                if (app.ConsumableEditorOpen) ConsumableEditor(root);
                 return;
             }
             var bg = page.AddComponent<Image>(); bg.color = Bg;
@@ -84,19 +86,22 @@ namespace Ruin.Runtime
                 Actions(root);
                 Journal(root);
             }
-            Label(root, "Footer", "第一阶段  /  战斗与探索     ·     F1 操作说明     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1280, 22, 13, Muted);
+            Label(root, "Footer", "第一阶段  /  战斗与探索     ·     F1 操作说明     ·     I 道具     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1320, 22, 13, Muted);
             Label(root, "Version", "STAGE 01   /   0.3", 1370, 868, 195, 22, 13, Muted, TextAnchor.MiddleRight);
             if (!nodePage && app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
             if (app.HelpOpen) Help(root);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (app.LabOpen) Laboratory(root);
 #endif
+            if (app.AccessoryEditorOpen) AccessoryEditor(root);
+            if (app.ConsumableEditorOpen) ConsumableEditor(root);
         }
 
         private void Header(RectTransform root)
         {
             Label(root, "Title", "界限之间", 34, 22, 420, 43, 31, Ink);
             Label(root, "Subtitle", app.AwaitingNode ? "探索路线  /  玩家理智同时决定候选数量与房间类型" : "战斗演练  /  理智与队伍的第一场试炼", 35, 66, 700, 26, 15, Muted);
+            Button(root, "Consumables", "道具", "I", 996, 27, 130, 53, app.ToggleConsumableEditor, app.ConsumableEditorOpen, !app.Busy, 15);
             Button(root, "Help", "操作说明", "F1", 1138, 27, 130, 53, app.ToggleHelp, false, true, 15);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             Button(root, "Laboratory", "验收工具", "F3", 1280, 27, 130, 53, app.ToggleLab, false, !app.Busy, 15);
@@ -201,11 +206,12 @@ namespace Ruin.Runtime
                     + "%   低理智 " + (p[2] * 100).ToString("0.0") + "%", 20, 174, 300, 20, 12, Muted);
                 Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 198, 300, 18, 11, Muted);
                 Label(box, "Attributes", AttributeText(actor), 20, 218, 300, 30, 11, Muted);
-                Label(box, "LimbHeading", "部位损伤  ·  重伤→断肢→义肢", 20, 254, 300, 20, 13, Gold);
-                LimbRow(box, actor, LimbPart.Head, 278);
-                LimbRow(box, actor, LimbPart.Torso, 302);
-                LimbRow(box, actor, LimbPart.Arm, 326);
-                LimbRow(box, actor, LimbPart.Leg, 350);
+                Label(box, "Accessories", "饰品  " + AccessorySystem.Summary(actor), 20, 252, 300, 20, 11, Gold);
+                Label(box, "LimbHeading", "部位损伤  ·  重伤→断肢→义肢", 20, 276, 300, 20, 13, Gold);
+                LimbRow(box, actor, LimbPart.Head, 300);
+                LimbRow(box, actor, LimbPart.Torso, 324);
+                LimbRow(box, actor, LimbPart.Arm, 348);
+                LimbRow(box, actor, LimbPart.Leg, 372);
             }
             else
             {
@@ -261,6 +267,8 @@ namespace Ruin.Runtime
 
             Label(root, "MapHeading", "第 " + step.Floor + " 层  /  共 " + rules.Floors + " 层", 34, 186, 700, 38, 29, Ink);
             Label(root, "MapSupplies", "补给 " + app.Map.Supplies + "   ·   持有义肢 " + app.Run.Prosthetics.Count
+                + "   ·   持有饰品 " + app.Run.AccessoryStock.Count
+                + "   ·   持有道具 " + app.Run.Consumables.Count
                 + (app.Map.BuffChosen ? "   ·   增益 " + OpeningBuffs.Name(app.Map.Buff) : ""),
                 760, 192, 806, 30, 16, Gold, TextAnchor.MiddleRight);
             Label(root, "MapSanityNote", "已通过 " + app.Map.ResolvedSteps + " 个位置 · 玩家理智 " + app.Run.PlayerSanity.ToString("0.0")
@@ -444,12 +452,17 @@ namespace Ruin.Runtime
 
             var heal = Button(root, "SupplyHeal", app.Map.SupplyHealed ? "治疗已使用" : "治疗全队",
                 "每名队员恢复 " + (app.Catalog.MapRules().SupplyHealRatio * 100).ToString("0") + "% 生命",
-                34, 258, 700, 52, app.SupplyHeal, app.Map.SupplyHealed, !app.Map.SupplyHealed, 17);
+                34, 258, 500, 52, app.SupplyHeal, app.Map.SupplyHealed, !app.Map.SupplyHealed, 17);
             Outline((RectTransform)heal.transform, Cyan, 1);
             var calm = Button(root, "SupplyCalm", app.Map.SupplyCalmed ? "静养已使用" : "静养",
                 "玩家理智 +" + Exploration.CalmSanity,
-                760, 258, 706, 52, app.SupplyCalm, app.Map.SupplyCalmed, !app.Map.SupplyCalmed, 17);
+                548, 258, 500, 52, app.SupplyCalm, app.Map.SupplyCalmed, !app.Map.SupplyCalmed, 17);
             Outline((RectTransform)calm.transform, Gold, 1);
+            var accessories = Button(root, "SupplyAccessories", "管理饰品",
+                "持有 " + app.Run.AccessoryStock.Count + " 件 · 已装备 "
+                    + app.Run.Heroes.Sum(h => h.EquippedAccessories == null ? 0 : h.EquippedAccessories.Count),
+                1062, 258, 504, 52, () => app.OpenAccessoryEditor(), false, true, 17);
+            Outline((RectTransform)accessories.transform, Cyan, 1);
 
             for (int i = 0; i < app.Run.Heroes.Count; i++) SupplyHero(root, app.Run.Heroes[i], 322 + i * 118);
             Label(root, "SupplyStock", StockText(), 34, 800, 1532, 22, 14, Gold);
@@ -575,12 +588,14 @@ namespace Ruin.Runtime
             Label(root, "TreasureNote", "第 " + app.Map.Floor + " 层   ·   " + app.Map.Current.Index + " 号位置",
                 36, 230, 1240, 24, 15, Muted);
             var panel = Box(root, "TreasurePanel", 34, 268, 1532, 330, Panel);
-            Label(panel, "TreasureBody", "这个房间还没有内容。", 22, 24, 1488, 32, 19, Gold);
+            Label(panel, "TreasureBody", "宝箱里装着的是饰品，不是义肢。", 22, 24, 1488, 32, 19, Gold);
             Label(panel, "TreasureDetail",
-                "宝箱房已经进入路线，理智50 时占房间概率的 10%，但它发什么奖励还没有定，所以进来不发放任何东西。\n"
-                + "奖励确定后在这里补上即可，权重可以在 GameCatalog 资产的 MapNodeOdds 里调。",
+                "每个宝箱房只发一次，登记在节点的已领取标记上，重新打开页面不会重复抽取。\n"
+                + "饰品在补给站或验收工具里装备；专属饰品只能由对应角色使用。",
                 22, 66, 1488, 90, 15, Ink);
             Label(panel, "TreasureStock", "补给 " + app.Map.Supplies + "   ·   持有义肢 " + app.Run.Prosthetics.Count
+                + "   ·   持有饰品 " + app.Run.AccessoryStock.Count
+                + "   ·   持有道具 " + app.Run.Consumables.Count
                 + "   ·   玩家理智 " + app.Run.PlayerSanity.ToString("0.0"), 22, 176, 1488, 26, 15, Muted);
             Label(panel, "TreasureResult", app.RoomNote ?? "", 22, 218, 1488, 60, 17, Gold);
             Button(root, "LeaveRoom", "离开宝箱房", "继续前进", 34, 806, 1532, 54, app.LeaveRoom, false, true, 19);
@@ -588,9 +603,12 @@ namespace Ruin.Runtime
 
         private string StockText()
         {
-            if (app.Run.Prosthetics.Count == 0) return "持有义肢：无（精英战斗掉落，本次可用 F3 验收工具发放）";
+            string accessories = "持有饰品 " + app.Run.AccessoryStock.Count + " 件";
+            string consumables = "持有道具 " + app.Run.Consumables.Count + " 件";
+            if (app.Run.Prosthetics.Count == 0)
+                return "持有义肢：无（精英战斗掉落，本次可用 F3 验收工具发放）   ·   " + accessories + "   ·   " + consumables;
             var groups = app.Run.Prosthetics.GroupBy(p => p.Id).Select(g => g.First().Name + (g.Count() > 1 ? " ×" + g.Count() : ""));
-            return "持有义肢：" + string.Join("   ·   ", groups);
+            return "持有义肢：" + string.Join("   ·   ", groups) + "   ·   " + accessories + "   ·   " + consumables;
         }
 
         private static string NodeDescription(NodeType type)
@@ -602,10 +620,10 @@ namespace Ruin.Runtime
                 case NodeType.Event: return "面对情境并做出选择。";
                 case NodeType.Altar: return "祭坛：代价换收获。";
                 case NodeType.Boss: return "本层终点。胜利即通关，全队阵亡则本局结束。";
-                case NodeType.Supply: return "治疗、修复部位、安装义肢、静养。";
+                case NodeType.Supply: return "治疗、修复部位、安装义肢、静养、管理饰品。";
                 case NodeType.Elevator: return "本层到此为止，通往下一层。";
                 case NodeType.Opening: return "三选一的全队增益。";
-                case NodeType.Treasure: return "宝箱房（内容待定，进去目前不发放任何东西）。";
+                case NodeType.Treasure: return "宝箱房：获得一件饰品（每个宝箱只发一次）。";
                 default: return "";
             }
         }
@@ -645,6 +663,13 @@ namespace Ruin.Runtime
                     swap ? (Action)(() => app.SelectSwap()) : () => app.SelectSkill(index),
                     swap ? app.PendingSwap : app.PendingSkill == index, reason == null && !app.Busy, 17);
             }
+            // The item slot follows the skill grid. Using one spends this turn, so it carries the same
+            // "only on our own action" gate as the skills.
+            int itemSlot = skills.Length + 1;
+            bool canUseItems = actor != null && actor.Player && !app.Busy;
+            Button(area, "BattleConsumables", "道具", "使用一件道具并消耗本次行动",
+                20 + (itemSlot % 4) * 287, 55 + (itemSlot / 4) * 77, 275, 65,
+                app.ToggleConsumableEditor, false, canUseItems, 17);
             Label(area, "ActionHint", app.Hint ?? "", 20, 218, 1136, 42, 14, app.Choosing ? Gold : Muted);
         }
 
@@ -728,9 +753,137 @@ namespace Ruin.Runtime
                 "      每层最后是电梯井（第3层为首领）；层内的房间只在你走到跟前时才抽出。\n\n" +
                 "10  每次给出1至3个候选，你选一个走过去；同一个位置不会重复同一种房间。\n" +
                 "      低理智更容易遇到精英与祭坛，高理智更容易遇到事件房间。\n" +
-                "      补给站治疗与修复；精英战斗掉落义肢；宝箱房已上路但奖励未定。";
+                "      补给站治疗、修复并管理饰品；精英战斗掉落义肢；宝箱房发放饰品。";
             Label(p, "HelpBody", text, 38, 92, 904, 640, 18, Ink);
             Button(p, "CloseHelp", "返回", "Esc / F1", 38, 752, 904, 52, app.ToggleHelp, true, true, 18);
+        }
+
+        // The accessory manager. It is a modal rather than an inline page because both UI systems need it:
+        // the external node HUD only opens it, and this canvas draws it above everything else.
+        private void AccessoryEditor(RectTransform root)
+        {
+            var p = Modal(root, "AccessoryModal", 1200, 800);
+            Label(p, "AccessoryTitle", "管理饰品", 30, 18, 500, 40, 26, Ink);
+            Label(p, "AccessoryCaption", "每名角色可装备任意数量；同一件饰品不能重复装备。专属饰品只能由对应角色使用。",
+                30, 58, 1140, 24, 13, Muted);
+
+            var hero = app.Run.Heroes.FirstOrDefault(h => h.Id == app.AccessoryHeroId)
+                ?? app.Run.Heroes.FirstOrDefault(h => !h.Dead) ?? app.Run.Heroes.FirstOrDefault();
+            for (int i = 0; i < app.Run.Heroes.Count && i < 4; i++)
+            {
+                var member = app.Run.Heroes[i];
+                int worn = member.EquippedAccessories == null ? 0 : member.EquippedAccessories.Count;
+                Button(p, "AccessoryHero_" + member.Id,
+                    member.Name + (member.Dead ? "（阵亡）" : ""),
+                    "饰品 " + worn + " 件 · 生命 " + member.Hp + "/" + member.Definition.MaxHp,
+                    30 + i * 286, 94, 276, 56,
+                    () => app.SelectAccessoryHero(member.Id), hero != null && hero.Id == member.Id, true, 16);
+            }
+
+            Label(p, "EquippedHeading", "已装备" + (hero == null ? "" : " · " + hero.Name), 30, 166, 555, 24, 15, Gold);
+            Label(p, "StockHeading", "队伍仓库 · " + app.Run.AccessoryStock.Count + " 件", 615, 166, 555, 24, 15, Gold);
+
+            if (hero != null)
+            {
+                var worn = hero.EquippedAccessories ?? new List<AccessorySpec>();
+                int shown = Math.Min(6, worn.Count);
+                if (worn.Count == 0) Label(p, "EquippedEmpty", "这个角色还没有装备饰品。", 30, 202, 555, 24, 13, Muted);
+                for (int i = 0; i < shown; i++)
+                {
+                    var item = worn[i];
+                    if (item == null) continue;
+                    var row = Box(p, "Equipped_" + i, 30, 198 + i * 82, 555, 74, Raised);
+                    Label(row, "Name", item.Name, 12, 6, 300, 24, 16, Ink);
+                    Label(row, "Detail", AccessorySystem.RestrictionText(item) + " · " + item.Description,
+                        12, 30, 420, 40, 11, Muted);
+                    Button(row, "Unequip_" + hero.Id + "_" + item.Id, "卸下", "",
+                        452, 11, 88, 52, () => app.UnequipAccessory(hero.Id, item.Id), false, true, 14);
+                }
+                if (worn.Count > shown)
+                    Label(p, "EquippedMore", "另有 " + (worn.Count - shown) + " 件未显示。", 30, 694, 555, 20, 11, Muted);
+            }
+
+            int stockShown = Math.Min(6, app.Run.AccessoryStock.Count);
+            if (app.Run.AccessoryStock.Count == 0)
+                Label(p, "StockEmpty", "仓库是空的。宝箱房与部分事件会发放饰品。", 615, 202, 555, 24, 13, Muted);
+            for (int i = 0; i < stockShown; i++)
+            {
+                var item = app.Run.AccessoryStock[i];
+                if (item == null) continue;
+                var row = Box(p, "Stock_" + i, 615, 198 + i * 82, 555, 74, Raised);
+                Label(row, "Name", item.Name, 12, 6, 300, 24, 16, Ink);
+                string blocked = hero == null ? "没有可装备的角色。" : AccessorySystem.EquipBlockedReason(hero, item);
+                Label(row, "Detail", blocked ?? (AccessorySystem.RestrictionText(item) + " · " + item.Description),
+                    12, 30, 420, 40, 11, blocked == null ? Muted : Rust);
+                int index = i;
+                Button(row, "Equip_" + i, blocked == null ? "装备" : "不可装备", "",
+                    452, 11, 88, 52, () => app.EquipAccessory(hero == null ? null : hero.Id, index),
+                    false, blocked == null, 14);
+            }
+            if (app.Run.AccessoryStock.Count > stockShown)
+                Label(p, "StockMore", "另有 " + (app.Run.AccessoryStock.Count - stockShown) + " 件未显示。",
+                    615, 694, 555, 20, 11, Muted);
+
+            Button(p, "CloseAccessories", "返回", "Esc", 30, 726, 1140, 52, app.CloseAccessoryEditor, true, true, 18);
+        }
+
+        // The consumable panel. It is drawn by this canvas in both UI modes for the same reason the
+        // accessory manager is: the external HUD only opens it, and the modal has to sit above both.
+        private void ConsumableEditor(RectTransform root)
+        {
+            bool inBattle = !app.AwaitingNode && app.Battle != null;
+            var p = Modal(root, "ConsumableModal", 1200, 800);
+            Label(p, "ConsumableTitle", "使用道具", 30, 18, 500, 40, 26, Ink);
+            Label(p, "ConsumableCaption", inBattle
+                    ? "战斗中只能在我方行动时使用；每件道具消耗当前角色的本次行动。"
+                    : "使用立即生效；理智锁定药剂会预置到下一场战斗。阵亡角色不能使用道具。",
+                30, 58, 1140, 26, 13, Muted);
+
+            var hero = app.Run.Heroes.FirstOrDefault(h => h.Id == app.ConsumableHeroId)
+                ?? app.Run.Heroes.FirstOrDefault(h => !h.Dead) ?? app.Run.Heroes.FirstOrDefault();
+            for (int i = 0; i < app.Run.Heroes.Count && i < 4; i++)
+            {
+                var member = app.Run.Heroes[i];
+                string state = member.Dead ? "阵亡"
+                    : member.SanityLocked ? "理智锁定"
+                    : member.SanityLockPending ? "下场锁定"
+                    : "";
+                Button(p, "ConsumableHero_" + member.Id,
+                    member.Name + (member.Dead ? "（阵亡）" : ""),
+                    "生命 " + member.Hp + "/" + member.Definition.MaxHp + (state.Length == 0 ? "" : " · " + state),
+                    30 + i * 286, 94, 276, 56,
+                    () => app.SelectConsumableHero(member.Id), hero != null && hero.Id == member.Id, true, 16);
+            }
+
+            Label(p, "ConsumableStockHeading", "道具仓库 · " + app.Run.Consumables.Count + " 件",
+                30, 166, 1140, 24, 15, Gold);
+            if (app.Run.Consumables.Count == 0)
+                Label(p, "ConsumableEmpty", "仓库是空的。验收工具（F3）的「发放全部道具」可以发放。",
+                    30, 202, 1140, 24, 13, Muted);
+
+            int shown = Math.Min(6, app.Run.Consumables.Count);
+            string heroId = hero == null ? null : hero.Id;
+            for (int i = 0; i < shown; i++)
+            {
+                var item = app.Run.Consumables[i];
+                if (item == null) continue;
+                var row = Box(p, "Consumable_" + i, 30, 198 + i * 86, 1140, 74, Raised);
+                Label(row, "Name", item.Name, 12, 6, 500, 24, 16, Ink);
+                string blocked = ConsumableSystem.UseBlockedReason(app.Run, hero, item, inBattle);
+                Label(row, "Detail", item.Description + (blocked == null ? "" : " · " + blocked),
+                    12, 30, 990, 40, 11, blocked == null ? Muted : Rust);
+                string label = !item.Implemented || item.Kind == ConsumableKind.SurgeryKit ? "功能待定"
+                    : blocked == null ? "使用" : "不可用";
+                int index = i;
+                Button(row, "UseConsumable_" + i, label, "",
+                    1030, 11, 94, 52, () => app.UseConsumable(heroId, index),
+                    false, blocked == null, 14);
+            }
+            if (app.Run.Consumables.Count > shown)
+                Label(p, "ConsumableMore", "另有 " + (app.Run.Consumables.Count - shown) + " 件未显示。",
+                    30, 704, 1140, 20, 11, Muted);
+
+            Button(p, "CloseConsumables", "返回", "Esc", 30, 726, 1140, 52, app.CloseConsumableEditor, true, true, 18);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -769,14 +922,17 @@ namespace Ruin.Runtime
             Button(p, "ForceTreasure", "进入宝箱房", "内容待定", 525, 602, 151, 50, () => app.DebugForceRoom(NodeType.Treasure), false, true, 15);
             Button(p, "ForceElevator", "进入电梯井", "替换当前候选", 688, 602, 151, 50, () => app.DebugForceRoom(NodeType.Elevator), false, true, 15);
             Button(p, "LabEvents", "事件验收", "十条事件各钉一条", 851, 602, 151, 50, app.ToggleLabEvents, false, true, 15);
-            Label(p, "LimbLabHeading", "身体与义肢   （作用于选中队员，可在房间页使用）", 36, 664, 968, 26, 17, Gold);
+            Label(p, "LimbLabHeading", "身体与义肢（作用于选中队员，可在房间页使用）", 36, 664, 600, 26, 17, Gold);
+            Button(p, "LabAccessories", "管理饰品", "", 650, 658, 170, 38, () => app.OpenAccessoryEditor(), false, true, 15);
+            Button(p, "GrantAllConsumables", "发放全部道具", "", 834, 658, 170, 38, app.DebugGrantAllConsumables, false, true, 15);
             Button(p, "InjureHead", "击伤·头部", "命中 −10%", 36, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Head), false, true, 16);
             Button(p, "InjureTorso", "击伤·躯干", "防御 −20%", 283, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Torso), false, true, 16);
             Button(p, "InjureArm", "击伤·手臂", "攻击 −20%", 530, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Arm), false, true, 16);
             Button(p, "InjureLeg", "击伤·腿部", "速度 −20%", 777, 700, 227, 54, () => app.DebugInjureLimb(LimbPart.Leg), false, true, 16);
-            Button(p, "SeverArm", "断肢·手臂", "两次击伤的效果", 36, 764, 294, 54, () => app.DebugSeverLimb(LimbPart.Arm), false, true, 16);
-            Button(p, "SeverLeg", "断肢·腿部", "两次击伤的效果", 350, 764, 294, 54, () => app.DebugSeverLimb(LimbPart.Leg), false, true, 16);
-            Button(p, "GrantAllProsthetics", "发放全部义肢", "进入补给站前先领好", 664, 764, 340, 54, app.DebugGrantAllProsthetics, false, true, 16);
+            Button(p, "SeverArm", "断肢·手臂", "两次击伤的效果", 36, 764, 227, 54, () => app.DebugSeverLimb(LimbPart.Arm), false, true, 16);
+            Button(p, "SeverLeg", "断肢·腿部", "两次击伤的效果", 283, 764, 227, 54, () => app.DebugSeverLimb(LimbPart.Leg), false, true, 16);
+            Button(p, "GrantAllProsthetics", "发放全部义肢", "进入补给站前先领好", 530, 764, 227, 54, app.DebugGrantAllProsthetics, false, true, 16);
+            Button(p, "GrantAllAccessories", "发放全部饰品", "八件各一份", 777, 764, 227, 54, app.DebugGrantAllAccessories, false, true, 16);
             Button(p, "CloseLab", "返回", "F3 / Esc", 36, 830, 968, 52, app.ToggleLab, true, true, 18);
         }
 
