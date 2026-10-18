@@ -11,7 +11,6 @@ namespace Ruin.Runtime
     public enum RoomView { Map, Buff, Supply, Event, Elevator, Treasure }
 
     public sealed partial class StageOneApp : MonoBehaviour
-    public sealed partial class StageOneApp : MonoBehaviour
     {
         public GameCatalog Catalog;
         public RunState Run { get; private set; }
