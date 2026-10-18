@@ -24,6 +24,9 @@ namespace GameMake.GothicHUD
     {
         [Header("Source / 数据来源")]
         public StageOneApp Source;
+        [Tooltip("The scene supplies the exploration map; retain this controller for rooms and run settlement.")]
+        public bool ExternalRouteUi;
+        public bool ExternalEventUi;
 
         [Header("Pages / 页面")]
         public GameObject PageRoot;
@@ -173,6 +176,8 @@ namespace GameMake.GothicHUD
             bool route = show && app.Room == RoomView.Map && !app.Map.Finished && app.Map.Current != null;
             bool runEnd = show && app.Room == RoomView.Map && !route;
             bool room = show && app.Room != RoomView.Map;
+            if(ExternalEventUi && app.Room==RoomView.Event) room=false;
+            route = route && !ExternalRouteUi;
 
             SetActive(PageRoot, route || runEnd || room);
             SetActive(RouteRoot, route);

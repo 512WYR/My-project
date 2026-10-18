@@ -1,6 +1,6 @@
 # 地图探索页面
 
-打开 `Assets/MapExplorationUI/Scenes/MapExploration.unity`，点击 Play。
+正常游戏打开 `Assets/Scenes/mainScene.unity`，点击 Play；它也是 Build Settings 的首个启用场景。独立预览仍可打开 `Assets/MapExplorationUI/Scenes/MapExploration.unity`。
 
 - 左上：楼层与**层内房间序号**，从 01 开始。进入下一层后，房间序号回到 01；数码使用提供的 0～9 图片，并带短暂翻牌动画。
 - 左侧：提供的四连角色框。显示实际队员、生命与理智；点击可切换队员选择。人物暂用项目已有剪影，可在每个 `Portrait - Drop Sprite Here` 的 Image 中替换头像。
@@ -19,7 +19,9 @@
 - `ExplorationMapController.OnCharacterSelected`：角色选中事件。
 - 现有规则最多九个层内位置，完整显示；若以后增加房间数，路线显示以当前位置为中心的九格窗口。
 
-新场景包含现有 GothicHUD，用于进入房间后的选项、战斗和结算；本次仅更换地图探索页。`mainScene` 和原战斗场景未被重建。新场景追加至 Build Settings，原启动顺序保留。
+新版地图已接入 `mainScene`、旧 `StageOne` 入口、独立地图场景和战斗预览场景。每个场景共用一个 StageOneApp：新版地图负责探索选择，GothicHUD 负责房间、战斗和结算；旧路线页由 `ExternalRouteUi` 关闭。战斗预览仍直接进入战斗，结束后返回新版地图。地图保持横向路线和“未探索”占位。
+
+`GameMake > Map Exploration > Apply To Game Entry Scenes` 可重新接入这些入口；它保留场景其他对象，补齐地图实例与引用，并将 `mainScene` 设为默认启动场景。地图／战斗场景重建器也会保留新版地图接入。
 
 ## 清晰度与预览
 

@@ -112,7 +112,7 @@ namespace GameMake.ExplorationEditor
                 slot.Placeholder.Silhouette=catalog.Heroes[i].Silhouette; slot.Placeholder.color=Cream; slot.Placeholder.Accent=new Color32(124,90,61,255); slot.Placeholder.raycastTarget=false;
                 slot.Portrait=Solid(area,"Portrait - Drop Sprite Here",35,37,114,91,Color.white); slot.Portrait.sprite=null; slot.Portrait.enabled=false; slot.Portrait.preserveAspect=true;
                 Solid(area,"Health Track",0,131,184,6,new Color32(44,29,27,255)); slot.Health=Solid(area,"Health Fill",0,131,184,6,new Color32(174,71,58,255)); Fill(slot.Health);
-                Solid(area,"Sanity Track",0,141,184,6,new Color32(25,40,40,255)); slot.Sanity=Solid(area,"Sanity Fill",0,141,184,6,new Color32(84,154,159,255)); Fill(slot.Sanity); slot.Sanity.fillAmount=.5f;
+                Solid(area,"Sanity Track",0,141,184,6,new Color32(25,40,40,255)); slot.Sanity=Solid(area,"Sanity Fill",0,141,184,6,new Color32(205,205,205,255)); Fill(slot.Sanity); slot.Sanity.fillAmount=.5f;
                 slot.Vitals=Text(area,"Health and Sanity","生命 "+catalog.Heroes[i].MaxHp+"/"+catalog.Heroes[i].MaxHp+"   理智 50",-8,151,200,21,16,Muted,TextAnchor.MiddleCenter);
             }
             view.PartyDetail=Text(page,"Selected Character Summary",catalog.Heroes[0].DisplayName+"  ·  探索队员",24,1034,420,28,18,Muted,TextAnchor.MiddleCenter);
@@ -145,6 +145,7 @@ namespace GameMake.ExplorationEditor
             for(int i=0;i<3;i++) view.Options[i]=MakeOption(view.Choices,i);
             view.Note=Text(map,"Exploration Hint","选择一间房继续探索",60,974,1280,25,18,Muted);
             var sample=new MapState(); MapGenerator.Advance(sample,catalog.MapRules(),new RunRandom(44972),50); view.RenderMap(sample,catalog.MapRules());
+            GameMake.SharedUI.Editor.RetroScreenStyling.ApplyMap(go);
             PrefabUtility.SaveAsPrefabAssetAndConnect(go,PrefabPath,InteractionMode.AutomatedAction);
 
             // Keep existing rooms, combat, settlement and F1/F3 tools playable in this new scene.
@@ -159,6 +160,7 @@ namespace GameMake.ExplorationEditor
             if(presentation) { presentation.BattleSource=app; presentation.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(presentation); }
             foreach(var oldCounter in fallback.GetComponentsInChildren<MechanicalRoundCounter>(true))
             { oldCounter.BattleSource=app; oldCounter.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(oldCounter); }
+            ExplorationSceneIntegration.AttachToCurrentScene();
             EditorSceneManager.SaveScene(scene,ScenePath); AssetDatabase.SaveAssets();
             // Append only; retain the user's startup scene and existing build entries.
             if(!EditorBuildSettings.scenes.Any(s=>s.path==ScenePath))

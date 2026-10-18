@@ -17,6 +17,8 @@ namespace GameMake.GothicHUD
         [Tooltip("Ten authored slots support the full positive int range. Only necessary slots are shown.")]
         public Image[] DigitSlots = new Image[10];
         public RectTransform DigitContainer;
+        [Tooltip("Size the digit tiles to the authored inner opening.")]
+        public bool FitDigitsToContainer;
         public bool AnimateChanges = true;
         [Range(.05f, .5f)] public float FlipDuration = .18f;
         private Coroutine flipRoutine;
@@ -85,7 +87,8 @@ namespace GameMake.GothicHUD
         {
             if (!DigitContainer || DigitSprites == null || DigitSprites.Length != 10 || DigitSlots == null) return;
             string digits = FormatRound(value);
-            float totalWidth = Mathf.Min(144, Mathf.Max(74, digits.Length * 35));
+            float totalWidth = FitDigitsToContainer ? DigitContainer.rect.width : Mathf.Min(144, Mathf.Max(74, digits.Length * 35));
+            float height = FitDigitsToContainer ? DigitContainer.rect.height : 59;
             float cellWidth = totalWidth / digits.Length;
             for (int i = 0; i < DigitSlots.Length; i++)
             {
@@ -94,7 +97,7 @@ namespace GameMake.GothicHUD
                 slot.sprite = DigitSprites[digits[i] - '0'];
                 var rect = slot.rectTransform;
                 rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
-                rect.sizeDelta = new Vector2(cellWidth, 59);
+                rect.sizeDelta = new Vector2(cellWidth, height);
                 rect.anchoredPosition = new Vector2(-totalWidth / 2 + cellWidth * (i + .5f), 0);
             }
         }
