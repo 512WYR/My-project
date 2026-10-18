@@ -14,8 +14,7 @@ namespace GameMake.ExplorationEditor
     {
         public const string MainScene = "Assets/Scenes/mainScene.unity";
         public static readonly string[] EntryScenes = {
-            MainScene, "Assets/StageOne/Scenes/StageOne.unity",
-            ExplorationMapBuilder.ScenePath, "Assets/GothicHUD/Scenes/GothicBattleHUD.unity"
+            MainScene, ExplorationMapBuilder.ScenePath, "Assets/GothicHUD/Scenes/GothicBattleHUD.unity"
         };
 
         [MenuItem("GameMake/Map Exploration/Apply To Game Entry Scenes")]
@@ -31,8 +30,7 @@ namespace GameMake.ExplorationEditor
                 AttachToCurrentScene();
                 EditorSceneManager.SaveScene(scene);
             }
-            EditorBuildSettings.scenes = new[]{new EditorBuildSettingsScene(MainScene,true)}
-                .Concat(EditorBuildSettings.scenes.Where(s=>s.path!=MainScene)).ToArray();
+            EditorBuildSettings.scenes = new[]{new EditorBuildSettingsScene(MainScene,true)};
             AssetDatabase.SaveAssets();
             EditorSceneManager.OpenScene(MainScene,OpenSceneMode.Single);
             Debug.Log("EXPLORATION_ENTRY_INTEGRATION_OK");
@@ -48,7 +46,9 @@ namespace GameMake.ExplorationEditor
             if(!hud)
             {
                 var prefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GothicHUD/Prefabs/GothicBattleHUD.prefab");
-                hud=((GameObject)PrefabUtility.InstantiatePrefab(prefab,scene)).GetComponent<GothicBattleHudController>();
+                var instance=(GameObject)PrefabUtility.InstantiatePrefab(prefab,scene);
+                instance.transform.localScale=Vector3.one;
+                hud=instance.GetComponent<GothicBattleHudController>();
             }
             var view=scene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<ExplorationMapController>(true)).SingleOrDefault();
             if(!view)
@@ -56,7 +56,7 @@ namespace GameMake.ExplorationEditor
                 var prefab=AssetDatabase.LoadAssetAtPath<GameObject>(ExplorationMapBuilder.PrefabPath);
                 view=((GameObject)PrefabUtility.InstantiatePrefab(prefab,scene)).GetComponent<ExplorationMapController>();
             }
-            app.ExternalBattleUi=true; Save(app);
+            Save(app);
             view.Source=app; Save(view);
             hud.BattleSource=app; Save(hud);
             var eventPrefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/IndustrialEventUI/Prefabs/IndustrialEventPage.prefab");

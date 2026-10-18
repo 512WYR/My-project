@@ -5,15 +5,14 @@ using Ruin.Core;
 using Ruin.Runtime;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
-using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace Ruin.Editor
 {
     public static class StageOneBuild
     {
-        public const string ScenePath = "Assets/StageOne/Scenes/StageOne.unity";
+        // mainScene is the only formal entry; it is authored by GameMake/Gothic HUD/Build mainScene.
+        public const string ScenePath = "Assets/Scenes/mainScene.unity";
         private const string Data = "Assets/StageOne/Resources/StageOne";
 
         [MenuItem("GameMake/Prepare Stage One")]
@@ -22,7 +21,6 @@ namespace Ruin.Editor
             Directory.CreateDirectory(Data + "/Skills");
             Directory.CreateDirectory(Data + "/Characters");
             Directory.CreateDirectory(Data + "/Events");
-            Directory.CreateDirectory("Assets/StageOne/Scenes");
             // Every folder above has to exist before this call: CreateAsset cannot write into a directory
             // the AssetDatabase has not seen yet.
             AssetDatabase.Refresh();
@@ -41,18 +39,6 @@ namespace Ruin.Editor
             });
             Migrate(catalog);
             EnsureEnemyContent(catalog, monsters);
-            if (!File.Exists(ScenePath))
-            {
-                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-                var cameraObject = new GameObject("Main Camera");
-                var camera = cameraObject.AddComponent<Camera>(); camera.orthographic = true;
-                camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = new Color(0.06f, 0.08f, 0.1f);
-                cameraObject.tag = "MainCamera"; cameraObject.transform.position = new Vector3(0, 0, -10);
-                cameraObject.AddComponent<AudioListener>();
-                var app = new GameObject("StageOne").AddComponent<StageOneApp>(); app.Catalog = catalog;
-                EditorSceneManager.SaveScene(scene, ScenePath);
-            }
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
             PlayerSettings.productName = "Between the Veils - Stage One";
             PlayerSettings.companyName = "GameMake";
             PlayerSettings.defaultScreenWidth = 1600; PlayerSettings.defaultScreenHeight = 900;

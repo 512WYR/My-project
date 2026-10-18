@@ -93,14 +93,14 @@ namespace GameMake.ExplorationUI
         void Choose(int index)
         {
             if(Entrance && Entrance.IsRunning) return;
-            if (!Source || Source.Run == null || !Page.activeSelf || Source.Busy || Source.HelpOpen || Source.LabOpen) return;
+            if (!Source || Source.Run == null || !Page.activeSelf || Source.Busy || StageOneApp.DebugOverlayOpen) return;
             Source.SelectNode(index);
         }
         public void Sync()
         {
             if (!Source || Source.Run == null) return;
             bool visible = Source.AwaitingNode && Source.Room == RoomView.Map && !Source.Map.Finished
-                && Source.Map.Current != null && !Source.HelpOpen && !Source.LabOpen;
+                && Source.Map.Current != null;
             bool reopening = (!wasVisible || !Page.activeSelf) && visible;
             wasVisible=visible;
             Page.SetActive(visible);
@@ -148,7 +148,7 @@ namespace GameMake.ExplorationUI
                 option.Description.text = Description(node.Type);
                 option.Action.text = "进入房间  →";
                 option.Accent.color = MapGenerator.IsCombat(node.Type) ? new Color32(200, 91, 72, 255) : green;
-                option.Hit.interactable = !step.Resolved && (Source == null || (!Source.Busy && !Source.HelpOpen && !Source.LabOpen));
+                option.Hit.interactable = !step.Resolved && (Source == null || (!Source.Busy && !StageOneApp.DebugOverlayOpen));
             }
             DrawRoute(map, total);
             if (step != shownStep || reopening)

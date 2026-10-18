@@ -31,6 +31,8 @@ namespace Ruin.Runtime
     {
         public string Header, Title, Code, Location, Body, Hint, AdvanceLabel;
         public bool CanLeave;
+        // Settlement is a result screen rather than a record to read, so it skips the typewriter.
+        public bool Instant;
         public readonly List<RoomPageChoice> Choices = new List<RoomPageChoice>();
         public Action<int> Choose;
         public Action Advance;
@@ -43,13 +45,17 @@ namespace Ruin.Runtime
         // The map page owns the route; every other node, plus the finished run, is drawn as an event page.
         public static bool Visible(StageOneApp app)
         {
-            if (!app || app.Run == null || app.Map == null || !app.AwaitingNode) return false;
-            if (app.HelpOpen || app.LabOpen || app.AccessoryEditorOpen || app.ConsumableEditorOpen) return false;
+            if (!app || app.Run == null || app.Map == null) return false;
+            // A settled battle is a result page in its own right; the route only takes over once
+            // ContinueBattle resolves the position.
+            if (app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) return true;
+            if (!app.AwaitingNode) return false;
             return app.Room != RoomView.Map || app.Map.Finished;
         }
 
         public static RoomPageView Build(StageOneApp app, RoomPageContext context)
         {
+            if (app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) return Settlement(app);
             if (app.Map.Finished) return RunEnd(app);
             switch (app.Room)
             {
@@ -124,12 +130,6 @@ namespace Ruin.Runtime
                 "玩家理智 +" + Exploration.CalmSanity.ToString("0.#"),
                 !app.Map.SupplyCalmed));
             view.Choices.Add(new RoomPageChoice(
-                "管理饰品",
-                "持有 " + app.Run.AccessoryStock.Count + " 件 · 为队员装备或卸下"));
-            view.Choices.Add(new RoomPageChoice(
-                "使用道具",
-                "持有 " + app.Run.Consumables.Count + " 件 · 战斗外也可使用"));
-            view.Choices.Add(new RoomPageChoice(
                 "部位与义肢",
                 "查看每名队员的四个部位，修复重伤或安装义肢"));
             view.Choices.Add(new RoomPageChoice("商店", "使用补给购买义体、饰品与药品"));
@@ -140,10 +140,8 @@ namespace Ruin.Runtime
                 {
                     case 0: app.SupplyHeal(); break;
                     case 1: app.SupplyCalm(); break;
-                    case 2: app.OpenAccessoryEditor(); break;
-                    case 3: app.OpenConsumableEditor(); break;
-                    case 4: context.Reset(); context.Section = 1; break;
-                    case 5: app.OpenSupplyShop(); break;
+                    case 2: context.Reset(); context.Section = 1; break;
+                    case 3: app.OpenSupplyShop(); break;
                 }
             };
             view.CanLeave = true;
@@ -277,12 +275,8 @@ namespace Ruin.Runtime
         {
             var view = Base(app, "宝箱终端", "宝箱房", "TREASURE / 宝箱");
             view.Body = "宝箱里装着的是饰品。每个宝箱房只发一次，重新打开页面不会重复抽取。\n"
-                + "饰品可以在这里直接管理，也可以留到补给站再装备。";
+                + "已经拿到的饰品会在离开后进入队伍仓库。";
             view.Hint = StockText(app);
-            view.Choices.Add(new RoomPageChoice(
-                "管理饰品",
-                "持有 " + app.Run.AccessoryStock.Count + " 件 · 为队员装备或卸下"));
-            view.Choose = index => { if (index == 0) app.OpenAccessoryEditor(); };
             view.CanLeave = true;
             view.AdvanceLabel = "离开宝箱房  →";
             view.Advance = () => app.LeaveRoom();
@@ -306,6 +300,53 @@ namespace Ruin.Runtime
                 view.Choices.Add(new RoomPageChoice(choice.Label, choice.Detail, choice.Enabled) { Shown = choice.Shown });
             view.Choose = index => app.ChooseEventOption(index);
             view.Advance = () => app.LeaveRoom();
+            return view;
+        }
+
+        // ---- battle settlement ----
+
+        static RoomPageView Settlement(StageOneApp app)
+        {
+            var battle = app.Battle;
+            var result = battle.Settlement;
+            string heading = result.Outcome == BattleOutcome.Victory ? "战斗胜利"
+                : result.Outcome == BattleOutcome.Retreat ? "队伍已撤离" : "本次冒险结束";
+            var view = Base(app, "战斗终端", heading, "SETTLEMENT / 战斗结算");
+            view.Location = "第 " + (app.ActiveNode?.Floor ?? app.Map.Floor).ToString("D2") + " 层";
+            var lines = new List<string>();
+            foreach (var entry in result.Entries)
+                lines.Add(entry.Name + (entry.Dead ? "  ·  死亡" : "")
+                    + "    入战 " + entry.Start.ToString("0.0")
+                    + "  →  结束 " + entry.End.ToString("0.0")
+                    + "    （" + entry.Delta.ToString("+0.0;-0.0;0.0") + "）");
+            double average = result.Entries.Count == 0 ? 0 : result.Entries.Average(e => e.Delta);
+            bool wiped = app.Run.Heroes.All(a => a.Dead);
+            bool boss = app.ActiveNode != null && app.ActiveNode.Type == NodeType.Boss;
+            bool won = result.Outcome == BattleOutcome.Victory;
+            view.Body = "战斗中的经历，已经成为下一次出发的起点。\n\n"
+                + string.Join("\n", lines)
+                + "\n\n平均净变化 " + average.ToString("+0.0;-0.0;0.0")
+                + "  ×  " + battle.Rules.FeedbackFactor.ToString("0.0")
+                + "  =  " + result.RawDelta.ToString("+0.0;-0.0;0.0")
+                + "\n玩家理智    " + result.Before.ToString("0.0")
+                + "  →  " + result.After.ToString("0.0")
+                + "\n\n" + (boss
+                    ? "首领是这条路的尽头：胜利即通关，全队阵亡则本局结束。"
+                    : won
+                        ? "胜利的补给已经入账。治疗与义肢只在补给站提供，路线上不会自动整备。"
+                        : "战斗失利，没有收获。治疗与义肢只在补给站提供，路线上不会自动整备。");
+            view.Hint = "查看结果后继续。";
+            view.CanLeave = false;
+            view.Instant = true;
+            view.Choices.Add(new RoomPageChoice(
+                wiped || (boss && !won) ? "结束本局" : boss ? "通关结算" : "继续前进",
+                wiped ? "查看本局结果" : boss ? "查看本局结果" : "选择下一个位置"));
+            view.Choices.Add(new RoomPageChoice("新开演练", "重置全部队员"));
+            view.Choose = index =>
+            {
+                if (index == 0) app.ContinueBattle();
+                else if (index == 1) app.NewRun();
+            };
             return view;
         }
 

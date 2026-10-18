@@ -89,15 +89,13 @@ namespace GameMake.EventEditor
             view.Choices[0].Hit.onClick.Invoke();
             Check(node.EventStep==1 && !view.ActionsReady,"First choice did not enter next narrative step");
             wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
-            app.ToggleHelp(); Check(!view.Page.activeSelf,"Event overlays help");
-            app.ToggleHelp(); wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
             view.Choices[0].Hit.onClick.Invoke();
             Check(app.EventCanLeave && !view.Continue.gameObject.activeSelf,"Event end did not wait for closing narrative");
             wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
             Check(view.Continue.gameObject.activeSelf && view.ContinueLabel.text.Contains("离开") && view.Continue.interactable,"No bottom-right leave button");
             Capture(view,"Event-Leave"); view.Continue.onClick.Invoke();
             Check(map.Page.activeSelf && !view.Page.activeSelf,"Event did not return to new map");
-            Pass("multi-stage choice, help reopen, closing text then bottom-right leave button, return to new map");
+            Pass("multi-stage choice, closing text then bottom-right leave button, return to new map");
 
             app.DebugForceEvent("EVT-007");
             wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;

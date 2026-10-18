@@ -7,7 +7,7 @@ namespace Ruin.Runtime
         public bool SupplyShopOpen { get; private set; }
         public string SupplyShopNote { get; private set; }
         public bool SupplyShopAvailable=>Run!=null && !Run.Map.Finished && AwaitingNode && Room==RoomView.Supply
-            && !Busy && !HelpOpen && !LabOpen && !CharacterPanelOpen && !AccessoryEditorOpen && !ConsumableEditorOpen;
+            && !Busy && !DebugOverlayOpen && !CharacterPanelOpen;
 
         public void OpenSupplyShop()
         {

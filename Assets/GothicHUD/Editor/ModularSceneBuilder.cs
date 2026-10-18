@@ -1,6 +1,7 @@
 using System.IO;
-using System.Linq;
+using GameMake.ExplorationEditor;
 using GameMake.GothicHUD;
+using GameMake.IndustrialDebugUI.EditorTools;
 using Ruin.Core;
 using Ruin.Editor;
 using Ruin.Runtime;
@@ -12,9 +13,9 @@ using UnityEngine.EventSystems;
 namespace GameMake.GothicHUDEditor
 {
     /// <summary>
-    /// Builds the scene where the Gothic HUD owns every page. The built-in pages stay exactly as they are
-    /// in StageOne.unity; this one turns StageOneApp.ExternalBattleUi on so StageOneView keeps only the
-    /// settlement, help and lab modals, while the HUD draws the battle page, the route and the six rooms.
+    /// Builds the only formal entry scene: every page is a prefab and the game state only binds to them.
+    /// The HUD, route map, event page, character panel and debug console are all attached here, so one
+    /// menu rebuilds the whole scene.
     /// </summary>
     public static class ModularSceneBuilder
     {
@@ -26,8 +27,7 @@ namespace GameMake.GothicHUDEditor
         {
             if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
-            // Order matters: Prepare() rewrites EditorBuildSettings.scenes wholesale, so it has to run before
-            // mainScene is appended. Running it afterwards would drop the new scene from the build list again.
+            // Prepare() only refreshes catalog resources; the scene itself is authored right below.
             StageOneBuild.Prepare();
 
             var catalog = AssetDatabase.LoadAssetAtPath<GameCatalog>(CatalogPath);
@@ -46,7 +46,6 @@ namespace GameMake.GothicHUDEditor
 
             var app = new GameObject("StageOne").AddComponent<StageOneApp>();
             app.Catalog = catalog;
-            app.ExternalBattleUi = true;
 
             var hud = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             hud.name = "GothicBattleHUD";
@@ -66,16 +65,18 @@ namespace GameMake.GothicHUDEditor
             else Debug.LogError("The HUD prefab has no GothicBattleHudController, so nothing will feed the " +
                 "battle into it. Run GameMake/Gothic HUD/Rebuild Modular HUD first, then build this scene again.");
 
+            // The route map, event page and character panel are authored prefabs too; attach them in the
+            // same pass so the scene never depends on a second menu.
+            ExplorationSceneIntegration.AttachToCurrentScene();
             if (!AssetDatabase.IsValidFolder("Assets/Scenes")) AssetDatabase.CreateFolder("Assets", "Scenes");
             Directory.CreateDirectory("Assets/Scenes");
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.SaveAssets();
 
-            // Append rather than replace: StageOne.unity has to stay in the build list.
-            var scenes = EditorBuildSettings.scenes.Where(s => s.path != ScenePath).ToList();
-            scenes.Add(new EditorBuildSettingsScene(ScenePath, true));
-            EditorBuildSettings.scenes = scenes.ToArray();
+            IndustrialDebugConsoleInstaller.InstallMainScene();
+            // mainScene is the only formal entry; the module preview scenes stay out of the build list.
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
             Debug.Log("GOTHIC_MAIN_SCENE_OK " + ScenePath);
         }
     }

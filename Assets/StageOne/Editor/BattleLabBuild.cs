@@ -7,11 +7,11 @@ using UnityEngine;
 namespace Ruin.Editor
 {
     // Battle Lab is a debugging scene. It is deliberately never added to EditorBuildSettings: the normal
-    // release entry stays StageOne.unity, and this menu only opens / validates / regenerates the lab.
+    // release entry stays mainScene, and this menu only opens / validates / regenerates the lab.
     public static class BattleLabBuild
     {
         public const string ScenePath = "Assets/StageOne/Scenes/BattleLab.unity";
-        public const string AppScriptPath = "Assets/StageOne/Runtime/BattleLab/BattleLabApp.cs";
+        public const string AppScriptPath = "Assets/MainGame/Runtime/BattleLab/BattleLabApp.cs";
         private const string CatalogPath = "Assets/StageOne/Resources/StageOne/GameCatalog.asset";
 
         [MenuItem("GameMake/Battle Lab/Open Battle Lab", false, 40)]

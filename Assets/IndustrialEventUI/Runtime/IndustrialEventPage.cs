@@ -151,7 +151,10 @@ namespace GameMake.EventUI
             if(changed)
             {
                 shownNode=node; signature=next; fullText=story;
-                characterStarts=StringInfo.ParseCombiningCharacters(fullText); revealed=0;
+                characterStarts=StringInfo.ParseCombiningCharacters(fullText);
+                // Settlement is a result screen, so it appears in full instead of typing itself out;
+                // Reveal still runs for the 0.32s action fade.
+                revealed=content.Instant?characterStarts.Length:0;
                 Body.text=fullText; Canvas.ForceUpdateCanvases();
                 measuredScale=-1; ResizeStory();
                 Body.text=""; StoryScroll.StopMovement(); StoryScroll.verticalNormalizedPosition=1;

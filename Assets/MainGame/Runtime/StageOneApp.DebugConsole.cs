@@ -92,8 +92,8 @@ namespace Ruin.Runtime
             Refresh();
         }
 
-        // The accessory manager in the console works on the live run rather than opening a modal, so it
-        // does not need AccessoryEditorOpen. The system still enforces exclusivity and restrictions.
+        // The console works on the live run rather than opening a modal. The system still enforces
+        // occupancy and class restrictions, so a rejected equip reports through its note.
         public void DebugEquipAccessory(string heroId, int stockIndex)
         {
             if (Run == null) return;

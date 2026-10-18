@@ -151,7 +151,7 @@ namespace GameMake.ExplorationEditor
 
             // Keep existing rooms, combat and settlement playable in this new scene. The debug console is
             // a separate prefab installed into mainScene by IndustrialDebugConsoleInstaller.
-            var app=new GameObject("Exploration Game State").AddComponent<StageOneApp>(); app.Catalog=catalog; app.ExternalBattleUi=true;
+            var app=new GameObject("Exploration Game State").AddComponent<StageOneApp>(); app.Catalog=catalog;
             view.Source=app;
             PrefabUtility.RecordPrefabInstancePropertyModifications(view);
             var legacy=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GothicHUD/Prefabs/GothicBattleHUD.prefab");

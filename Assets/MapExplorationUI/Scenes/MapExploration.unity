@@ -563,7 +563,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Catalog: {fileID: 11400000, guid: c537f0060ede2734c8b0219dc40cfa00, type: 2}
-  ExternalBattleUi: 1
 --- !u!4 &1891219167
 Transform:
   m_ObjectHideFlags: 0

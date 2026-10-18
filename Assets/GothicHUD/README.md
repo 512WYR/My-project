@@ -63,13 +63,13 @@ MechanicalRoundCounter 保留 SetRound(int)、自动读取 StageOneApp.Battle.Ro
 
 位移按钮紧邻第五技能槽。点击触发根对象 OnDisplacementRequested；若启用 Follow Stage One Battle 且同场景有 StageOneApp，则调用其现有换位行动，再点击合法相邻队友完成换位。没有战斗管理器时，按钮只发送事件。
 
-GothicHudPanel.OnSkillSelected 提供技能选择事件，技能效果由游戏逻辑绑定。四个快捷物品槽是可编辑按钮，物品使用逻辑可通过 Button.OnClick 接入。
+GothicHudPanel.OnSkillSelected 提供技能选择事件，技能效果由游戏逻辑绑定。四个快捷物品槽原先通往已删除的道具面板，现在由控制器在运行时隐藏整组 `Items - 快捷物品`；饰品与药剂改在角色面板（点击头像）中处理。
 
 角色名称、生命和理智可自动跟随 StageOneApp。本地预览或接入其他系统时，请关闭 Follow Stage One Battle。
 
 ## 接管全部页面：mainScene
 
-GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity。该场景把 StageOneApp 的 External Battle Ui 打开，于是 StageOneView 不再绘制任何页面——战斗页全部让出，只保留结算弹窗、饰品与道具弹窗；它的 Canvas 排序为 50，所以这些弹窗仍盖在 HUD（排序 10）之上。帮助、验收命令与后台信息改由独立的 `IndustrialDebugConsole.prefab` 提供（Canvas 排序 80），入口是屏幕上的「调试台」按钮，不再使用 F1 / F3。
+GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity，这是唯一的正式入口。场景中没有代码生成的 UI：战斗页来自 HUD（Canvas 10），路线页来自 `MapExploration`（20），全部非战斗页与战斗结算来自 `IndustrialEventPage`（25），角色面板来自 `CharacterPanel`（45）。验收命令与后台信息由独立的 `IndustrialDebugConsole.prefab` 提供（Canvas 80），入口是屏幕上的「调试台」按钮；不再使用 F1 / F3 / I，也不再有帮助页。
 
 > 生成场景前必须先跑一次 **GameMake / Gothic HUD / Rebuild Modular HUD**：新组件与它们的引用都写在预制体和场景实例上，只重建其中一个不够。
 >
@@ -86,7 +86,7 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 | 事件房间 | IndustrialEventPage | 场景内独立 Canvas，接管 `RoomView.Event` |
 | 调试台 | IndustrialDebugConsole | 独立 prefab 与 Canvas（排序 80）；屏幕按钮或 HUD 的「调试台」按钮打开，不占用功能键 |
 
-战斗页本身只承担位置、血量、技能三件事，其余都收进调试页：
+战斗页本身只承担位置、血量、技能三件事，其余信息与命令都收进调试台：
 
 | 区域 | 来源 | 内容 |
 |---|---|---|
@@ -105,9 +105,9 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 - 事件房间由场景内的 `IndustrialEventPage` 负责。
 - 增益房、补给站、电梯井、宝箱房和本局结束页由 `IndustrialEventPage` 统一按事件页结构显示，内容来自 `Ruin.Runtime.RoomPages`。
 
-保留 Follow Stage One Battle 为默认值的原因为：StageOne.unity 与该场景的自动化测试（StageOneSmoke、StageOneFlowTests）都走内置页面，External Battle Ui 默认关闭，行为不变。
+mainScene 中的 HUD 实例把 Follow Stage One Battle 关掉，由 `GothicBattleHudController` 单独写入角色、卡面和技能，避免两个控制器争同一个控件。
 
-战场卡点击会选中该角色，选中技能或位移后可作为目标；`StageOneView.RegisterCardImage` 让打击闪红在 HUD 上照常工作。
+战场卡点击会选中该角色，选中技能或位移后可作为目标。受击与治疗的闪色由 HUD 自己维护卡片图字典并实现 `StageOneApp.BattleEventAnimation`，不再依赖代码生成的页面。
 
 ## 验收与备份
 

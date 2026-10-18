@@ -112,12 +112,6 @@ namespace GameMake.EventEditor
             view.UseSupply(true); Check(app.Run.PlayerSanity==30,"Sanity recovered twice");
             Capture(view,"Supply-Station-Used");
             Pass("Screen, hidden narrative, horizontal bounded buttons, actual pointer clicks, heal/sanity results and once-per-station limits");
-            Click(view.Choices.First(c=>c.gameObject.activeSelf && c.Title.text=="管理饰品").Hit);
-            Check(app.AccessoryEditorOpen && !view.Page.activeSelf,"Accessory option failed");
-            app.CloseAccessoryEditor(); CheckStationStable(view,"close accessory modal"); wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
-            Click(view.Choices.First(c=>c.gameObject.activeSelf && c.Title.text=="使用道具").Hit);
-            Check(app.ConsumableEditorOpen,"Consumable option failed");
-            app.CloseConsumableEditor(); CheckStationStable(view,"close consumable modal"); wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
             Click(view.Choices.First(c=>c.gameObject.activeSelf && c.Title.text=="部位与义肢").Hit);
             CheckStationStable(view,"select hero subpage");
             wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
@@ -142,8 +136,8 @@ namespace GameMake.EventEditor
             Check(app.Run.Prosthetics.Count==stock+1 && app.Map.Supplies==money-SupplyShop.ProstheticPrice,"Prosthetic purchase did not reach inventory");
             Check(shop.EntranceCount==1 && shop.Fade.alpha==1 && shop.EntranceComplete,"Purchase restarted shop entrance");
             CheckStationStable(view,"purchase");
-            view.Continue.onClick.Invoke(); app.LeaveRoom(); app.ToggleHelp();
-            Check(shop.Page.activeInHierarchy && view.Page.activeSelf && !app.HelpOpen,"Shop allowed background commands");
+            view.Continue.onClick.Invoke(); app.LeaveRoom();
+            Check(shop.Page.activeInHierarchy && view.Page.activeSelf,"Shop allowed background commands");
             Click(shop.Tabs[1]); yield return .2f;
             Check(shop.Cards.Count==AccessorySystem.Defaults.Length,"Missing accessory inventory");
             stock=app.Run.AccessoryStock.Count; money=app.Map.Supplies; Click(shop.Cards[0].Buy);

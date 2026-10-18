@@ -7,8 +7,7 @@ namespace Ruin.Runtime
     {
         public bool CharacterPanelOpen { get; private set; }
         public string CharacterHeroId { get; private set; }
-        public bool CharacterPageAvailable => Run != null && !HelpOpen && !LabOpen
-            && !ConsumableEditorOpen && !AccessoryEditorOpen
+        public bool CharacterPageAvailable => Run != null && !DebugOverlayOpen
             && (AwaitingNode ? Room == RoomView.Map && !Run.Map.Finished
                 : Battle != null && Battle.Outcome == BattleOutcome.Active);
         public bool CanManageCharacter => CharacterPanelOpen && CharacterPageAvailable && !Busy

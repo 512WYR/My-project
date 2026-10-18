@@ -1,7 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 using GameMake.IndustrialDebugUI;
+#endif
 using Ruin.Core;
 using Ruin.Runtime;
 using UnityEngine;
@@ -42,9 +45,6 @@ namespace GameMake.GothicHUD
         public GameObject DebugRoot;
         public Button DebugButton;
         public Button DebugCloseButton;
-        public Button HelpButton;
-        public Button LabButton;
-        public Button NewRunButton;
         public Text PlayerSanityText;
         public Text FloorText;
         public Text TurnText;
@@ -53,12 +53,21 @@ namespace GameMake.GothicHUD
 
         private StageOneApp bound;
         private bool hooked;
+        private GameObject quickItemRoot;
+        // Owned here now that the code-generated page is gone: the app asks for a flash and the cards
+        // answer with their own background images.
+        private readonly Dictionary<string, Image> cardImages = new Dictionary<string, Image>();
 
         private void OnEnable() { Bind(); Sync(); }
         private void Start() { Bind(); Sync(); }
         private void OnDisable()
         {
-            if (bound) bound.Changed -= Sync;
+            if (bound)
+            {
+                bound.Changed -= Sync;
+                bound.BattleEventAnimation = null;
+            }
+            cardImages.Clear();
             bound = null;
         }
 
@@ -69,12 +78,16 @@ namespace GameMake.GothicHUD
             if (!Presentation) Presentation = GetComponent<ModularHudController>();
             if (!Counter) Counter = GetComponentInChildren<MechanicalRoundCounter>(true);
             if (QuickItems == null || QuickItems.Length < 4 || QuickItems.All(b => !b)) ResolveQuickItems();
+            // The quick-item slots led to the deleted item panel. The page keeps its authored shape, but
+            // the group is switched off rather than rewired to another screen.
+            if (quickItemRoot) quickItemRoot.SetActive(false);
             if (bound != BattleSource)
             {
-                if (bound) bound.Changed -= Sync;
+                if (bound) { bound.Changed -= Sync; bound.BattleEventAnimation = null; }
                 bound = BattleSource;
                 if (bound) bound.Changed += Sync;
             }
+            if (bound) bound.BattleEventAnimation = AnimateEvents;
             if (hooked) return;
             hooked = true;
             if (Panel)
@@ -89,17 +102,16 @@ namespace GameMake.GothicHUD
             // only as serialized history; the authored console owns every readout and command now.
             if (DebugButton)
             {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 DebugButton.onClick.AddListener(IndustrialDebugConsole.ToggleFromHud);
+#else
+                DebugButton.gameObject.SetActive(false);
+#endif
                 var caption = DebugButton.GetComponentInChildren<Text>(true);
                 if (caption) caption.text = "调试台";
             }
             foreach (var card in Cards())
                 if (card && card.Hit) card.Hit.onClick.AddListener(() => SelectCard(card));
-            for (int i = 0; i < QuickItems.Length; i++)
-            {
-                var button = QuickItems[i];
-                if (button) button.onClick.AddListener(OpenConsumables);
-            }
         }
 
         // The authored quick-item slots carry a Button on their "Item Frame" child. They are found by name
@@ -110,6 +122,7 @@ namespace GameMake.GothicHUD
             var group = GetComponentsInChildren<Transform>(true)
                 .FirstOrDefault(t => t.name == "Items - 快捷物品");
             if (group == null) return;
+            quickItemRoot = group.gameObject;
             for (int i = 0; i < 4; i++)
             {
                 var slot = group.GetComponentsInChildren<Transform>(true)
@@ -127,7 +140,6 @@ namespace GameMake.GothicHUD
         // ---- input, routed straight into the existing app commands ----
         private void SelectSkill(int index) { if (BattleSource) BattleSource.SelectSkill(index); }
         private void SelectSwap() { if (BattleSource) BattleSource.SelectSwap(); }
-        private void OpenConsumables() { if (BattleSource) BattleSource.OpenConsumableEditor(); }
         private void SelectCard(GothicBattleCard card)
         {
             if (BattleSource && card && !string.IsNullOrEmpty(card.ActorId)) BattleSource.SelectActor(card.ActorId);
@@ -145,11 +157,8 @@ namespace GameMake.GothicHUD
             var app = BattleSource;
             if (!app || app.Run == null) return;
             var battle = app.Battle;
-            bool live = battle != null && !app.AwaitingNode && battle.Outcome == BattleOutcome.Active
-                && !app.HelpOpen && !app.LabOpen && !app.ConsumableEditorOpen;
+            bool live = battle != null && !app.AwaitingNode && battle.Outcome == BattleOutcome.Active;
             foreach (var chrome in ChromeRoots) if (chrome) chrome.SetActive(live);
-            bool quickItems = live && battle.Current != null && battle.Current.Player && !app.Busy;
-            foreach (var button in QuickItems) if (button) button.interactable = quickItems;
             // The old sheet is never shown: the authored console replaced it. Hiding it here also keeps
             // a stale prefab from covering the laid-out page if the scene was saved while it was open.
             if (DebugRoot) DebugRoot.SetActive(false);
@@ -273,9 +282,8 @@ namespace GameMake.GothicHUD
                 var hero = app.Run.Heroes.FirstOrDefault(h => h.Rank == rank);
                 card.Render(hero, hero != null && battle.Current == hero, hero != null && possible.Contains(hero.Id),
                     hero != null && app.InspectedId == hero.Id, null);
-                // Hand the card body over so the damage flash still has something to tint: the built-in page
-                // fills StageOneView's card map, and nothing else would on this page.
-                if (hero != null && app.View) app.View.RegisterCardImage(hero.Id, card.Background);
+                // Keep the card body so the damage flash has something to tint; this page owns that map now.
+                if (hero != null && card.Background) cardImages[hero.Id] = card.Background;
             }
             // One card per living enemy. Matching by rank keeps the formation readable; anything that
             // has no free rank slot (a rank collision left by debug tools, or a rank outside 1-4) is
@@ -297,28 +305,25 @@ namespace GameMake.GothicHUD
                 var enemy = slots[rank];
                 card.Render(enemy, enemy != null && battle.Current == enemy, enemy != null && possible.Contains(enemy.Id),
                     enemy != null && app.InspectedId == enemy.Id, enemy == null ? null : battle.Intent(enemy));
-                if (enemy != null && app.View) app.View.RegisterCardImage(enemy.Id, card.Background);
+                if (enemy != null && card.Background) cardImages[enemy.Id] = card.Background;
             }
         }
 
-        // The readouts and commands that have nowhere to live on the authored layout yet. Kept on one sheet
-        // so the battle page only shows positions, vitals and skills. It also opens outside a battle, where
-        // the battle-only rows say so instead of reading as if a fight were running.
-        private void SyncDebug(StageOneApp app, BattleEngine battle)
+        // StageOneApp asks the bound page to flash the cards between two events. The old code-generated
+        // view used to do this; the HUD now owns both the cards and the animation.
+        private IEnumerator AnimateEvents(BattleEvent[] events, bool fast)
         {
-            if (PlayerSanityText) PlayerSanityText.text = "玩家理智  " + app.Run.PlayerSanity.ToString("0.0") + " / 100";
-            if (FloorText)
-                FloorText.text = "第 " + app.Map.Floor + " 层  ·  第 " + app.Run.Battles + " 场"
-                    + (battle == null ? "" : "  ·  第 " + battle.Round + " 回合");
-            if (TurnText)
-                TurnText.text = battle == null ? "路线 · 不在战斗中"
-                    : battle.Current == null ? "本场已结束"
-                    : (battle.Current.Player ? "我方行动  ·  " : "敌方行动  ·  ") + battle.Current.Name;
-            if (HintText) HintText.text = app.Hint ?? "";
-            if (DebugIntentText)
-                DebugIntentText.text = battle == null ? "（不在战斗中）"
-                    : string.Join("\n",
-                        battle.Enemies.Where(e => !e.Dead).Select(e => e.Name + "  ·  " + battle.Intent(e)));
+            var hits = events.Where(e => e.Kind == "damage" || e.Kind == "heal").ToArray();
+            if (hits.Length == 0) { yield return new WaitForSeconds(fast ? 0.01f : 0.12f); yield break; }
+            foreach (var e in hits)
+            {
+                Image img;
+                if (e.TargetId == null || !cardImages.TryGetValue(e.TargetId, out img) || !img) continue;
+                Color saved = img.color;
+                img.color = e.Kind == "heal" ? new Color32(0x39, 0x72, 0x74, 0xFF) : new Color32(0x80, 0x3F, 0x39, 0xFF);
+                yield return new WaitForSeconds(fast ? 0.01f : 0.18f);
+                if (img) img.color = saved;
+            }
         }
     }
 }

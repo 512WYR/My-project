@@ -361,15 +361,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1001, guid: 2d0a2212803833e5cc600896ba58edf1, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1001, guid: 2d0a2212803833e5cc600896ba58edf1, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1001, guid: 2d0a2212803833e5cc600896ba58edf1, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1001, guid: 2d0a2212803833e5cc600896ba58edf1, type: 3}
       propertyPath: m_LocalPosition.x
@@ -568,15 +568,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 730933248618790277, guid: 67adc4eb83d30ef4b9f90b0f7234a222, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 730933248618790277, guid: 67adc4eb83d30ef4b9f90b0f7234a222, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 730933248618790277, guid: 67adc4eb83d30ef4b9f90b0f7234a222, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 730933248618790277, guid: 67adc4eb83d30ef4b9f90b0f7234a222, type: 3}
       propertyPath: m_LocalPosition.x
@@ -665,7 +665,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Catalog: {fileID: 11400000, guid: c537f0060ede2734c8b0219dc40cfa00, type: 2}
-  ExternalBattleUi: 1
 --- !u!4 &1460833117
 Transform:
   m_ObjectHideFlags: 0

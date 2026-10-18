@@ -120,6 +120,10 @@ namespace GameMake.IndustrialDebugUI.EditorTools
                 if (instance != null)
                 {
                     instance.name = "IndustrialDebugConsole";
+                    // A stale instance override once wrote a zero scale, which hid the whole canvas; the
+                    // console is also kept at the scene root so it is listed in SceneRoots.
+                    instance.transform.SetParent(null);
+                    SceneManager.MoveGameObjectToScene(instance, scene);
                     instance.transform.localScale = Vector3.one;
                 }
                 if (openedHere) EditorSceneManager.SaveScene(scene);
@@ -146,6 +150,10 @@ namespace GameMake.IndustrialDebugUI.EditorTools
         {
             foreach (var root in scene.GetRootGameObjects())
                 if (root.GetComponentInChildren<IndustrialDebugConsole>(true)) return true;
+            // An older generated scene held the console without listing it in SceneRoots, so the root scan
+            // above could miss the very instance that was already serialized.
+            foreach (var console in Object.FindObjectsOfType<IndustrialDebugConsole>(true))
+                if (console && console.gameObject.scene == scene) return true;
             return false;
         }
 

@@ -25,7 +25,7 @@
 
 ### 复现步骤
 
-1. 进入 `StageOne.unity`，让战士站到 1 号位（`w_bash` 的 `ActorRanks = 3`，只允许 1 号位施放）。
+1. 进入 `Assets/Scenes/mainScene.unity`，让战士站到 1 号位（`w_bash` 的 `ActorRanks = 3`，只允许 1 号位施放）。
 2. 对敌人使用「猛击」。
 3. 观察敌人卡片与后续行动。
 4. 下一回合继续使用「猛击」。
@@ -113,7 +113,7 @@ enemyActed=False
 
 ### 复现步骤
 
-1. 进入 `StageOne.unity`，编队包含战士 / 盾卫 / 奶妈。
+1. 进入 `Assets/Scenes/mainScene.unity`，编队包含战士 / 盾卫 / 奶妈。
 2. 轮到对应角色行动，点击上述任一技能。
 3. 观察：没有目标被高亮；点击我方或敌方角色均无反应。
 
@@ -134,8 +134,8 @@ enemyActed=False
 1. `BattleEngine.NeedsTarget` 只对 `SkillTargeting.Choose` 返回 `true`（`Assets/StageOne/Core/BattleEngine.cs:223-226`）。
 2. `BattleEngine.Targets(index)` 在 `NeedsTarget` 为 `false` 时直接返回 `Enumerable.Empty<ActorState>()`，因此群体技能没有任何合法目标。
 3. `BattleEngine.SkillDisabledReason(index)` 只在 `NeedsTarget(skill) && !Targets(index).Any()` 时报错（`BattleEngine.cs:236`）；群体技能不满足 `NeedsTarget`，所以**不会禁用**，技能按钮保持可点。
-4. `StageOneApp.SelectSkill` 只把技能记到 `PendingSkill`，并提示“点击高亮目标”（`Assets/StageOne/Runtime/StageOneApp.cs:586-594`）。
-5. 真正提交动作的只有 `StageOneApp.SelectActor`，条件是点击的角色出现在 `Battle.Targets(PendingSkill.Value)` 中（`StageOneApp.cs:608-617`）。群体技能的 `Targets()` 永远为空，因此**不存在任何可以提交动作的点击路径**。
+4. `StageOneApp.SelectSkill` 只把技能记到 `PendingSkill`，并提示“点击高亮目标”（`Assets/MainGame/Runtime/StageOneApp.cs`）。
+5. 真正提交动作的只有 `StageOneApp.SelectActor`，条件是点击的角色出现在 `Battle.Targets(PendingSkill.Value)` 中。群体技能的 `Targets()` 永远为空，因此**不存在任何可以提交动作的点击路径**。
 6. 结果：技能可选、目标列表为空、无提交入口，形成死路。
 
 ### 修复建议
@@ -145,7 +145,7 @@ enemyActed=False
 ```csharp
 public void SelectSkill(int index)
 {
-    if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
+    if (Busy || CharacterPanelOpen || DebugOverlayOpen || AwaitingNode || Battle == null) return;
     string reason = Battle.SkillDisabledReason(index);
     if (reason != null) { Hint = reason; Refresh(); return; }
     PendingSwap = false;
@@ -166,7 +166,7 @@ public void SelectSkill(int index)
 同时：
 
 - 若希望保留“选中后再确认”的交互，可改为显示一个“确认释放”按钮，而不是依赖点击目标。
-- 检查 `StageOneView` 的技能提示与目标高亮逻辑，确保群体技能不会显示“请选择目标”。
+- 检查 `GothicBattleHudController` 的技能提示与目标高亮逻辑，确保群体技能不会显示“请选择目标”。
 - 为 5 个 `Targeting = All` 的技能补一条 EditMode 或 PlayMode 回归测试：`Targets(index)` 为空时仍能通过 `Execute(new ActionRequest(ActionKind.Skill, null, index))` 成功释放，并且事件、消耗、回合推进正常。
 
 ### 验收标准
@@ -195,7 +195,7 @@ public void SelectSkill(int index)
 
 ### 复现步骤
 
-1. 进入 `StageOne.unity`，队伍包含枪手，枪手站在 3 或 4 号位（`g_grapple` 的 `ActorRanks = 12`）。
+1. 进入 `Assets/Scenes/mainScene.unity`，队伍包含枪手，枪手站在 3 或 4 号位（`g_grapple` 的 `ActorRanks = 12`）。
 2. 遇到带有「肉盾怪 / 精英肉盾怪」的编队，并让肉盾成功施放「守护」。
 3. 对肉盾守护的后排敌人使用「拖拽射击」。
 4. 观察：伤害由肉盾承受（日志显示“为……挡下攻击”），但被选中的后排敌人位置不变，也没有拖拽日志。
@@ -302,7 +302,7 @@ tankHp=100->88 healerHp=100 healerRank=2
 
 - 首领：`Boss01-复制`（`copy_boss`，`EnemyBehavior.CopyBoss`）必现；`Boss03-组合` 的操作怪补召存在同类问题。
 - 机制：所有依赖“空站位”判断的召唤/补位逻辑，包括复制体 `SummonCopies` 与操作怪 `RespawnOperator`。
-- 表现层：Gothic 战斗页的敌方 4 张卡片按站位一对一映射，尸体可遮住同站位的存活单位；内置 `StageOneView` 会把尸体与存活单位画在同一坐标上，出现卡片重叠。
+- 表现层：Gothic 战斗页的敌方 4 张卡片按站位一对一映射，尸体可遮住同站位的存活单位，出现卡片重叠。
 - 结算：引擎的胜利条件本身没有写错，但会被“看不见的存活单位”阻塞，最终表现为 BUG-005。
 
 ### 根因分析
@@ -319,7 +319,7 @@ tankHp=100->88 healerHp=100 healerRank=2
 3. **HUD 每个站位只取第一个匹配单位，尸体把存活单位挡住了**
    - Gothic 战斗页按站位取敌人：`battle.Enemies.FirstOrDefault(e => e.Rank == rank)`（`Assets/GothicHUD/Runtime/GothicBattleHudController.cs:284`），**没有过滤 `Dead`**。
    - 尸体在 `Enemies` 列表中创建得更早，`FirstOrDefault` 先返回尸体；后补召的存活单位排在列表末尾，因此永远不会被渲染到卡片上。
-   - 内置 `StageOneView` 虽然遍历所有敌人（`Assets/StageOne/Runtime/StageOneView.cs:143-144`），但同一站位的单位会被画在完全相同的坐标上，视觉上仍然只是一张卡片。
+   - 旧的内置页面虽然遍历所有敌人，但同一站位的单位会被画在完全相同的坐标上，视觉上仍然只是一张卡片；该页面现已删除。
 
 4. **胜利判定会正确看到隐藏的存活单位**
    - `CheckEnd` 使用 `Enemies.All(a => a.Dead)`（`BattleEngine.cs:1632-1637`）。隐藏的复制体/操作怪确实还活着，所以 `Outcome` 保持 `Active`，战斗不会结算。
@@ -358,7 +358,7 @@ tankHp=100->88 healerHp=100 healerRank=2
 
 - 本条与 BUG-005 是同一组现象的两个角度：本条描述“为什么会有看不见的怪”，BUG-005 描述“为什么战斗卡住不结算”。
 - 用户建议的“死亡后自动往前移动一格”能同时缓解尸体挡位与阵型空洞，但它本身不能替代“尸体不参与界面映射/占位”的修复；两者建议一起做。
-- **修复记录（2026-10-18）**：`BattleEngine` 新增死亡站位登记与 `ResolveEnemyRanksAfterDeaths()`，存活敌人会在当前行动结束后前移一格；死亡站位按从后往前的顺序释放，同一次范围攻击击杀多具尸体时存活单位会连续补位，而不是只补一格。Gothic 战斗页只给存活敌人分配卡片，并在站位冲突/越界时回退到第一个空卡片；内置 `StageOneView` 不再绘制尸体卡片。新增 EditMode 测试覆盖单次死亡与同回合双死亡补位，独立控制台复现“死亡前移、双死亡连续补位、复制体各占 1/2/3 号位”，待 Unity 内验收。
+- **修复记录（2026-10-18）**：`BattleEngine` 新增死亡站位登记与 `ResolveEnemyRanksAfterDeaths()`，存活敌人会在当前行动结束后前移一格；死亡站位按从后往前的顺序释放，同一次范围攻击击杀多具尸体时存活单位会连续补位，而不是只补一格。Gothic 战斗页只给存活敌人分配卡片，并在站位冲突/越界时回退到第一个空卡片；旧的内置页面已随 `StageOneView` 一并删除。新增 EditMode 测试覆盖单次死亡与同回合双死亡补位，独立控制台复现“死亡前移、双死亡连续补位、复制体各占 1/2/3 号位”，待 Unity 内验收。
 
 ---
 
@@ -386,7 +386,7 @@ tankHp=100->88 healerHp=100 healerRank=2
 
 1. **胜利条件要求“所有敌方单位死亡”，而不是“首领死亡”**
    - `CheckEnd` 的唯一胜利条件是 `Enemies.All(a => a.Dead)`（`Assets/StageOne/Core/BattleEngine.cs:1632-1637`）。
-   - 只要还有一只存活单位，战斗就保持 `Active`。这与界面文案“击败第 X 层首领，本局通关”（`Assets/StageOne/Runtime/StageOneApp.cs:536`）并不一致：玩家理解为首领死亡即通关，引擎却要求清场。
+   - 只要还有一只存活单位，战斗就保持 `Active`。这与界面文案“击败第 X 层首领，本局通关”（`Assets/MainGame/Runtime/StageOneApp.cs`）并不一致：玩家理解为首领死亡即通关，引擎却要求清场。
 
 2. **Boss01：首领死亡后仍有最多 3 只存活复制体**
    - 首领死亡后 `RunRoundStartHooks` 不再补召（`BattleEngine.cs:1269-1275`），但此前召唤出的复制体仍然存活。
@@ -398,9 +398,9 @@ tankHp=100->88 healerHp=100 healerRank=2
    - 只有先击杀蒸汽机器，操作怪才不会继续补召；这一优先级在游戏内没有提示。
 
 4. **结算界面本身依赖 `Battle.Outcome != Active`**
-   - `StageOneView` 只有在 `Battle.Outcome != BattleOutcome.Active` 时才绘制结算面板（`Assets/StageOne/Runtime/StageOneView.cs:56`、`StageOneView.cs:91`）。
+   - `RoomPages.Settlement` 只在 `Battle.Outcome != BattleOutcome.Active` 时生成结算页，由 `IndustrialEventPage` 显示。
    - 因此只要还有一只隐藏存活单位，界面就不会出现任何“结束”入口，表现为“打完一直卡在战斗”。
-   - 设置 `ExternalBattleUi` 的场景仍由 `StageOneView` 负责结算、帮助和调试弹窗（`StageOneApp.cs:59-63`），所以问题不在外部 HUD 把结算盖住，而在战斗结果根本没有变成 `Victory`。
+   - 所以问题不在 HUD 把结算盖住，而在战斗结果根本没有变成 `Victory`。
 
 5. **Boss02 需要单独确认**
    - `Boss02-巨型` 的编队只有 `giant_boss`，没有召唤物；它死亡后 `Enemies.All(a => a.Dead)` 应为真。
@@ -455,8 +455,7 @@ tankHp=100->88 healerHp=100 healerRank=2
 | `Assets/StageOne/Core/BattleEngine.cs:709-729` | `PullToFront` 的移动、1 号位与 `Immobile` 反馈 |
 | `Assets/StageOne/Core/Models.cs:206` | `ImbalanceImmuneRounds` 默认值 |
 | `Assets/StageOne/Resources/StageOne/Skills/g_grapple.asset` | 拖拽射击数值（75% 伤害 / 40% 拖拽） |
-| `Assets/StageOne/Runtime/StageOneApp.cs:592-621` | `SelectSkill` 对空目标技能直接提交，其余仍等待点击 |
-| `Assets/StageOne/Runtime/StageOneApp.cs:623` | `SelectActor` 提交有目标技能 |
+| `Assets/MainGame/Runtime/StageOneApp.cs` | `SelectSkill` 对空目标技能直接提交，其余仍等待点击；`SelectActor` 提交有目标技能 |
 | `Assets/GothicHUD/Runtime/GothicBattleCard.cs:80-102` | 主场景卡片状态行；失衡经由 `Battle.Intent` 显示 |
 | `Assets/StageOne/Editor/StageOneBuild.cs:92-166` | 5 个群体技能的定义位置 |
 | `Assets/StageOne/Core/BattleEngine.cs:1654` | `Kill` 标记死亡并登记站位释放 |
@@ -467,6 +466,5 @@ tankHp=100->88 healerHp=100 healerRank=2
 | `Assets/StageOne/Core/BattleEngine.cs:1632-1637` | `CheckEnd` 以“所有敌方单位死亡”为胜利条件 |
 | `Assets/StageOne/Core/BattleEngine.cs:1269-1275` | 每回合开始的 Boss 召唤/补召钩子 |
 | `Assets/GothicHUD/Runtime/GothicBattleHudController.cs:284` | 战斗页按 `Rank` 取敌人，未过滤 `Dead` |
-| `Assets/StageOne/Runtime/StageOneView.cs:143-144` | 内置战斗页遍历所有敌人，同站位会重叠绘制 |
-| `Assets/StageOne/Runtime/StageOneView.cs:56`、`91` | 仅在 `Outcome != Active` 时绘制结算面板 |
-| `Assets/StageOne/Runtime/StageOneApp.cs:507-542` | `ContinueBattle` 与 Boss 通关结算入口 |
+| `Assets/MainGame/Runtime/RoomPages.cs` | `Settlement` 仅在 `Outcome != Active` 时生成结算页 |
+| `Assets/MainGame/Runtime/StageOneApp.cs` | `ContinueBattle` 与 Boss 通关结算入口 |

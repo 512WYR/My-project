@@ -60,7 +60,7 @@ namespace GameMake.IndustrialBattleEditor
             camera.clearFlags=CameraClearFlags.SolidColor; camera.backgroundColor=new Color32(12,14,14,255);
             new GameObject("EventSystem",typeof(EventSystem),typeof(StandaloneInputModule));
             var app=new GameObject("Battle Game State").AddComponent<StageOneApp>();
-            app.Catalog=AssetDatabase.LoadAssetAtPath<GameCatalog>("Assets/StageOne/Resources/StageOne/GameCatalog.asset"); app.ExternalBattleUi=true;
+            app.Catalog=AssetDatabase.LoadAssetAtPath<GameCatalog>("Assets/StageOne/Resources/StageOne/GameCatalog.asset");
             var hud=(GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(Prefab));
             var chrome=hud.GetComponent<GothicBattleHudController>(); chrome.BattleSource=app; PrefabUtility.RecordPrefabInstancePropertyModifications(chrome);
             var presentation=hud.GetComponent<ModularHudController>(); presentation.BattleSource=app; presentation.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(presentation);
