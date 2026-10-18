@@ -96,7 +96,7 @@ namespace GameMake.ExplorationEditor
             counter.RoomWindow=Group(counterRoot,"Room Digits",314,17,104,46);
             counter.FloorSlots=DigitSlots(counter.FloorWindow); counter.RoomSlots=DigitSlots(counter.RoomWindow); counter.Paint();
 
-            var party=Group(page,"Party Column",98,178,270,842); Art(party,"Four Character Frames","Party",0,0,270,842);
+            var party=Group(page,"Party Column",8,178,270,842); Art(party,"Four Character Frames","Party",0,0,270,842);
             var catalog=AssetDatabase.LoadAssetAtPath<GameCatalog>("Assets/StageOne/Resources/StageOne/GameCatalog.asset");
             view.Party=new ExplorationPartySlot[4];
             for(int i=0;i<4;i++)

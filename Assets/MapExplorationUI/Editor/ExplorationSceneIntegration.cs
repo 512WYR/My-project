@@ -22,7 +22,10 @@ namespace GameMake.ExplorationEditor
         public static void Apply()
         {
             if(!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-            foreach(var path in EntryScenes)
+            var paths=EntryScenes.AsEnumerable();
+            const string eventScene="Assets/IndustrialEventUI/Scenes/IndustrialEvent.unity";
+            if(System.IO.File.Exists(eventScene)) paths=paths.Concat(new[]{eventScene});
+            foreach(var path in paths)
             {
                 var scene=EditorSceneManager.OpenScene(path,OpenSceneMode.Single);
                 AttachToCurrentScene();
@@ -64,6 +67,13 @@ namespace GameMake.ExplorationEditor
                 eventView.Source=app; Save(eventView);
             }
             var presentation=hud.GetComponent<ModularHudController>();
+            var characterPrefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/CharacterPanelUI/Prefabs/CharacterPanel.prefab");
+            if(characterPrefab)
+            {
+                var characterView=scene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<GameMake.CharacterUI.CharacterPanelView>(true)).SingleOrDefault();
+                if(!characterView) characterView=((GameObject)PrefabUtility.InstantiatePrefab(characterPrefab,scene)).GetComponent<GameMake.CharacterUI.CharacterPanelView>();
+                characterView.Source=app; Save(characterView);
+            }
             presentation.BattleSource=app; presentation.FollowStageOneBattle=false; Save(presentation);
             foreach(var counter in hud.GetComponentsInChildren<MechanicalRoundCounter>(true))
             { counter.BattleSource=app; counter.FollowStageOneBattle=false; Save(counter); }
