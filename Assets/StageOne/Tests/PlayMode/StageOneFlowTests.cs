@@ -268,9 +268,9 @@ namespace Ruin.Tests
             Assert.AreEqual(NodeType.Opening, app.Map.Current.Candidates[0].Type, "新开一局回到初始增益房");
         }
 
-        [UnityTest] public IEnumerator TheChestRoomIsOnTheRouteButGivesNothingYet()
+        [UnityTest] public IEnumerator TheChestRoomGrantsOneAccessoryOnlyOnce()
         {
-            // 宝箱房已经上路，但内容还没定：概率面板上有它，被推到时也要能走出去、不发放任何东西。
+            // 宝箱房是饰品的获取来源：概率面板上有它，进去发一件，节点上的已领取标记只翻一次。
             var specs = MapGenerator.Resolve(app.Catalog.MapRules()).NodeOdds;
             int chest = System.Array.FindIndex(specs, s => s.Type == NodeType.Treasure);
             Assert.That(chest, Is.GreaterThanOrEqualTo(0), "宝箱房已经登记进房间类型表");
@@ -280,16 +280,121 @@ namespace Ruin.Tests
             Assert.IsTrue(Object.FindObjectsOfType<Text>().Any(t => t.name == "宝箱房Percent" && t.text == percent),
                 "概率面板上要画出宝箱房这一行（期望 " + percent + "）");
 
+            int before = app.Run.AccessoryStock.Count;
             app.DebugForceRoom(NodeType.Treasure); yield return null;
             Assert.AreEqual(RoomView.Treasure, app.Room);
             Assert.IsNull(app.Battle);
             Assert.IsTrue(Object.FindObjectsOfType<Text>().Any(t => t.name == "TreasureHeading"));
+            Assert.AreEqual(before + 1, app.Run.AccessoryStock.Count, "宝箱房发放一件饰品");
+            Assert.IsFalse(string.IsNullOrEmpty(app.RoomNote), "房间页要说出拿到了什么");
+            Assert.AreEqual(1, app.ActiveNode.EventFlag, "已领取标记已经写下");
 
             int supplies = app.Map.Supplies;
             Click("LeaveRoom"); yield return null;
             Assert.AreEqual(RoomView.Map, app.Room, "离开宝箱房要能回到路线页");
             Assert.IsTrue(app.AwaitingNode);
-            Assert.AreEqual(supplies, app.Map.Supplies, "内容未定之前不发放任何东西");
+            Assert.AreEqual(supplies, app.Map.Supplies, "宝箱房只发饰品，不发补给");
+        }
+
+        [UnityTest] public IEnumerator TheSupplyRoomEquipsAndUnequipsAnAccessory()
+        {
+            app.DebugForceRoom(NodeType.Supply); yield return null;
+            app.DebugGrantAllAccessories(); yield return null;
+            Assert.GreaterOrEqual(app.Run.AccessoryStock.Count, 8);
+
+            Click("SupplyAccessories"); yield return null;
+            Assert.IsTrue(app.AccessoryEditorOpen, "管理饰品按钮要打开同一套面板");
+            var gunner = app.Run.Heroes.First(h => h.Definition.Silhouette == "gunner");
+            Click("AccessoryHero_" + gunner.Id); yield return null;
+
+            int stock = app.Run.AccessoryStock.Count;
+            Click("Equip_0"); yield return null;
+            Assert.IsTrue(gunner.EquippedAccessories.Any(a => a.Id == "acc_gutter"), "枪手装备了穿肠弹");
+            Assert.AreEqual(stock - 1, app.Run.AccessoryStock.Count);
+
+            Click("Unequip_" + gunner.Id + "_acc_gutter"); yield return null;
+            Assert.IsFalse(gunner.EquippedAccessories.Any(a => a.Id == "acc_gutter"));
+            Assert.AreEqual(stock, app.Run.AccessoryStock.Count, "卸下后回到仓库");
+
+            Click("CloseAccessories"); yield return null;
+            Assert.IsFalse(app.AccessoryEditorOpen);
+            Assert.AreEqual(RoomView.Supply, app.Room, "关掉面板仍在补给站");
+        }
+
+        [UnityTest] public IEnumerator TheConsumablePanelHealsOutsideBattleAndStaysOpen()
+        {
+            var hero = app.Run.Heroes[0];
+            hero.Hp = 10;
+            app.DebugGrantAllConsumables(); yield return null;
+            Assert.AreEqual(3, app.Run.Consumables.Count);
+
+            Click("Consumables"); yield return null;
+            Assert.IsTrue(app.ConsumableEditorOpen, "标题栏的道具按钮要打开面板");
+            int expected = System.Math.Min(hero.Definition.MaxHp,
+                10 + (int)System.Math.Ceiling(hero.Definition.MaxHp * ConsumableSystem.HealPercent / 100.0));
+            // 默认顺序是理智锁定、血量恢复、手术包。
+            Click("UseConsumable_1"); yield return null;
+            Assert.AreEqual(expected, hero.Hp);
+            Assert.AreEqual(2, app.Run.Consumables.Count, "使用后扣除一件");
+            Assert.IsTrue(app.ConsumableEditorOpen, "战斗外使用后面板保持打开");
+
+            Click("CloseConsumables"); yield return null;
+            Assert.IsFalse(app.ConsumableEditorOpen);
+        }
+
+        [UnityTest] public IEnumerator TheBattleConsumablePanelLocksSanityAndConsumesTheTurn()
+        {
+            app.DebugForceRoom(NodeType.Battle); yield return null;
+            Assert.NotNull(app.Battle);
+            Assert.IsTrue(app.Battle.Current != null && app.Battle.Current.Player);
+            var hero = app.Battle.Current;
+            app.DebugGrantAllConsumables(); yield return null;
+
+            Click("BattleConsumables"); yield return null;
+            Assert.IsTrue(app.ConsumableEditorOpen, "行动区的道具按钮要打开面板");
+            Click("ConsumableHero_" + hero.Id); yield return null;
+            int stock = app.Run.Consumables.Count;
+            // 第一件是理智锁定药剂。
+            Click("UseConsumable_0"); yield return null;
+            int frames = 0; while (app.Busy && frames++ < 400) yield return null;
+
+            Assert.IsTrue(hero.SanityLocked, "战斗中直接使用会立刻锁定本次战斗");
+            Assert.AreEqual(stock - 1, app.Run.Consumables.Count);
+            Assert.IsFalse(app.ConsumableEditorOpen, "战斗中成功使用后会关掉面板并结算行动");
+            Assert.IsTrue(app.Battle.Events.Any(e => e.Kind == "sanity" && e.Message.Contains("理智锁定")));
+        }
+
+        [UnityTest] public IEnumerator TheSurgeryKitIsVisibleButCannotBeUsed()
+        {
+            app.DebugGrantAllConsumables(); yield return null;
+            Click("Consumables"); yield return null;
+            Assert.IsTrue(app.ConsumableEditorOpen);
+
+            var use = Object.FindObjectsOfType<Button>().First(b => b.name == "UseConsumable_2");
+            Assert.IsFalse(use.interactable, "手术包的使用按钮永远禁用");
+            Assert.IsTrue(Object.FindObjectsOfType<Text>().Any(t => t.name == "UseConsumable_2Title" && t.text == "功能待定"));
+            Assert.AreEqual(3, app.Run.Consumables.Count, "禁用按钮不会消耗库存");
+        }
+
+        [UnityTest] public IEnumerator TheConsumablePanelBlocksBattleCommandsAndKeepsTheRandomState()
+        {
+            app.DebugForceRoom(NodeType.Battle); yield return null;
+            app.DebugGrantAllConsumables(); yield return null;
+            uint state = app.Run.Random.State;
+            string inspected = app.InspectedId;
+
+            Click("BattleConsumables"); yield return null;
+            Assert.AreEqual(state, app.Run.Random.State, "打开面板不消耗随机序列");
+
+            // 面板还开着时，技能、换位和选人都不能开始一个新的行动。
+            app.SelectSkill(0);
+            app.SelectSwap();
+            app.SelectActor(app.Battle.Enemies[0].Id);
+            Assert.IsFalse(app.Choosing);
+            Assert.AreEqual(inspected, app.InspectedId);
+
+            Click("CloseConsumables"); yield return null;
+            Assert.IsFalse(app.ConsumableEditorOpen);
         }
 
         [UnityTest] public IEnumerator DebugForceRoomReplacesTheCurrentCandidates()

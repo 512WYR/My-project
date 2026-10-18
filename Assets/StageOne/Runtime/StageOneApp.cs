@@ -25,6 +25,14 @@ namespace Ruin.Runtime
         public bool Busy { get; private set; }
         public bool HelpOpen { get; private set; }
         public bool LabOpen { get; private set; }
+        // The accessory manager is a modal that both UI systems share: StageOneView draws it above the
+        // external HUD, and GothicNodeHudController simply opens it.
+        public bool AccessoryEditorOpen { get; private set; }
+        public string AccessoryHeroId { get; private set; }
+        // The consumable panel follows the same rule: StageOneView draws it above either UI system, and
+        // both the built-in pages and the external HUD only route clicks into these commands.
+        public bool ConsumableEditorOpen { get; private set; }
+        public string ConsumableHeroId { get; private set; }
         // Which page of the acceptance tool is up: the general one, or the per-event list.
         public bool LabEvents { get; private set; }
         public string Hint { get; private set; }
@@ -79,12 +87,15 @@ namespace Ruin.Runtime
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.F1)) ToggleHelp();
+            if (Input.GetKeyDown(KeyCode.I)) ToggleConsumableEditor();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Input.GetKeyDown(KeyCode.F3)) ToggleLab();
 #endif
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                if (HelpOpen) ToggleHelp();
+                if (ConsumableEditorOpen) CloseConsumableEditor();
+                else if (AccessoryEditorOpen) CloseAccessoryEditor();
+                else if (HelpOpen) ToggleHelp();
                 // Back out of the event list first, so one Esc does not lose the whole tool.
                 else if (LabOpen && LabEvents) ToggleLabEvents();
                 else if (LabOpen) ToggleLab();
@@ -95,6 +106,8 @@ namespace Ruin.Runtime
         public void NewRun(double? preset = null)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); HelpOpen = false; LabOpen = false;
+            AccessoryEditorOpen = false; AccessoryHeroId = null;
+            ConsumableEditorOpen = false; ConsumableHeroId = null;
             Room = RoomView.Map; ActiveNode = null; EventBattle = null; RoomNote = null; MapNote = null;
             RunEndNote = null;
             // The limb rules travel with the rest of the combat rules, so the catalog's part ratios and
@@ -115,7 +128,9 @@ namespace Ruin.Runtime
         // re-rendering or reloading never re-rolls them and never consumes a draw.
         private void RevealStep()
         {
-            StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
+            StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
+            AccessoryEditorOpen = false; AccessoryHeroId = null;
+            ConsumableEditorOpen = false; ConsumableHeroId = null; Battle = null;
             Room = RoomView.Map; ActiveNode = null; EventBattle = null; RoomNote = null;
             AwaitingNode = true;
             MapGenerator.Advance(Run.Map, Rules(), Run.Random, Run.PlayerSanity);
@@ -135,7 +150,8 @@ namespace Ruin.Runtime
 
         public void SelectNode(int index)
         {
-            if (Busy || HelpOpen || LabOpen || Run == null || Run.Map.Finished) return;
+            if (Busy || HelpOpen || LabOpen || AccessoryEditorOpen || ConsumableEditorOpen
+                || Run == null || Run.Map.Finished) return;
             if (Room != RoomView.Map) return;
             var step = Run.Map.Current;
             if (step == null || step.Resolved || index < 0 || index >= step.Candidates.Count) return;
@@ -242,6 +258,132 @@ namespace Ruin.Runtime
             Refresh();
         }
 
+        // ---------------- accessories ----------------
+
+        // The manager is reachable from the supply room and from the acceptance tool. It only needs a run
+        // that is standing on a node, so it works on the route page and inside a room alike.
+        public void OpenAccessoryEditor(string heroId = null)
+        {
+            if (Run == null || Busy || !AwaitingNode || ConsumableEditorOpen) return;
+            var hero = !string.IsNullOrEmpty(heroId) ? Run.Heroes.FirstOrDefault(h => h.Id == heroId) : null;
+            if (hero == null) hero = Run.Heroes.FirstOrDefault(h => h.Id == AccessoryHeroId)
+                ?? Run.Heroes.FirstOrDefault(h => !h.Dead) ?? Run.Heroes.FirstOrDefault();
+            AccessoryHeroId = hero == null ? null : hero.Id;
+            AccessoryEditorOpen = true; HelpOpen = false; LabOpen = false; LabEvents = false;
+            ClearPending(); Refresh();
+        }
+
+        public void CloseAccessoryEditor()
+        {
+            if (!AccessoryEditorOpen) return;
+            AccessoryEditorOpen = false; ClearPending(); Refresh();
+        }
+
+        public void SelectAccessoryHero(string heroId)
+        {
+            if (!AccessoryEditorOpen || Run == null) return;
+            var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
+            if (hero == null) return;
+            AccessoryHeroId = hero.Id; Refresh();
+        }
+
+        public void EquipAccessory(string heroId, int stockIndex)
+        {
+            if (!AccessoryEditorOpen || Run == null) return;
+            var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
+            string note;
+            if (AccessorySystem.Equip(Run, hero, stockIndex, out note))
+            {
+                AccessoryHeroId = hero.Id;
+                Hint = note;
+            }
+            else Hint = note;
+            Refresh();
+        }
+
+        public void UnequipAccessory(string heroId, string itemId)
+        {
+            if (!AccessoryEditorOpen || Run == null) return;
+            var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
+            string note;
+            if (AccessorySystem.Unequip(Run, hero, itemId, out note))
+            {
+                AccessoryHeroId = hero.Id;
+                Hint = note;
+            }
+            else Hint = note;
+            Refresh();
+        }
+
+        // ---------------- consumables ----------------
+
+        // Reachable everywhere a battle is not mid-enemy-turn: the route, every room, and our own battle
+        // turns. The accessory manager and this panel never stand open together.
+        public void ToggleConsumableEditor()
+        {
+            if (ConsumableEditorOpen) CloseConsumableEditor();
+            else OpenConsumableEditor();
+        }
+
+        public void OpenConsumableEditor(string heroId = null)
+        {
+            if (Run == null || Busy || HelpOpen || LabOpen) return;
+            if (!AwaitingNode && (Battle == null || Battle.Outcome != BattleOutcome.Active
+                || Battle.Current == null || !Battle.Current.Player)) return;
+            var hero = !string.IsNullOrEmpty(heroId) ? Run.Heroes.FirstOrDefault(h => h.Id == heroId) : null;
+            if (hero == null) hero = Run.Heroes.FirstOrDefault(h => h.Id == ConsumableHeroId);
+            if (hero == null && !AwaitingNode && Battle != null && Battle.Current != null && Battle.Current.Player)
+                hero = Battle.Current;
+            if (hero == null) hero = Run.Heroes.FirstOrDefault(h => !h.Dead) ?? Run.Heroes.FirstOrDefault();
+            ConsumableHeroId = hero == null ? null : hero.Id;
+            ConsumableEditorOpen = true;
+            // One modal at a time: the two managers share the same canvas and the same Escape key.
+            AccessoryEditorOpen = false; AccessoryHeroId = null;
+            HelpOpen = false; LabOpen = false; LabEvents = false;
+            ClearPending(); Refresh();
+        }
+
+        public void CloseConsumableEditor()
+        {
+            if (!ConsumableEditorOpen) return;
+            ConsumableEditorOpen = false; ClearPending(); Refresh();
+        }
+
+        public void SelectConsumableHero(string heroId)
+        {
+            if (!ConsumableEditorOpen || Run == null) return;
+            var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
+            if (hero == null) return;
+            ConsumableHeroId = hero.Id; Refresh();
+        }
+
+        public void UseConsumable(string heroId, int stockIndex)
+        {
+            if (!ConsumableEditorOpen || Run == null) return;
+            var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
+            if (hero == null) return;
+
+            if (!AwaitingNode && Battle != null)
+            {
+                int from = Battle.Events.Count;
+                string battleNote;
+                if (!Battle.UseConsumable(stockIndex, heroId, out battleNote))
+                { Hint = battleNote; Refresh(); return; }
+                ConsumableHeroId = hero.Id;
+                ConsumableEditorOpen = false; ClearPending();
+                Hint = battleNote;
+                StartCoroutine(ContinueEnemies(from));
+                return;
+            }
+
+            string note;
+            if (ConsumableSystem.Use(Run, hero, stockIndex, false, out note))
+                ConsumableHeroId = hero.Id;
+            Hint = note;
+            // The panel stays open outside battle so a second item can be used without reopening it.
+            Refresh();
+        }
+
         // Events and altars share one page. Which event the room holds, and everything that event rolled on
         // entry, is frozen here; EventScripts.Page then rebuilds the current step on every render without
         // drawing anything, so re-rendering never re-rolls the room.
@@ -277,15 +419,33 @@ namespace Ruin.Runtime
             Refresh();
         }
 
-        // The chest room is on the route ahead of its content: it holds a real weight in the odds table,
-        // so it turns up like any other sampled room, but it hands out nothing until someone decides what
-        // it holds. The page exists so walking into it resolves the position instead of dead-ending.
+        // The chest room is the accessory source. EventFlag doubles as the "already opened" marker for
+        // this node, so reopening the page never draws a second item.
         private void EnterTreasureRoom()
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
             Room = RoomView.Treasure; AwaitingNode = true;
-            RoomNote = "宝箱房的内容还没有确定，这里暂时不发放任何东西。";
-            Hint = "宝箱房：内容待定。离开会继续前进。";
+            if (ActiveNode != null && ActiveNode.EventFlag == 0)
+            {
+                var item = Encounter.DropAccessory(Run.Random);
+                ActiveNode.EventFlag = 1;
+                if (item != null)
+                {
+                    Run.AccessoryStock.Add(item);
+                    RoomNote = "宝箱里是一件饰品：「" + item.Name + "」——" + item.Description;
+                    Hint = "获得饰品「" + item.Name + "」。可在补给站或验收工具中装备。";
+                }
+                else
+                {
+                    RoomNote = "宝箱是空的。";
+                    Hint = "宝箱房：空。离开会继续前进。";
+                }
+            }
+            else
+            {
+                RoomNote = "宝箱已经空了，饰品已经放进了队伍仓库。";
+                Hint = "宝箱房：已领取。离开会继续前进。";
+            }
             Refresh();
         }
 
@@ -299,7 +459,7 @@ namespace Ruin.Runtime
         // The one button every room page ends on. A room that still owes a decision refuses to close.
         public void LeaveRoom()
         {
-            if (Run == null || !InRoom) return;
+            if (Run == null || !InRoom || AccessoryEditorOpen || ConsumableEditorOpen) return;
             if (Room == RoomView.Buff && !Run.Map.BuffChosen) { Hint = "先选择一项增益再离开。"; Refresh(); return; }
             if (Room == RoomView.Event && !EventCanLeave) { Hint = "这个事件还没有走完。"; Refresh(); return; }
             ResolveCurrent();
@@ -381,6 +541,7 @@ namespace Ruin.Runtime
         private void ReturnToEvent(NodeState node, bool won)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
+            ConsumableEditorOpen = false; ConsumableHeroId = null;
             Battle = null; EventBattle = null;
             AwaitingNode = true; Room = RoomView.Event; ActiveNode = node;
             RoomNote = EventScripts.ResolveBattleReturn(node, Run, Rules(), won);
@@ -391,6 +552,7 @@ namespace Ruin.Runtime
         private void FinishRun(string note, bool cleared)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false; Battle = null;
+            ConsumableEditorOpen = false; ConsumableHeroId = null;
             AwaitingNode = true; Room = RoomView.Map; ActiveNode = null; EventBattle = null;
             Run.Map.Finished = true; Run.Map.Cleared = cleared;
             RunEndNote = note;
@@ -403,9 +565,14 @@ namespace Ruin.Runtime
         private void StartBattle(NodeState node, NodeType kind)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); LabOpen = false;
+            ConsumableEditorOpen = false; ConsumableHeroId = null;
             AwaitingNode = false;
-            // Scaling builds brand new specs, so an elite or a boss never leaks back into the enemy asset.
-            var enemies = Encounter.Scale(Catalog.Enemies.Select(a => a.ToSpec()).ToArray(), kind, Rules());
+            // Designed formations name their own ranks and already carry their final numbers, so they are
+            // not scaled again. The legacy three-enemy fallback is kept for a catalog that has not been
+            // regenerated since the monster pass.
+            var enemies = Catalog.BuildEnemyLineup(kind, Run.Random);
+            if (enemies.Length == 0)
+                enemies = Encounter.Scale(Catalog.Enemies.Select(a => a.ToSpec()).ToArray(), kind, Rules());
             Battle = new BattleEngine(Run, enemies, Catalog.Rules());
             // Only a fight the event asked for comes back to the event; a route battle resolves the position.
             EventBattle = Room == RoomView.Event ? node : null;
@@ -418,7 +585,7 @@ namespace Ruin.Runtime
 
         public void SelectSkill(int index)
         {
-            if (Busy || HelpOpen || LabOpen || AwaitingNode || Battle == null) return;
+            if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
             string reason = Battle.SkillDisabledReason(index);
             if (reason != null) { Hint = reason; Refresh(); return; }
             PendingSwap = false; PendingSkill = index;
@@ -428,7 +595,7 @@ namespace Ruin.Runtime
 
         public void SelectSwap()
         {
-            if (Busy || HelpOpen || LabOpen || AwaitingNode || Battle == null) return;
+            if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
             string reason = Battle.SwapDisabledReason();
             if (reason != null) { Hint = reason; Refresh(); return; }
             PendingSkill = null; PendingSwap = true;
@@ -440,7 +607,7 @@ namespace Ruin.Runtime
 
         public void SelectActor(string id)
         {
-            if (AwaitingNode || Battle == null) return;
+            if (AwaitingNode || Battle == null || ConsumableEditorOpen) return;
             InspectedId = id;
             if (!Busy && PendingSkill.HasValue && Battle.Targets(PendingSkill.Value).Any(a => a.Id == id))
             { Submit(new ActionRequest(ActionKind.Skill, id, PendingSkill.Value)); return; }
@@ -474,18 +641,22 @@ namespace Ruin.Runtime
             }
             Busy = false;
             if (Battle.Current != null && Battle.Current.Player) InspectedId = Battle.Current.Id;
-            Hint = "选择技能，再点击高亮目标。F1查看说明，F3打开验收工具。";
+            Hint = "选择技能，再点击高亮目标。F1查看说明，I使用道具，F3打开验收工具。";
             Refresh();
         }
 
-        public void ToggleHelp() { HelpOpen = !HelpOpen; LabOpen = false; ClearPending(); Refresh(); }
+        public void ToggleHelp()
+        {
+            if (AccessoryEditorOpen || ConsumableEditorOpen) return;
+            HelpOpen = !HelpOpen; LabOpen = false; ClearPending(); Refresh();
+        }
         public void ToggleLab()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // Closing always wins: a forced room can open a page while the tool is up, and without this the
             // tool would be stuck open because the room page blocks the reopen path.
             if (LabOpen) { LabOpen = false; LabEvents = false; ClearPending(); Refresh(); return; }
-            if (Busy || InRoom) return;
+            if (AccessoryEditorOpen || ConsumableEditorOpen || Busy || InRoom) return;
             LabOpen = true; HelpOpen = false; LabEvents = false; ClearPending(); Refresh();
 #endif
         }
@@ -511,6 +682,9 @@ namespace Ruin.Runtime
             var actor = Battle.Find(InspectedId);
             if (actor == null || !actor.Player || actor.Dead) actor = Run.Heroes.FirstOrDefault(a => !a.Dead);
             if (actor == null || Battle.Outcome != BattleOutcome.Active) return;
+            // ChangeSanity refuses while the potion is active, so the tool must say so instead of claiming
+            // it changed anything.
+            if (actor.SanityLocked) { Hint = "理智已被锁定，无法调整。"; Refresh(); return; }
             Battle.ChangeSanity(actor, value - actor.Sanity, "验收工具调整");
             Hint = "已改变实际理智；本回合形态固定，下回合才重新抽取。";
             Refresh();
@@ -614,6 +788,54 @@ namespace Ruin.Runtime
             foreach (var item in LimbSystem.Resolve(Catalog.Rules().Limbs).Prosthetics)
                 if (!Run.Prosthetics.Any(p => p != null && p.Id == item.Id)) Run.Prosthetics.Add(item);
             Hint = "验收工具已发放全部义肢。";
+            Refresh();
+        }
+
+        public void DebugGrantAllAccessories()
+        {
+            if (Run == null) return;
+            int granted = 0;
+            foreach (var item in AccessorySystem.Defaults)
+            {
+                if (item == null) continue;
+                Run.AccessoryStock.Add(AccessorySystem.Clone(item));
+                granted++;
+            }
+            Hint = "验收工具已发放全部 " + granted + " 件饰品。";
+            Refresh();
+        }
+
+        public void DebugGrantAccessory(AccessoryKind kind)
+        {
+            if (Run == null) return;
+            var item = AccessorySystem.Defaults.FirstOrDefault(a => a != null && a.Kind == kind);
+            if (item == null) return;
+            Run.AccessoryStock.Add(AccessorySystem.Clone(item));
+            Hint = "验收工具已发放「" + item.Name + "」。";
+            Refresh();
+        }
+
+        public void DebugGrantAllConsumables()
+        {
+            if (Run == null) return;
+            int granted = 0;
+            foreach (var item in ConsumableSystem.Defaults)
+            {
+                if (item == null) continue;
+                Run.Consumables.Add(ConsumableSystem.Clone(item));
+                granted++;
+            }
+            Hint = "验收工具已发放全部 " + granted + " 件道具。";
+            Refresh();
+        }
+
+        public void DebugGrantConsumable(ConsumableKind kind)
+        {
+            if (Run == null) return;
+            var item = ConsumableSystem.ForKind(kind);
+            if (item == null) return;
+            Run.Consumables.Add(ConsumableSystem.Clone(item));
+            Hint = "验收工具已发放「" + item.Name + "」。";
             Refresh();
         }
 

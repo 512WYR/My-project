@@ -1,0 +1,86 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: bleed
+  m_EditorClassIdentifier: 
+  Id: bleed
+  DisplayName: "\u6D41\u8840\u602A"
+  Subtitle: "\u4F18\u5148\u653B\u51FB\u6D41\u8840\u6700\u591A\u7684\u89D2\u8272"
+  Silhouette: enemy
+  MaxHp: 22
+  Speed: 5
+  SanityOffset: 0
+  EnemyPattern: 2
+  Attack: 3
+  Accuracy: 0.9
+  CritChance: 0
+  Dodge: 0
+  Defense: 0
+  BasicSkills: []
+  PrimalSkills: []
+  TechnicalSpecial: {fileID: 0}
+  Behavior: 2
+  EnemySkills:
+  - Id: e_bleed_strike
+    Name: "\u6D41\u8840\u653B\u51FB"
+    Description: "\u6D41\u8840\u653B\u51FB"
+    Effect: 0
+    Target: 0
+    Multiplier: 1
+    ActorRanks: 15
+    TargetRanks: 7
+    Uses: 0
+    Bleed: 2
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 0
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: 0
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 0
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0
+    FollowupPercent: 50
+    SanityDamage: 0
+    SanityAdjacent: 0
+    TargetCount: 0
+    TargetRule: 2
+    GuardReduction: 0
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 0
+      Area: 0
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 0
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

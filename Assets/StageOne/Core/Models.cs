@@ -9,7 +9,8 @@ namespace Ruin.Core
     // simply changed what they switch: the whole skill list, not a single slot.
     public enum SkillForm { Technical, Basic, Primal }
     public enum MentalState { None, Composed, Agitated }
-    public enum SkillEffect { Attack, Heal, Protect, Buff }
+    // Sanity sits next to Attack/Heal as its own effect: 理智怪 has no hit roll and deals no HP damage.
+    public enum SkillEffect { Attack, Heal, Protect, Buff, Sanity }
     public enum TargetSide { Enemy, Ally }
     // Choose = the player picks one main target. All = the skill sweeps the whole side and needs no pick.
     public enum SkillTargeting { Choose, All }
@@ -22,7 +23,27 @@ namespace Ruin.Core
     public enum RiderArea { Self, SelfAdjacent, Chosen }
     public enum ActionKind { Skill, Swap }
     public enum BattleOutcome { Active, Victory, Retreat, Defeat }
+    // Legacy pattern enemies (the three stage-one dummies) keep their scripted behaviour. Designed
+    // monsters carry SkillSpec data and run through the enemy skill AI instead. The enum is append-only:
+    // Unity assets may serialize these values.
     public enum EnemyPattern { Cleaver, Whisperer, Hunter }
+    public enum EnemyBehavior
+    {
+        Simple,          // Random target inside the skill's TargetRanks.
+        Sanity,          // 理智怪: sanity drain from the back, plain melee in the front rank.
+        Bleed,           // 流血怪: prefer the target already carrying the most bleed.
+        HighDamage,      // 高伤怪: front skill and back skill differ only by rank.
+        Tank,            // 肉盾怪: guard, then guard/attack alternation.
+        Healer,          // 回血怪: heal the most wounded ally, retreat from the front.
+        CopyBoss,        // Boss1: copies party members and refills dead copies.
+        GiantBoss,       // Boss2: occupies three ranks, cycles 1-2-1-2-3, heals on hero death.
+        RandomSummoner,  // Boss3 part: is replaced by a random normal monster at battle start.
+        SteamMachine,    // Boss3 part: immobile, fires when operated twice.
+        Operator         // Boss3 part: operates the machine from rank 4 every other round.
+    }
+    // How an enemy skill picks among its legal targets. Random is the default and is the only rule the
+    // plain monsters use; the other two serve the bleed monster and the healer's "most wounded" rule.
+    public enum EnemyTargetRule { Random, LowestHp, MostBleed }
 
     [Serializable]
     public sealed class SkillRider
@@ -82,6 +103,18 @@ namespace Ruin.Core
         public double GrantAccuracy;
         public int FollowupPercent = 50;
 
+        // ---- designed-monster fields ----
+        // Sanity is a separate effect, not a rider: the drain lands without an accuracy roll and without
+        // touching HP. SanityAdjacent is the elite 理智怪's bleed-out onto both neighbours.
+        public int SanityDamage;
+        public int SanityAdjacent;
+        // How many separate targets the skill takes. 0 keeps the older Targeting/Area behaviour; anything
+        // above zero makes the enemy AI roll the hit independently for each drawn target.
+        public int TargetCount;
+        public EnemyTargetRule TargetRule = EnemyTargetRule.Random;
+        // When set, an attack that is intercepted by a guard loses this share of its damage.
+        public double GuardReduction;
+
         // ---- randomness ----
         public bool RandomTarget;        // The target is drawn instead of picked.
         public double FriendlyFireChance; // When the sweep finds no second enemy, this may hit a neighbour.
@@ -98,6 +131,9 @@ namespace Ruin.Core
         public string Silhouette; // Replaces HeroRole: "warrior" / "shield" / "gunner" / "medic", or null for enemies.
         public int MaxHp;
         public int Speed;
+        // Starting enemy rank. -1 means "use the array index", which keeps the old constructor contract
+        // for heroes and tests; a formation instead names the rank explicitly so empty slots stay empty.
+        public int StartRank = -1;
         // Character combat attributes. They are static per character and never derived from sanity.
         public int Attack = 10;
         public double Accuracy = 0.9;
@@ -106,11 +142,33 @@ namespace Ruin.Core
         public double Defense;
         public double SanityOffset;
         public EnemyPattern Pattern;
+        // ---- designed-monster fields (ignored by legacy pattern enemies) ----
+        public EnemyBehavior Behavior = EnemyBehavior.Simple;
+        // Ranks the actor occupies: the giant boss covers ranks 1-3, the steam machine ranks 2-3.
+        public int RankWidth = 1;
+        public bool Immobile;              // Never moved by dragging or by a back-step.
+        // A monster that acts once every N rounds. ActionPhase shifts which rounds count.
+        public int ActionInterval = 1;
+        public int ActionPhase;
+        // Giant boss: HP restored whenever a party member dies.
+        public int BossHealOnHeroDeath;
+        // Share of an intercepted hit absorbed by this actor when it guards somebody.
+        public double GuardReduction;
+        // RandomSummoner: the pool it turns into at battle start (normal monsters only).
+        public ActorSpec[] SummonPool = new ActorSpec[0];
         public SkillSpec[] BasicSkills = EmptySkills;
         public SkillSpec[] PrimalSkills = EmptySkills;
         public SkillSpec[] TechnicalSkills = EmptySkills;
 
         public static readonly SkillSpec[] EmptySkills = new SkillSpec[0];
+
+        public int Width { get { return Math.Max(1, RankWidth); } }
+        public bool ActsOn(int round)
+        {
+            if (ActionInterval <= 1) return true;
+            int offset = round - 1 - ActionPhase;
+            return offset >= 0 && offset % ActionInterval == 0;
+        }
 
         public SkillSpec[] SkillsFor(SkillForm form)
         {
@@ -175,6 +233,17 @@ namespace Ruin.Core
         public int Interrupted;
         public bool Defending;
         public string ProtectorId;
+        // Damage share absorbed while this actor is guarding somebody (elite tank: 0.25).
+        public double GuardReduction;
+        // ---- designed-monster runtime state ----
+        // Counts the enemy's own completed actions: the tank alternates guard/attack and the giant boss
+        // walks its 1-2-1-2-3 cycle off this counter.
+        public int EnemyActionCount;
+        public int Operations;      // Steam machine: successful operations accumulated.
+        public int BlastRound;      // Steam machine: round on which the charged blast fires; 0 = not charged.
+        public int NextSpawnRound;  // Operator: round on which it may be summoned again.
+        public bool IsCopy;         // Boss1 copy, so refills only top up the copies it owns.
+        public string SummonedBy;   // Boss1 body id for a copy.
         // Per-skill use counters. Counted by skill Id, so a skill keeps its spent uses across forms and
         // is only refilled when the next battle resets the actor.
         public List<SkillUse> Uses = new List<SkillUse>();
@@ -194,9 +263,25 @@ namespace Ruin.Core
         // Four parts, hero side only. Read the effective attributes through BattleEngine so the limb
         // penalties are applied; Speed below stays the raw character value.
         public List<LimbState> Limbs = new List<LimbState>();
+        // Run-long equipment. Unequipping moves the item back to RunState.AccessoryStock.
+        public List<AccessorySpec> EquippedAccessories = new List<AccessorySpec>();
+        // Per-battle accessory flags and stacks, reset at the start of every battle.
+        public AccessoryBattleState AccessoryBattle = new AccessoryBattleState();
+        // 理智锁定药剂. SanityLocked is the live battle lock; SanityLockPending is a lock bought outside
+        // battle that activates when the next one starts. Both are cleared when a battle settles.
+        public bool SanityLocked;
+        public bool SanityLockPending;
         public int Speed { get { return Definition.Speed; } }
         public string Name { get { return Definition.Name; } }
         public bool DeathDoor { get { return Player && !Dead && Hp <= 0; } }
+        public int Width { get { return Definition == null ? 1 : Definition.Width; } }
+        public bool OccupiesRank(int rank) { return rank >= Rank && rank < Rank + Width; }
+        public bool OccupiesAnyRank(int rankMask)
+        {
+            for (int rank = Rank; rank < Rank + Width; rank++)
+                if (rank >= 0 && rank < 32 && (rankMask & (1 << rank)) != 0) return true;
+            return false;
+        }
 
         public int UsesLeft(SkillSpec skill)
         {
@@ -225,6 +310,10 @@ namespace Ruin.Core
         public MapState Map = new MapState();
         // Prosthetics the party owns but has not fitted yet.
         public List<ProstheticSpec> Prosthetics = new List<ProstheticSpec>();
+        // Accessories the party owns but has not equipped yet.
+        public List<AccessorySpec> AccessoryStock = new List<AccessorySpec>();
+        // Single-use items the party owns. A successful use removes one entry.
+        public List<ConsumableSpec> Consumables = new List<ConsumableSpec>();
 
         public static RunState Create(ActorSpec[] heroes, uint seed, double? sanityPreset = null, CombatRules rules = null)
         {

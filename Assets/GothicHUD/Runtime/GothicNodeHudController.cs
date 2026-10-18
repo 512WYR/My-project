@@ -151,6 +151,8 @@ namespace GameMake.GothicHUD
                 case RoomView.Supply:
                     if (slot.Index == 0) app.SupplyHeal();
                     else if (slot.Index == 1) app.SupplyCalm();
+                    else if (slot.Index == 2) app.OpenAccessoryEditor();
+                    else if (slot.Index == 3) app.OpenConsumableEditor();
                     break;
             }
         }
@@ -172,7 +174,10 @@ namespace GameMake.GothicHUD
             var app = Source;
             if (!app || app.Run == null || app.Map == null) { SetActive(PageRoot, false); return; }
 
-            bool show = app.AwaitingNode && !app.HelpOpen && !app.LabOpen;
+            // The accessory manager is drawn by StageOneView's canvas above this HUD, so the node pages
+            // step aside while it is open.
+            bool show = app.AwaitingNode && !app.HelpOpen && !app.LabOpen
+                && !app.AccessoryEditorOpen && !app.ConsumableEditorOpen;
             bool route = show && app.Room == RoomView.Map && !app.Map.Finished && app.Map.Current != null;
             bool runEnd = show && app.Room == RoomView.Map && !route;
             bool room = show && app.Room != RoomView.Map;
@@ -198,6 +203,7 @@ namespace GameMake.GothicHUD
 
             SetText(RouteHeading, "第 " + step.Floor + " 层  /  共 " + rules.Floors + " 层");
             SetText(RouteStock, "补给 " + app.Map.Supplies + "   ·   持有义肢 " + app.Run.Prosthetics.Count
+                + "   ·   持有饰品 " + app.Run.AccessoryStock.Count
                 + (app.Map.BuffChosen ? "   ·   增益 " + OpeningBuffs.Name(app.Map.Buff) : ""));
             SetText(RouteNote, "已通过 " + app.Map.ResolvedSteps + " 个位置 · 玩家理智 " + app.Run.PlayerSanity.ToString("0.0")
                 + " 同时决定候选数量与房间类型（不受角色 30/70 门槛限制）");
@@ -370,15 +376,16 @@ namespace GameMake.GothicHUD
         {
             string ratio = (app.Catalog.MapRules().SupplyHealRatio * 100).ToString("0");
             SetText(RoomHeading, "补给站");
-            SetText(RoomSubtitle, "治疗全队、修复重伤部位、为断肢安装义肢、静养恢复理智。每项各可用一次。");
+            SetText(RoomSubtitle, "治疗全队、静养恢复理智，或管理饰品与一次性道具。每项各可用一次。");
             SetText(RoomTitle, "可以选择的事");
             SetText(RoomBody, "治疗为每名队员恢复 " + ratio + "% 生命，阵亡成员不会复活。\n"
-                + "静养为玩家理智 +" + Exploration.CalmSanity.ToString("0.#") + "。");
+                + "静养为玩家理智 +" + Exploration.CalmSanity.ToString("0.#") + "。\n"
+                + "部位修复与义肢安装仍在内置页面处理。");
             SetText(RoomNote, "治疗 " + (app.Map.SupplyHealed ? "已使用" : "可用")
                 + "   ·   静养 " + (app.Map.SupplyCalmed ? "已使用" : "可用") + "\n" + StockText(app));
             SetAccent(RoomAccent, Cyan);
 
-            // The two party-wide actions fit the block; the per-hero limb work does not, so it is stated
+            // Three party-wide actions fit the block; the per-hero limb work does not, so it is stated
             // rather than forced in. The built-in page still offers it in StageOne.unity.
             if (Options.Length > 0 && Options[0])
             {
@@ -392,9 +399,23 @@ namespace GameMake.GothicHUD
                 Options[1].Render(app.Map.SupplyCalmed ? "静养已使用" : "静养",
                     "玩家理智 +" + Exploration.CalmSanity.ToString("0.#"), Gold, app.Map.SupplyCalmed, !app.Map.SupplyCalmed);
             }
-            for (int i = 2; i < Options.Length; i++) if (Options[i]) Options[i].Hide();
-            LayoutOptions(2, OptionInnerLeft);
-            SetOptionsPlaceholder("修复部位 / 安装义肢\n按角色与部位逐个处理，本页暂未接入。", 970f, 740f);
+            if (Options.Length > 2 && Options[2])
+            {
+                Options[2].Index = 2;
+                Options[2].Render("管理饰品",
+                    "持有 " + app.Run.AccessoryStock.Count + " 件 · 为队员装备或卸下",
+                    Cyan, false, true);
+            }
+            if (Options.Length > 3 && Options[3])
+            {
+                Options[3].Index = 3;
+                Options[3].Render("使用道具",
+                    "持有 " + app.Run.Consumables.Count + " 件 · 战斗外也可使用",
+                    Gold, false, true);
+            }
+            for (int i = 4; i < Options.Length; i++) if (Options[i]) Options[i].Hide();
+            LayoutOptions(4, OptionStart(4));
+            SetOptionsPlaceholder(null, OptionInnerLeft, OptionInnerWidth);
             SetContinue("离开补给站", "继续前进");
         }
 
@@ -424,13 +445,13 @@ namespace GameMake.GothicHUD
             var node = app.ActiveNode;
             SetText(RoomHeading, "宝箱房");
             SetText(RoomSubtitle, "第 " + app.Map.Floor + " 层   ·   " + (node == null ? "未知" : node.Index + " 号位置"));
-            SetText(RoomTitle, "这个房间还没有内容");
-            SetText(RoomBody, "宝箱房已经进入路线，理智 50 时占房间概率的 10%，但它发什么奖励还没有定，"
-                + "所以进来不发放任何东西。\n奖励确定后在这里补上即可，权重可以在 GameCatalog 资产的 MapNodeOdds 里调。");
+            SetText(RoomTitle, "宝箱里装着的是饰品");
+            SetText(RoomBody, "每个宝箱房只发一次，登记在节点的已领取标记上，重新打开页面不会重复抽取。\n"
+                + "饰品在补给站或验收工具里装备；专属饰品只能由对应角色使用。");
             SetText(RoomNote, app.RoomNote ?? "");
             SetAccent(RoomAccent, Gold);
 
-            SetOptionsPlaceholder("内容待定，暂时没有选项。", OptionInnerLeft, OptionInnerWidth);
+            SetOptionsPlaceholder("宝箱已经结算，离开继续前进。", OptionInnerLeft, OptionInnerWidth);
             SetContinue("离开宝箱房", "继续前进");
         }
 
@@ -496,10 +517,12 @@ namespace GameMake.GothicHUD
 
         private static string StockText(StageOneApp app)
         {
+            string accessories = "持有饰品 " + app.Run.AccessoryStock.Count + " 件";
+            string consumables = "持有道具 " + app.Run.Consumables.Count + " 件";
             var items = app.Run.Prosthetics;
-            if (items.Count == 0) return "持有义肢：无";
+            if (items.Count == 0) return "持有义肢：无   ·   " + accessories + "   ·   " + consumables;
             var groups = items.GroupBy(p => p.Id).Select(g => g.First().Name + (g.Count() > 1 ? " ×" + g.Count() : ""));
-            return "持有义肢：" + string.Join("   ·   ", groups);
+            return "持有义肢：" + string.Join("   ·   ", groups) + "   ·   " + accessories + "   ·   " + consumables;
         }
 
         private static string FloorSummary(StageOneApp app, int floor)
@@ -523,10 +546,10 @@ namespace GameMake.GothicHUD
                 case NodeType.Event: return "面对情境并做出选择。";
                 case NodeType.Altar: return "祭坛：代价换收获。";
                 case NodeType.Boss: return "本层终点。胜利即通关，全队阵亡则本局结束。";
-                case NodeType.Supply: return "治疗、修复部位、安装义肢、静养。";
+                case NodeType.Supply: return "治疗、修复部位、安装义肢、静养、管理饰品。";
                 case NodeType.Elevator: return "本层到此为止，通往下一层。";
                 case NodeType.Opening: return "三选一的全队增益。";
-                case NodeType.Treasure: return "宝箱房（内容待定，进去目前不发放任何东西）。";
+                case NodeType.Treasure: return "宝箱房：获得一件饰品（每个宝箱只发一次）。";
                 default: return "";
             }
         }

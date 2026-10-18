@@ -149,9 +149,13 @@ namespace Ruin.Core
             var spec = new ActorSpec
             {
                 Id = source.Id, Name = source.Name, Subtitle = source.Subtitle, Silhouette = source.Silhouette,
-                MaxHp = source.MaxHp, Speed = source.Speed, Attack = source.Attack,
+                MaxHp = source.MaxHp, Speed = source.Speed, StartRank = source.StartRank, Attack = source.Attack,
                 Accuracy = source.Accuracy, CritChance = source.CritChance, Dodge = source.Dodge,
                 Defense = source.Defense, SanityOffset = source.SanityOffset, Pattern = source.Pattern,
+                Behavior = source.Behavior, RankWidth = source.RankWidth, Immobile = source.Immobile,
+                ActionInterval = source.ActionInterval, ActionPhase = source.ActionPhase,
+                BossHealOnHeroDeath = source.BossHealOnHeroDeath, GuardReduction = source.GuardReduction,
+                SummonPool = source.SummonPool,
                 BasicSkills = source.BasicSkills, PrimalSkills = source.PrimalSkills, TechnicalSkills = source.TechnicalSkills
             };
             if (type == NodeType.EliteBattle)
@@ -193,6 +197,13 @@ namespace Ruin.Core
             if (index >= pool.Length) index = pool.Length - 1;
             var pick = pool[index];
             return new ProstheticSpec(pick.Id, pick.Name, pick.Part, pick.Description);
+        }
+
+        // Chest rooms and the "饰品" event rewards draw from the code table. A fresh copy is returned so
+        // the stock never aliases AccessorySystem.Defaults.
+        public static AccessorySpec DropAccessory(RunRandom random)
+        {
+            return AccessorySystem.Drop(random);
         }
     }
 }

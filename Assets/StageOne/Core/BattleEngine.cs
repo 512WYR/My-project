@@ -27,11 +27,21 @@ namespace Ruin.Core
                 ResetBattleEffects(hero);
             }
             for (int i = 0; i < enemies.Length; i++)
-                Enemies.Add(new ActorState { Id = "enemy_" + i, Definition = enemies[i], Player = false, Rank = i, Hp = enemies[i].MaxHp, Sanity = 50 });
+            {
+                var spec = ResolveSummoner(enemies[i]);
+                if (spec == null) continue;
+                Enemies.Add(new ActorState
+                {
+                    Id = "enemy_" + i, Definition = spec, Player = false,
+                    Rank = spec.StartRank >= 0 ? spec.StartRank : i,
+                    Hp = spec.MaxHp, Sanity = 50
+                });
+            }
             Run.Battles++;
             Log("第 " + Run.Battles + " 场演练开始。队员理智与持续精神状态沿用。", "system");
             if (roster.Count == 0) { Finish(BattleOutcome.Defeat); return; }
             if (Enemies.Count == 0) { Finish(BattleOutcome.Victory); return; }
+            ApplyBattleStartAccessories();
             Advance();
         }
 
@@ -42,7 +52,49 @@ namespace Ruin.Core
             actor.BlockCharges = 0; actor.Counter = false; actor.Followup = false; actor.FollowupAttack = 0;
             actor.Imbalance = 0; actor.ImbalanceImmuneRound = -1;
             actor.DefenseBuff = 0; actor.AccuracyBuff = 0; actor.SelfVulnerable = 0;
+            actor.GuardReduction = 0; actor.EnemyActionCount = 0;
+            actor.Operations = 0; actor.BlastRound = 0; actor.NextSpawnRound = 0;
+            actor.IsCopy = false; actor.SummonedBy = null;
             actor.Uses.Clear();
+            actor.AccessoryBattle = new AccessoryBattleState();
+            // 理智锁定药剂 used outside battle primes this fight. A lock bought during the previous fight
+            // was already cleared when it settled, so this is the only place a pending lock matures.
+            actor.SanityLocked = actor.SanityLockPending;
+            actor.SanityLockPending = false;
+        }
+
+        // Runs after every hero's per-battle flags are reset and after the enemy roster exists, so the heart
+        // can mark a real target. Randomness is only drawn by accessories that are actually equipped.
+        private void ApplyBattleStartAccessories()
+        {
+            foreach (var hero in Run.Heroes.Where(h => h != null && !h.Dead).ToArray())
+            {
+                var state = hero.AccessoryBattle;
+                if (state == null) { state = new AccessoryBattleState(); hero.AccessoryBattle = state; }
+
+                if (AccessorySystem.Has(hero, AccessoryKind.Addiction)) state.AddictionActive = true;
+
+                if (AccessorySystem.Has(hero, AccessoryKind.Heart))
+                {
+                    var pool = Enemies.Where(e => !e.Dead).ToArray();
+                    if (pool.Length > 0)
+                    {
+                        var target = pool[Math.Min(pool.Length - 1, (int)(Run.Random.NextUnit() * pool.Length))];
+                        state.HeartActive = true;
+                        state.HeartTargetId = target.Id;
+                        Log(hero.Name + " 的跃动心脏标记了 " + target.Name + "。", "system", hero.Id, target.Id);
+                    }
+                }
+
+                if (AccessorySystem.Has(hero, AccessoryKind.RustMedal))
+                {
+                    int loss = Math.Max(1, (int)Math.Ceiling(hero.Definition.MaxHp * AccessorySystem.RustEntryLoss - 1e-9));
+                    Log(hero.Name + " 的锈血勋章索取 " + loss + " 点生命作为入场代价。", "system", hero.Id);
+                    Damage(hero, loss, hero.Id, false, true, true);
+                    if (AccessorySystem.AddSkillUse(hero, AccessorySystem.RustSkillId, 1) && !hero.Dead)
+                        Log(hero.Name + " 的锈血勋章让「带伤强攻」多出 1 次使用。", "system", hero.Id);
+                }
+            }
         }
 
         public IEnumerable<ActorState> All { get { return Run.Heroes.Concat(Enemies); } }
@@ -91,14 +143,28 @@ namespace Ruin.Core
                         actor.SelfVulnerable = 0; actor.BlockCharges = 0;
                         actor.Counter = false; actor.Followup = false; actor.FollowupAttack = 0;
                     }
+                    // Boss summons and refills happen before the turn queue is built, so a unit summoned
+                    // "at the end of round one" is already standing when round two starts.
+                    RunRoundStartHooks();
                     foreach (var actor in All.Where(a => !a.Dead).OrderByDescending(a => EffectiveSpeed(a)).ThenBy(a => a.Player ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal))
+                    {
                         turns.Enqueue(actor);
+                        // 跃动心脏：同一角色紧接着再行动一次。失败后的 ExtraActions 返回 0，下一回合起自然消失。
+                        for (int extra = AccessorySystem.ExtraActions(actor); extra > 0; extra--) turns.Enqueue(actor);
+                    }
                     Log("—— 第 " + Round + " 回合 ——", "round");
                 }
                 var next = turns.Dequeue();
                 if (next.Dead) continue;
                 next.Defending = false;
-                foreach (var ally in Run.Heroes) if (ally.ProtectorId == next.Id) ally.ProtectorId = null;
+                // A guard lasts until the protector's own next turn begins, for either side.
+                foreach (var ward in All) if (ward.ProtectorId == next.Id) ward.ProtectorId = null;
+                // A monster on a two-round action interval simply passes on its off round.
+                if (!next.Player && !next.Definition.ActsOn(Round))
+                {
+                    Log(next.Name + " 尚未准备好下一次行动。", "control", null, next.Id);
+                    continue;
+                }
                 if (next.BleedTurns > 0)
                 {
                     next.BleedTurns--;
@@ -184,7 +250,7 @@ namespace Ruin.Core
             var skill = SkillFor(Current, skillIndex);
             if (!NeedsTarget(skill)) return Enumerable.Empty<ActorState>();
             var side = skill.Target == TargetSide.Ally ? (IEnumerable<ActorState>)Run.Heroes : Enemies;
-            return side.Where(a => !a.Dead && (skill.TargetRanks & (1 << a.Rank)) != 0
+            return side.Where(a => !a.Dead && a.OccupiesAnyRank(skill.TargetRanks)
                 && (skill.Effect != SkillEffect.Heal || a.Hp < a.Definition.MaxHp || (skill.Cleanse && a.BleedTurns > 0))
                 && (skill.Effect != SkillEffect.Protect || a != Current));
         }
@@ -199,6 +265,24 @@ namespace Ruin.Core
         {
             if (request.Kind == ActionKind.Swap) return ExecuteSwap(request, out error);
             return ExecuteSkill(request, out error);
+        }
+
+        // A consumable used in battle spends the current hero's action. Anything refused here leaves the
+        // stock, the turn and the random sequence exactly as they were.
+        public bool UseConsumable(int stockIndex, string targetId, out string note)
+        {
+            note = null;
+            if (Outcome != BattleOutcome.Active) { note = "战斗已经结束。"; return false; }
+            if (Current == null || !Current.Player) { note = "现在不是我方行动。"; return false; }
+            if (Run.Consumables == null || stockIndex < 0 || stockIndex >= Run.Consumables.Count)
+            { note = "请选择库存中的道具。"; return false; }
+            var target = Run.Heroes.FirstOrDefault(a => a != null && a.Id == targetId);
+            if (target == null) { note = "请选择一名存活队员。"; return false; }
+            var item = Run.Consumables[stockIndex];
+            if (!ConsumableSystem.Use(Run, target, stockIndex, true, out note)) return false;
+            Log(note, item.Kind == ConsumableKind.HpRestore ? "heal" : "sanity", Current.Id, target.Id);
+            if (!CheckEnd()) Advance();
+            return true;
         }
 
         private bool ExecuteSwap(ActionRequest request, out string error)
@@ -247,43 +331,104 @@ namespace Ruin.Core
             ApplyBuffs(actor, actor, skill.SelfGrant, skill);
             if (skill.Effect == SkillEffect.Attack)
             {
-                ResolveAttack(actor, primary, skill);
+                bool hit = ResolveAttack(actor, primary, skill);
+                ApplyAttackAccessories(actor, skill, hit);
                 return;
             }
             // Healing, guarding and buffs land on the whole sweep without a hit roll.
             foreach (var target in BuildArea(actor, primary, skill))
                 ApplySupport(actor, target, skill);
+            if (skill.Effect == SkillEffect.Heal) ApplyHealAccessories(actor);
             ApplyRider(actor, primary, skill, 0);
         }
 
-        private void ResolveAttack(ActorState actor, ActorState primary, SkillSpec skill)
+        private bool ResolveAttack(ActorState actor, ActorState primary, SkillSpec skill)
         {
             var set = BuildArea(actor, primary, skill);
             var main = primary ?? set.FirstOrDefault();
-            if (main == null) return;
+            if (main == null) return false;
 
             // A displaced enemy that is imbalanced this round cannot dodge the displacement.
             bool autoHit = skill.PullToFront && main.Imbalance > 0 && main.ImbalanceImmuneRound != Round;
             if (!autoHit)
             {
                 if (!Roll(EffectiveAccuracy(actor, skill)))
-                { Log(actor.Name + " · " + skill.Name + " 未命中。", "miss", actor.Id, main.Id); ApplyRider(actor, primary, skill, 0); return; }
+                { Log(actor.Name + " · " + skill.Name + " 未命中。", "miss", actor.Id, main.Id); ApplyRider(actor, primary, skill, 0); return false; }
                 if (main.Definition.Dodge > 0 && Roll(main.Definition.Dodge))
-                { Log(actor.Name + " · " + skill.Name + " → " + main.Name + " 被闪避。", "dodge", actor.Id, main.Id); return; }
+                { Log(actor.Name + " · " + skill.Name + " → " + main.Name + " 被闪避。", "dodge", actor.Id, main.Id); return false; }
             }
-            bool critical = Roll(actor.Definition.CritChance);
+            // 穿肠弹把暴击变成必然，并因此省掉一次暴击骰。
+            bool critical = AccessorySystem.AlwaysCrit(actor) || Roll(actor.Definition.CritChance);
             Log(actor.Name + " · " + skill.Name + (critical ? " 暴击！" : ""), "action", actor.Id, main.Id);
             int dealt = 0;
             foreach (var target in set)
             {
                 if (target.Dead) continue;
                 int amount = DamageFor(actor, target, skill, main, critical);
-                Damage(target, amount, actor.Id);
+                // A tank standing in front of the target takes the hit instead. The guard's own share is
+                // the only reduction it adds; the target's defense no longer applies because it was never
+                // actually struck.
+                var victim = GuardedTarget(target);
+                if (victim != target)
+                {
+                    amount = ReduceForGuard(amount, victim);
+                    Log(victim.Name + " 为 " + target.Name + " 挡下攻击。", "guard", victim.Id, target.Id);
+                }
+                Damage(victim, amount, actor.Id);
                 dealt += amount;
-                if (!target.Dead) ApplyOnHit(actor, target, skill, target == main);
+                if (!victim.Dead) ApplyOnHit(actor, victim, skill, target == main);
             }
             ApplyRider(actor, primary, skill, dealt);
             TryFollowups(actor, main, false);
+            return true;
+        }
+
+        // 穿肠弹和成瘾物 both ride on the attack action. The gutter's backlash only lands on a hit; the
+        // addiction's own top-up and vulnerability stack happen every time the hero attacks, hit or miss.
+        private void ApplyAttackAccessories(ActorState actor, SkillSpec skill, bool hit)
+        {
+            if (actor == null || !actor.Player || actor.Dead) return;
+            if (hit && AccessorySystem.Has(actor, AccessoryKind.Gutter))
+            {
+                if (!AccessorySystem.LimbLock(actor))
+                {
+                    var part = AccessorySystem.RandomPart(Run.Random, actor);
+                    bool severed = LimbSystem.Damage(actor, part, AccessorySystem.GutterLimbDamage);
+                    Log(actor.Name + " 的穿肠弹反噬" + LimbSystem.PartName(part) + " -" + AccessorySystem.GutterLimbDamage
+                        + (severed ? "，部位断裂！" : "。"), "limb", actor.Id, actor.Id);
+                }
+                actor.BleedDamage += AccessorySystem.GutterBleed;
+                actor.BleedTurns = Math.Max(actor.BleedTurns, 2);
+                Log(actor.Name + " 因穿肠弹流血 " + actor.BleedDamage + " × " + actor.BleedTurns + " 次行动。",
+                    "bleed", actor.Id, actor.Id, AccessorySystem.GutterBleed);
+            }
+            if (AccessorySystem.Has(actor, AccessoryKind.Addiction) && actor.AccessoryBattle.AddictionActive)
+            {
+                ActorState target = actor;
+                if (target.Sanity >= 100)
+                {
+                    var pool = Run.Heroes.Where(h => !h.Dead && h.Sanity < 100).ToArray();
+                    target = pool.Length == 0 ? null
+                        : pool[Math.Min(pool.Length - 1, (int)(Run.Random.NextUnit() * pool.Length))];
+                }
+                if (target != null)
+                    ChangeSanity(target, AccessorySystem.AddictionSanityRestore, "成瘾物");
+                var state = actor.AccessoryBattle;
+                state.AddictionStacks = Math.Min(AccessorySystem.AddictionMaxStacks, state.AddictionStacks + 1);
+                Log(actor.Name + " 的成瘾加深：受到伤害 +"
+                    + ((AccessorySystem.DamageTakenFactor(actor) - 1) * 100).ToString("0.#") + "%。", "sanity", actor.Id);
+            }
+        }
+
+        // 献血针筒: one self-cost per heal skill cast, not per target, so a party heal still charges once.
+        private void ApplyHealAccessories(ActorState actor)
+        {
+            if (actor == null || !actor.Player || actor.Dead || !AccessorySystem.Has(actor, AccessoryKind.Syringe)) return;
+            var victim = AccessorySystem.RandomLivingHero(Run, Run.Random);
+            if (victim == null) return;
+            int amount = Math.Max(1, (int)Math.Ceiling(victim.Definition.MaxHp * AccessorySystem.SyringeSelfCost - 1e-9));
+            Log(actor.Name + " 的献血针筒索取 " + victim.Name + " 的最大生命 " + amount + " 点。", "damage", actor.Id, victim.Id, amount);
+            Damage(victim, amount, actor.Id, false, true);
         }
 
         // The sweep around the main target. Only enemy-side skills read Adjacent/Splash/Pierce; ally-side
@@ -311,10 +456,10 @@ namespace Ruin.Core
                 }
                 case SkillArea.Splash:
                     result.AddRange(side.Where(a => !a.Dead && a != primary)
-                        .OrderBy(a => Math.Abs(a.Rank - primary.Rank)).ThenBy(a => a.Rank).Take(skill.AreaMax));
+                        .OrderBy(a => RankGap(a, primary)).ThenBy(a => a.Rank).Take(skill.AreaMax));
                     break;
                 case SkillArea.Pierce:
-                    result.AddRange(side.Where(a => !a.Dead && a != primary && a.Rank > primary.Rank)
+                    result.AddRange(side.Where(a => !a.Dead && a != primary && a.Rank > primary.Rank + primary.Width - 1)
                         .OrderBy(a => a.Rank).Take(skill.AreaMax));
                     break;
             }
@@ -326,8 +471,18 @@ namespace Ruin.Core
 
         private static void AddByRank(List<ActorState> result, IEnumerable<ActorState> side, int rank)
         {
-            var actor = side.FirstOrDefault(a => !a.Dead && a.Rank == rank);
-            if (actor != null) result.Add(actor);
+            var actor = side.FirstOrDefault(a => !a.Dead && a.OccupiesRank(rank));
+            if (actor != null && !result.Contains(actor)) result.Add(actor);
+        }
+
+        // Distance between an actor and a rank, treating every rank a wide actor covers as distance 0.
+        private static int RankGap(ActorState actor, ActorState other)
+        {
+            if (actor.OccupiesAnyRank(other.Rank)) return 0;
+            if (other.OccupiesAnyRank(actor.Rank)) return 0;
+            int left = Math.Abs(actor.Rank - other.Rank);
+            int right = Math.Abs(actor.Rank - (other.Rank + other.Width - 1));
+            return Math.Min(left, right);
         }
 
         private IEnumerable<ActorState> FriendlyFire(ActorState actor, double chance)
@@ -349,6 +504,7 @@ namespace Ruin.Core
             // The wound gambit drops every limb penalty for this one swing.
             double attack = skill.IgnoreLimbPenalty ? actor.Definition.Attack
                 : actor.Definition.Attack * LimbSystem.AttackFactor(actor, Rules.Limbs);
+            attack *= AccessorySystem.AttackMultiplier(actor);
             if (skill.HpMissingDamageScale > 0 && actor.Definition.MaxHp > 0)
                 multiplier += skill.HpMissingDamageScale * Math.Max(0, actor.Definition.MaxHp - actor.Hp) / actor.Definition.MaxHp;
             int value = attack <= 0 || multiplier <= 0 ? 0 : (int)Math.Ceiling(attack * multiplier - 1e-9);
@@ -403,7 +559,10 @@ namespace Ruin.Core
             if (skill.Effect == SkillEffect.Protect)
             {
                 target.ProtectorId = actor.Id;
-                Log(actor.Name + " 守护 " + target.Name + "，本回合代为承受攻击。", "guard", actor.Id, target.Id);
+                // The reduction belongs to the guarding actor, not the ward, and only ever applies to a
+                // hit it intercepts. The elite tank keeps 25%; everyone else keeps zero.
+                actor.GuardReduction = Math.Max(0, skill.GuardReduction);
+                Log(actor.Name + " 守护 " + target.Name + "，持续到自身下次行动。", "guard", actor.Id, target.Id);
             }
             else if (skill.Cleanse)
             {
@@ -468,6 +627,26 @@ namespace Ruin.Core
             }
         }
 
+        // Only enemies guard in this design. One level of redirection is enough: a guarded protector cannot
+        // chain the hit onward.
+        private ActorState GuardedTarget(ActorState target)
+        {
+            if (target == null || target.Player || target.Dead || string.IsNullOrEmpty(target.ProtectorId)) return target;
+            var protector = Enemies.FirstOrDefault(e => e.Id == target.ProtectorId && !e.Dead);
+            return protector == null || protector == target ? target : protector;
+        }
+
+        private static int ReduceForGuard(int amount, ActorState guard)
+        {
+            if (amount <= 0 || guard == null) return amount;
+            double reduction = guard.GuardReduction;
+            // 殉道锁链 adds another 50% to whatever share the guard already absorbs.
+            if (AccessorySystem.Has(guard, AccessoryKind.MartyrChain))
+                reduction = 1 - (1 - reduction) * (1 - AccessorySystem.MartyrGuardReduction);
+            if (reduction <= 0) return amount;
+            return Math.Max(1, (int)Math.Ceiling(amount * (1 - reduction) - 1e-9));
+        }
+
         private bool ConsumeBlock(ActorState target)
         {
             if (target.BlockCharges <= 0) return false;
@@ -497,9 +676,17 @@ namespace Ruin.Core
 
         private void PullToFront(ActorState enemy)
         {
+            if (enemy.Definition.Immobile)
+            {
+                Log(enemy.Name + " 固定在原地，没有被拖拽。", "move", null, enemy.Id);
+                return;
+            }
             int from = enemy.Rank;
             if (from <= 0) return;
-            foreach (var other in Enemies.Where(e => e != enemy && !e.Dead && e.Rank < from)) other.Rank++;
+            // Wide and immobile units do not step aside, so a pull either finds room or fails.
+            int shift = enemy.Width;
+            foreach (var other in Enemies.Where(e => e != enemy && !e.Dead && e.Rank < from && !e.Definition.Immobile).ToArray())
+                other.Rank = Math.Min(3, other.Rank + shift);
             enemy.Rank = 0;
             Log(enemy.Name + " 被拖拽到 1 号位。", "move", null, enemy.Id);
         }
@@ -509,15 +696,18 @@ namespace Ruin.Core
         public double EffectiveAccuracy(ActorState actor, SkillSpec skill)
         {
             if (actor == null || skill == null) return 0;
-            return SanityProbability.Clamp(actor.Definition.Accuracy * LimbSystem.AccuracyFactor(actor, Rules.Limbs)
+            double value = SanityProbability.Clamp(actor.Definition.Accuracy * LimbSystem.AccuracyFactor(actor, Rules.Limbs)
                 + (skill.Accuracy - Rules.SkillAccuracyBaseline)
                 + Rules.Mental(actor.Mental).AccuracyModifier
                 + actor.AccuracyBuff, 0, 1);
+            // 穿肠弹 raises accuracy to a floor, not to a fixed value.
+            return Math.Max(value, AccessorySystem.AccuracyFloor(actor));
         }
 
         public double EffectiveAttack(ActorState actor)
         {
-            return actor.Definition.Attack * LimbSystem.AttackFactor(actor, Rules.Limbs);
+            return actor.Definition.Attack * LimbSystem.AttackFactor(actor, Rules.Limbs)
+                * AccessorySystem.AttackMultiplier(actor);
         }
 
         public double EffectiveDefense(ActorState actor)
@@ -533,7 +723,10 @@ namespace Ruin.Core
 
         public int SkillValue(ActorState actor, SkillSpec skill)
         {
-            return Scale(actor.Definition.Attack, skill.Multiplier * LimbSystem.AttackFactor(actor, Rules.Limbs));
+            double multiplier = skill.Multiplier;
+            if (skill.Effect == SkillEffect.Attack) multiplier *= AccessorySystem.AttackMultiplier(actor);
+            else if (skill.Effect == SkillEffect.Heal) multiplier *= AccessorySystem.HealMultiplier(actor);
+            return Scale(actor.Definition.Attack, multiplier * LimbSystem.AttackFactor(actor, Rules.Limbs));
         }
 
         public int CritValue(ActorState actor, SkillSpec skill)
@@ -566,6 +759,14 @@ namespace Ruin.Core
         {
             if (enemy.Dead) return "已被击败";
             if (enemy.Interrupted > 0) return "下一次行动被打断";
+            bool noSkills = enemy.Definition.BasicSkills == null || enemy.Definition.BasicSkills.Length == 0;
+            return noSkills && enemy.Definition.Behavior == EnemyBehavior.Simple
+                ? LegacyIntent(enemy)
+                : DesignedIntent(enemy);
+        }
+
+        private string LegacyIntent(ActorState enemy)
+        {
             var target = EnemyTarget(enemy);
             if (target == null) return "—";
             string text;
@@ -582,6 +783,85 @@ namespace Ruin.Core
             return text;
         }
 
+        // Pure preview: it reads the round and the action counter but never draws from the random sequence,
+        // so a re-render cannot change the fight.
+        private string DesignedIntent(ActorState enemy)
+        {
+            var def = enemy.Definition;
+            switch (def.Behavior)
+            {
+                case EnemyBehavior.SteamMachine:
+                    if (enemy.BlastRound > 0 && Round >= enemy.BlastRound)
+                    {
+                        var blast = FirstUsableSkill(enemy);
+                        return blast == null ? "蓄能完毕" : blast.Name + " → 我方全体\n伤害 " + SkillValue(enemy, blast);
+                    }
+                    return "等待操作（累计 " + enemy.Operations + "/2）";
+                case EnemyBehavior.Operator:
+                    if (enemy.Rank != 3) return "后撤 → 尝试回到 4 号位";
+                    var machine = Enemies.FirstOrDefault(e => !e.Dead && e.Definition.Behavior == EnemyBehavior.SteamMachine);
+                    return machine == null ? "没有可操作的机器" : "操作" + machine.Name + "（累计 " + machine.Operations + "/2）";
+                case EnemyBehavior.Healer:
+                    if (enemy.Rank == 0) return "后撤 → 离开 1 号位，放弃本次治疗";
+                    var heal = FirstUsableSkill(enemy, SkillEffect.Heal);
+                    return heal == null ? "待机" : heal.Name + " → 最虚弱的同伴\n恢复 " + SkillValue(enemy, heal);
+                case EnemyBehavior.Tank:
+                    bool guard = enemy.Rank >= 2 || enemy.EnemyActionCount % 2 == 0;
+                    var protect = FirstUsableSkill(enemy, SkillEffect.Protect);
+                    if (guard && protect != null) return protect.Name + " → 保护优先级最高的同伴\n" + GuardPriorityHint(enemy);
+                    var tankAttack = FirstUsableSkill(enemy, SkillEffect.Attack);
+                    return tankAttack == null ? "待机" : SkillIntent(enemy, tankAttack);
+                case EnemyBehavior.GiantBoss:
+                    int step = enemy.EnemyActionCount % 5;
+                    int index = step == 0 || step == 2 ? 0 : step == 1 || step == 3 ? 1 : 2;
+                    var skills = def.BasicSkills;
+                    return skills == null || index >= skills.Length ? "待机" : SkillIntent(enemy, skills[index]);
+                default:
+                    var skill = def.Behavior == EnemyBehavior.Sanity
+                        ? FirstUsableSkill(enemy, SkillEffect.Sanity) ?? FirstUsableSkill(enemy, SkillEffect.Attack)
+                        : FirstUsableSkill(enemy);
+                    if (skill == null) return enemy.Definition.Behavior == EnemyBehavior.RandomSummoner ? "等待被召唤" : "待机";
+                    return SkillIntent(enemy, skill);
+            }
+        }
+
+        private string SkillIntent(ActorState enemy, SkillSpec skill)
+        {
+            string target = skill.TargetCount > 1 ? "我方 " + skill.TargetCount + " 人" : TargetRankText(skill.TargetRanks);
+            if (skill.Effect == SkillEffect.Sanity)
+            {
+                string drain = "理智−" + skill.SanityDamage;
+                if (skill.SanityAdjacent > 0) drain += " · 相邻各−" + skill.SanityAdjacent;
+                return skill.Name + " → " + target + "\n" + drain;
+            }
+            if (skill.Effect == SkillEffect.Heal) return skill.Name + " → " + target + "\n恢复 " + SkillValue(enemy, skill);
+            if (skill.Effect == SkillEffect.Protect) return skill.Name + " → " + target;
+            if (skill.Effect != SkillEffect.Attack) return skill.Name + " → " + target;
+            string text = skill.Name + " → " + target + "\n伤害 " + SkillValue(enemy, skill);
+            if (skill.Bleed > 0) text += " · 流血 " + skill.Bleed + "×" + skill.BleedTurns;
+            if (skill.Accuracy < 0.9) text += " · 命中 " + (AccuracyPercent(enemy, skill)).ToString("0") + "%";
+            return text;
+        }
+
+        private double AccuracyPercent(ActorState enemy, SkillSpec skill) { return EffectiveAccuracy(enemy, skill) * 100; }
+
+        private static string TargetRankText(int mask)
+        {
+            if (mask == 15) return "我方任意一人";
+            if (mask == 3) return "我方1～2号位";
+            if (mask == 7) return "我方1～3号位";
+            return "我方对应站位";
+        }
+
+        private string GuardPriorityHint(ActorState tank)
+        {
+            var others = Enemies.Where(e => e != tank && !e.Dead).ToArray();
+            if (others.Length == 0) return "没有可保护的同伴";
+            int best = others.Max(GuardPriority);
+            var names = others.Where(e => GuardPriority(e) == best).Select(e => e.Name);
+            return "目标：" + string.Join(" / ", names);
+        }
+
         private ActorState EnemyTarget(ActorState enemy)
         {
             var alive = Run.Heroes.Where(a => !a.Dead);
@@ -594,15 +874,45 @@ namespace Ruin.Core
         {
             if (Outcome != BattleOutcome.Active || Current == null || Current.Player) return;
             var enemy = Current;
+            // The three stage-one dummies are Simple behaviour with no skills and keep their scripted
+            // pattern behaviour. A designed monster either carries skills or names a special behaviour
+            // (the operator has no attack of its own).
+            bool noSkills = enemy.Definition.BasicSkills == null || enemy.Definition.BasicSkills.Length == 0;
+            if (noSkills && enemy.Definition.Behavior == EnemyBehavior.Simple)
+                ExecuteLegacyEnemy(enemy);
+            else
+                ExecuteDesignedEnemy(enemy);
+            if (!CheckEnd()) Advance();
+        }
+
+        // Debug tooling only: ends the current actor's turn without acting. Gameplay never calls this.
+        // Skipping draws no random number, spends no skill use and changes no HP or sanity; the turn
+        // queue then advances exactly as it would after a normal action.
+        public bool SkipCurrentTurn(out string note)
+        {
+            note = null;
+            if (Outcome != BattleOutcome.Active) { note = "战斗已经结束。"; return false; }
+            if (Current == null) { note = "当前没有行动者。"; return false; }
+            Log(Current.Name + " 跳过本次行动（调试）。", "debug", Current.Id);
+            Advance();
+            return true;
+        }
+
+        // ---------------- legacy pattern enemies ----------------
+
+        private void ExecuteLegacyEnemy(ActorState enemy)
+        {
             var target = EnemyTarget(enemy);
             if (target == null) { Finish(BattleOutcome.Defeat); return; }
             ActorState protector = string.IsNullOrEmpty(target.ProtectorId) ? null : Find(target.ProtectorId);
+            bool guarded = false;
             if (protector != null && !protector.Dead)
             {
                 Log(protector.Name + " 为 " + target.Name + " 拦下攻击。", "guard", protector.Id, target.Id);
                 // The guard holds for the whole round now, so ProtectorId is left in place; it is cleared
                 // when the protector takes its next turn.
                 target = protector;
+                guarded = true;
             }
             if (!Roll(SanityProbability.Clamp(enemy.Definition.Accuracy, 0, 1)))
                 Log(target.Name + " 避开了 " + enemy.Name + " 的攻击。", "miss", enemy.Id, target.Id);
@@ -616,7 +926,9 @@ namespace Ruin.Core
             else
             {
                 Log(enemy.Name + " 发动" + (enemy.Definition.Pattern == EnemyPattern.Whisperer ? "低语。" : "攻击。"), "action", enemy.Id, target.Id);
-                Damage(target, EnemyDamage(enemy), enemy.Id);
+                int amount = EnemyDamage(enemy);
+                if (guarded) amount = ReduceForGuard(amount, target);
+                Damage(target, amount, enemy.Id);
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Whisperer)
                 { ChangeSanity(target, -14, "受到低语侵蚀"); TryMentalState(target); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
@@ -624,7 +936,490 @@ namespace Ruin.Core
                 if (!target.Dead) TryLimbDamage(enemy, target);
                 TryCounter(target, enemy);
             }
-            if (!CheckEnd()) Advance();
+        }
+
+        // ---------------- designed enemy AI ----------------
+
+        private void ExecuteDesignedEnemy(ActorState enemy)
+        {
+            switch (enemy.Definition.Behavior)
+            {
+                case EnemyBehavior.SteamMachine: MachineTurn(enemy); return;
+                case EnemyBehavior.Operator: OperatorTurn(enemy); return;
+                case EnemyBehavior.Healer: HealerTurn(enemy); return;
+                case EnemyBehavior.Tank: TankTurn(enemy); return;
+                case EnemyBehavior.GiantBoss: GiantTurn(enemy); return;
+                case EnemyBehavior.CopyBoss: CopyBossTurn(enemy); return;
+                case EnemyBehavior.Sanity: SanityTurn(enemy); return;
+                default: StandardTurn(enemy); return;
+            }
+        }
+
+        private void StandardTurn(ActorState enemy)
+        {
+            var skill = FirstUsableSkill(enemy);
+            if (skill == null) { Wait(enemy); return; }
+            UseEnemySkill(enemy, skill);
+        }
+
+        private void SanityTurn(ActorState enemy)
+        {
+            var skill = FirstUsableSkill(enemy, SkillEffect.Sanity) ?? FirstUsableSkill(enemy, SkillEffect.Attack);
+            if (skill == null) { Wait(enemy); return; }
+            UseEnemySkill(enemy, skill);
+        }
+
+        private void CopyBossTurn(ActorState enemy)
+        {
+            var skill = FirstUsableSkill(enemy);
+            if (skill == null) { Wait(enemy); return; }
+            UseEnemySkill(enemy, skill);
+        }
+
+        private void GiantTurn(ActorState enemy)
+        {
+            var skills = enemy.Definition.BasicSkills;
+            if (skills == null || skills.Length == 0) { Wait(enemy); return; }
+            // 1 → 2 → 1 → 2 → 3, then repeat.
+            int step = enemy.EnemyActionCount % 5;
+            int index = step == 0 || step == 2 ? 0 : step == 1 || step == 3 ? 1 : 2;
+            if (index >= skills.Length) index = skills.Length - 1;
+            UseEnemySkill(enemy, skills[index]);
+        }
+
+        private void MachineTurn(ActorState enemy)
+        {
+            var blast = FirstUsableSkill(enemy);
+            if (enemy.BlastRound > 0 && Round >= enemy.BlastRound && blast != null)
+            {
+                Log(enemy.Name + " 释放积蓄的蒸汽！", "action", enemy.Id);
+                var targets = AliveHeroes();
+                StrikeEnemyTargets(enemy, blast, targets);
+                enemy.Operations = 0;
+                enemy.BlastRound = 0;
+                enemy.EnemyActionCount++;
+                return;
+            }
+            Wait(enemy);
+        }
+
+        private void OperatorTurn(ActorState enemy)
+        {
+            if (enemy.Rank != 3)
+            {
+                // Displacing the operator is meant to be real counterplay, but it walks back on its own
+                // turns instead of being permanently disabled.
+                if (MoveEnemy(enemy, 1))
+                {
+                    Log(enemy.Name + " 向后退回 " + (enemy.Rank + 1) + " 号位。", "move", enemy.Id);
+                    enemy.EnemyActionCount++;
+                }
+                else Wait(enemy);
+                return;
+            }
+            var machine = Enemies.FirstOrDefault(e => !e.Dead && e.Definition.Behavior == EnemyBehavior.SteamMachine);
+            if (machine == null) { Wait(enemy); return; }
+            if (machine.BlastRound > 0)
+            {
+                Log(enemy.Name + " 检查已经蓄能完毕的" + machine.Name + "。", "action", enemy.Id);
+                enemy.EnemyActionCount++;
+                return;
+            }
+            machine.Operations++;
+            Log(enemy.Name + " 操作" + machine.Name + "（累计 " + machine.Operations + "/2）。", "action", enemy.Id, machine.Id);
+            if (machine.Operations >= 2)
+            {
+                machine.Operations = 2;
+                machine.BlastRound = Round + 1;
+                Log(machine.Name + " 开始蓄能，下回合发动全体攻击。", "control", machine.Id);
+            }
+            enemy.EnemyActionCount++;
+        }
+
+        private void HealerTurn(ActorState enemy)
+        {
+            if (enemy.Rank == 0)
+            {
+                if (MoveEnemy(enemy, 1))
+                {
+                    Log(enemy.Name + " 后退到 " + (enemy.Rank + 1) + " 号位，放弃本次治疗。", "move", enemy.Id);
+                    enemy.EnemyActionCount++;
+                }
+                else Wait(enemy);
+                return;
+            }
+            var heal = FirstUsableSkill(enemy, SkillEffect.Heal);
+            if (heal == null) { Wait(enemy); return; }
+            var candidates = Enemies.Where(e => e != enemy && !e.Dead && e.Hp < e.Definition.MaxHp).ToArray();
+            if (candidates.Length == 0) { Wait(enemy); return; }
+            int most = candidates.Max(e => e.Definition.MaxHp - e.Hp);
+            var tied = candidates.Where(e => e.Definition.MaxHp - e.Hp == most).ToArray();
+            var target = DrawRandom(tied);
+            Log(enemy.Name + " · " + heal.Name, "action", enemy.Id, target.Id);
+            ApplySupport(enemy, target, heal);
+            enemy.EnemyActionCount++;
+        }
+
+        private void TankTurn(ActorState enemy)
+        {
+            var others = Enemies.Where(e => e != enemy && !e.Dead).ToArray();
+            if (others.Length == 0)
+            {
+                // No one left to protect: attack from the front, otherwise just stand there.
+                var solo = enemy.Rank <= 1 ? FirstUsableSkill(enemy, SkillEffect.Attack) : null;
+                if (solo == null) { Wait(enemy); return; }
+                UseEnemySkill(enemy, solo);
+                return;
+            }
+            bool guard = enemy.Rank >= 2 || enemy.EnemyActionCount % 2 == 0;
+            var protect = FirstUsableSkill(enemy, SkillEffect.Protect);
+            if (guard && protect != null)
+            {
+                var target = GuardPriorityTarget(enemy, others);
+                if (target != null)
+                {
+                    Log(enemy.Name + " · " + protect.Name, "action", enemy.Id);
+                    ApplySupport(enemy, target, protect);
+                    enemy.EnemyActionCount++;
+                    return;
+                }
+            }
+            var attack = FirstUsableSkill(enemy, SkillEffect.Attack);
+            if (attack == null) { Wait(enemy); return; }
+            UseEnemySkill(enemy, attack);
+        }
+
+        private ActorState GuardPriorityTarget(ActorState tank, ActorState[] others)
+        {
+            int best = int.MinValue;
+            foreach (var other in others) best = Math.Max(best, GuardPriority(other));
+            var tied = others.Where(e => GuardPriority(e) == best).ToArray();
+            return tied.Length == 0 ? null : DrawRandom(tied);
+        }
+
+        // 回血怪 > 理智怪 > 高伤怪 > 流血怪 > 小怪. Elite versions count as their own category.
+        private static int GuardPriority(ActorState actor)
+        {
+            switch (actor.Definition.Behavior)
+            {
+                case EnemyBehavior.Healer: return 5;
+                case EnemyBehavior.Sanity: return 4;
+                case EnemyBehavior.HighDamage: return 3;
+                case EnemyBehavior.Bleed: return 2;
+                case EnemyBehavior.Simple: return 1;
+                default: return 0;
+            }
+        }
+
+        private SkillSpec FirstUsableSkill(ActorState enemy, SkillEffect? effect = null)
+        {
+            var skills = enemy.Definition.BasicSkills;
+            if (skills == null) return null;
+            foreach (var skill in skills)
+            {
+                if (skill == null) continue;
+                if (effect.HasValue && skill.Effect != effect.Value) continue;
+                if (!enemy.OccupiesAnyRank(skill.ActorRanks)) continue;
+                if (enemy.UsesLeft(skill) <= 0) continue;
+                return skill;
+            }
+            return null;
+        }
+
+        private void UseEnemySkill(ActorState enemy, SkillSpec skill)
+        {
+            if (skill.Effect == SkillEffect.Sanity) { UseSanitySkill(enemy, skill); return; }
+            if (skill.Effect == SkillEffect.Heal) { UseEnemyHeal(enemy, skill); return; }
+            if (skill.Effect == SkillEffect.Protect)
+            {
+                var ally = GuardPriorityTarget(enemy, Enemies.Where(e => e != enemy && !e.Dead).ToArray());
+                if (ally == null) { Wait(enemy); return; }
+                Log(enemy.Name + " · " + skill.Name, "action", enemy.Id);
+                ApplySupport(enemy, ally, skill);
+                enemy.EnemyActionCount++;
+                return;
+            }
+            if (skill.Effect != SkillEffect.Attack) { ApplySupport(enemy, enemy, skill); enemy.EnemyActionCount++; return; }
+            var targets = SelectEnemyTargets(enemy, skill);
+            if (targets.Length == 0) { Wait(enemy); return; }
+            Log(enemy.Name + " · " + skill.Name, "action", enemy.Id, targets[0].Id);
+            StrikeEnemyTargets(enemy, skill, targets);
+            enemy.EnemyActionCount++;
+        }
+
+        private void UseEnemyHeal(ActorState enemy, SkillSpec skill)
+        {
+            var candidates = Enemies.Where(e => e != enemy && !e.Dead && e.Hp < e.Definition.MaxHp).ToArray();
+            if (candidates.Length == 0) { Wait(enemy); return; }
+            int most = candidates.Max(e => e.Definition.MaxHp - e.Hp);
+            var tied = candidates.Where(e => e.Definition.MaxHp - e.Hp == most).ToArray();
+            var target = DrawRandom(tied);
+            Log(enemy.Name + " · " + skill.Name, "action", enemy.Id, target.Id);
+            ApplySupport(enemy, target, skill);
+            enemy.EnemyActionCount++;
+        }
+
+        private void UseSanitySkill(ActorState enemy, SkillSpec skill)
+        {
+            var pool = Run.Heroes.Where(a => !a.Dead && a.OccupiesAnyRank(skill.TargetRanks)).ToArray();
+            if (pool.Length == 0) { Wait(enemy); return; }
+            var target = DrawRandom(pool);
+            Log(enemy.Name + " · " + skill.Name + " → " + target.Name, "action", enemy.Id, target.Id);
+            if (skill.SanityDamage > 0) { ChangeSanity(target, -skill.SanityDamage, skill.Name); TryMentalState(target); }
+            if (skill.SanityAdjacent > 0)
+            {
+                foreach (var neighbour in Run.Heroes.Where(a => !a.Dead && a != target && Math.Abs(a.Rank - target.Rank) == 1).OrderBy(a => a.Rank).ToArray())
+                {
+                    ChangeSanity(neighbour, -skill.SanityAdjacent, skill.Name + "波及");
+                    TryMentalState(neighbour);
+                }
+            }
+            enemy.EnemyActionCount++;
+        }
+
+        // Each target is rolled separately, so a three-target sweep can hit one hero and miss another.
+        private void StrikeEnemyTargets(ActorState enemy, SkillSpec skill, ActorState[] targets)
+        {
+            foreach (var intended in targets)
+            {
+                if (intended.Dead) continue;
+                var target = HeroGuardTarget(intended);
+                bool guarded = target != intended;
+                if (guarded)
+                    Log(target.Name + " 为 " + intended.Name + " 拦下攻击。", "guard", target.Id, intended.Id);
+                if (!Roll(EffectiveAccuracy(enemy, skill)))
+                {
+                    Log(target.Name + " 避开了 " + enemy.Name + " 的" + skill.Name + "。", "miss", enemy.Id, target.Id);
+                    continue;
+                }
+                if (target.Definition.Dodge > 0 && Roll(target.Definition.Dodge))
+                {
+                    Log(target.Name + " 闪避了 " + enemy.Name + " 的" + skill.Name + "。", "dodge", enemy.Id, target.Id);
+                    continue;
+                }
+                if (ConsumeBlock(target))
+                {
+                    Log(target.Name + " 的格挡免除了这次攻击。", "guard", enemy.Id, target.Id);
+                    TryCounter(target, enemy);
+                    continue;
+                }
+                int amount = Math.Max(0, SkillValue(enemy, skill));
+                if (guarded) amount = ReduceForGuard(amount, target);
+                Damage(target, amount, enemy.Id);
+                if (!target.Dead) ApplyOnHit(enemy, target, skill, true);
+                TryCounter(target, enemy);
+            }
+        }
+
+        private ActorState HeroGuardTarget(ActorState target)
+        {
+            if (string.IsNullOrEmpty(target.ProtectorId)) return target;
+            var protector = Run.Heroes.FirstOrDefault(h => h.Id == target.ProtectorId && !h.Dead);
+            return protector == null || protector == target ? target : protector;
+        }
+
+        private ActorState[] AliveHeroes()
+        {
+            return Run.Heroes.Where(a => !a.Dead).OrderBy(a => a.Rank).ToArray();
+        }
+
+        private ActorState[] SelectEnemyTargets(ActorState enemy, SkillSpec skill)
+        {
+            var pool = Run.Heroes.Where(a => !a.Dead && a.OccupiesAnyRank(skill.TargetRanks)).ToArray();
+            if (pool.Length == 0) return new ActorState[0];
+            int count = skill.TargetCount > 0 ? Math.Min(skill.TargetCount, pool.Length) : 1;
+            // Single-target rules (bleed preference) only ever apply to a one-target skill.
+            if (count == 1 && skill.TargetRule == EnemyTargetRule.MostBleed)
+            {
+                int most = pool.Max(Stacks);
+                var tied = pool.Where(a => Stacks(a) == most).ToArray();
+                return new[] { DrawRandom(tied) };
+            }
+            if (count == 1 && skill.TargetRule == EnemyTargetRule.LowestHp)
+            {
+                double lowest = pool.Min(a => (double)a.Hp / Math.Max(1, a.Definition.MaxHp));
+                var tied = pool.Where(a => (double)a.Hp / Math.Max(1, a.Definition.MaxHp) == lowest).ToArray();
+                return new[] { DrawRandom(tied) };
+            }
+            if (count >= pool.Length) return pool.OrderBy(a => a.Rank).ToArray();
+            // Draw without replacement: each removal keeps the remaining picks distinct.
+            var remaining = pool.ToList();
+            var picked = new List<ActorState>();
+            while (picked.Count < count && remaining.Count > 0)
+            {
+                var pick = DrawRandom(remaining.ToArray());
+                picked.Add(pick);
+                remaining.Remove(pick);
+            }
+            return picked.ToArray();
+        }
+
+        private static int Stacks(ActorState actor)
+        {
+            return actor.BleedTurns > 0 ? actor.BleedDamage : 0;
+        }
+
+        private void Wait(ActorState enemy)
+        {
+            Log(enemy.Name + " 待机。", "control", null, enemy.Id);
+        }
+
+        // ---------------- boss round hooks ----------------
+
+        private void RunRoundStartHooks()
+        {
+            foreach (var boss in Enemies.Where(e => !e.Dead && e.Definition.Behavior == EnemyBehavior.CopyBoss).ToArray())
+                SummonCopies(boss);
+            RespawnOperator();
+            RunAccessoryRoundStartHooks();
+        }
+
+        // Round-scoped accessory effects. The heart is judged before the turn queue is built, so a failed
+        // heart already has its extra action removed on the round the failure happens.
+        private void RunAccessoryRoundStartHooks()
+        {
+            foreach (var hero in Run.Heroes.Where(h => h != null && !h.Dead).ToArray())
+            {
+                var state = hero.AccessoryBattle;
+                if (state == null) continue;
+                if (state.SleepTurns > 0 && !hero.Dead)
+                {
+                    state.SleepTurns--;
+                    Log(hero.Name + " 仍被困在假寐中，理智 -" + AccessorySystem.SleepSanityDrain.ToString("0.#") + "。", "sanity", hero.Id);
+                    ChangeSanity(hero, -AccessorySystem.SleepSanityDrain, "假寐药剂的余波");
+                }
+                if (AccessorySystem.Has(hero, AccessoryKind.Heart) && state.HeartActive
+                    && !state.HeartResolved && Round >= 3)
+                {
+                    state.HeartActive = false;
+                    state.HeartResolved = true;
+                    state.HeartSuccess = false;
+                    Log(hero.Name + " 的跃动心脏未能在两回合内杀死标记目标，攻击大幅衰减。", "system", hero.Id);
+                }
+            }
+        }
+
+        private void SummonCopies(ActorState boss)
+        {
+            if (Round < 2 || Run.Heroes.Count == 0) return;
+            int alive = Enemies.Count(e => e.IsCopy && e.SummonedBy == boss.Id && !e.Dead);
+            if (alive >= 3) return;
+            foreach (int rank in new[] { 1, 2, 3 })
+            {
+                if (alive >= 3) break;
+                if (Enemies.Any(e => !e.Dead && e.OccupiesRank(rank))) continue;
+                SpawnCopy(boss, rank);
+                alive++;
+            }
+        }
+
+        private void SpawnCopy(ActorState boss, int rank)
+        {
+            var hero = Run.Heroes[Math.Min(Run.Heroes.Count - 1, (int)(Run.Random.NextUnit() * Run.Heroes.Count))];
+            var source = hero.Definition;
+            var spec = CopySpec(source);
+            spec.Id = "copy_" + source.Id;
+            spec.Name = source.Name + "复制体";
+            spec.Subtitle = "复制自" + source.Name;
+            spec.Silhouette = source.Silhouette;
+            // The copied maximum is half of the party member's actual maximum, and the copy arrives full.
+            spec.MaxHp = Math.Max(1, source.MaxHp / 2);
+            spec.Attack = source.Attack;
+            spec.Accuracy = source.Accuracy;
+            spec.CritChance = 0;
+            spec.Speed = source.Speed;
+            spec.Behavior = EnemyBehavior.Simple;
+            spec.RankWidth = 1;
+            spec.Immobile = false;
+            spec.ActionInterval = 1;
+            spec.BossHealOnHeroDeath = 0;
+            spec.BasicSkills = new[] { CopyStrike };
+            var actor = new ActorState
+            {
+                Id = "enemy_copy_" + (++copySerial), Definition = spec, Player = false, Rank = rank,
+                Hp = spec.MaxHp, Sanity = 50, IsCopy = true, SummonedBy = boss.Id
+            };
+            Enemies.Add(actor);
+            Log(boss.Name + " 复制了" + source.Name + "，召唤复制体（位置 " + (rank + 1) + "，生命 " + spec.MaxHp + "）。", "summon", boss.Id, actor.Id);
+        }
+
+        private void RespawnOperator()
+        {
+            if (Round < 2) return;
+            var machine = Enemies.FirstOrDefault(e => !e.Dead && e.Definition.Behavior == EnemyBehavior.SteamMachine);
+            if (machine == null) return;
+            if (Enemies.Any(e => !e.Dead && e.Definition.Behavior == EnemyBehavior.Operator)) return;
+            var fallen = Enemies.FirstOrDefault(e => e.Dead && e.Definition.Behavior == EnemyBehavior.Operator
+                && e.NextSpawnRound > 0 && Round >= e.NextSpawnRound);
+            if (fallen == null) return;
+            int rank = -1;
+            for (int candidate = 3; candidate >= 0; candidate--)
+                if (!Enemies.Any(e => !e.Dead && e.OccupiesRank(candidate))) { rank = candidate; break; }
+            if (rank < 0) return;
+            var spec = CopySpec(fallen.Definition);
+            var actor = new ActorState
+            {
+                Id = "enemy_operator_" + (++operatorSerial), Definition = spec, Player = false,
+                Rank = rank, Hp = spec.MaxHp, Sanity = 50
+            };
+            Enemies.Add(actor);
+            // The old corpse must not keep qualifying for a respawn on every later round.
+            fallen.NextSpawnRound = int.MaxValue;
+            Log(spec.Name + " 被重新召唤到 " + (rank + 1) + " 号位。", "summon", null, actor.Id);
+        }
+
+        private int copySerial;
+        private int operatorSerial;
+        private static readonly SkillSpec CopyStrike = new SkillSpec
+        {
+            Id = "copy_strike", Name = "复制体攻击", Description = "复制体沿用原角色的基础攻击。",
+            Effect = SkillEffect.Attack, Target = TargetSide.Enemy, Multiplier = 1.0,
+            ActorRanks = 15, TargetRanks = 15, Accuracy = 0.9
+        };
+
+        private ActorSpec ResolveSummoner(ActorSpec spec)
+        {
+            if (spec == null) return null;
+            if (spec.Behavior != EnemyBehavior.RandomSummoner || spec.SummonPool == null || spec.SummonPool.Length == 0)
+                return spec;
+            int index = Math.Min(spec.SummonPool.Length - 1, (int)(Run.Random.NextUnit() * spec.SummonPool.Length));
+            var copy = CopySpec(spec.SummonPool[index]);
+            // The transformed summoner keeps the marker's action cadence and starting slot.
+            copy.ActionInterval = Math.Max(1, spec.ActionInterval);
+            copy.ActionPhase = spec.ActionPhase;
+            copy.StartRank = spec.StartRank;
+            return copy;
+        }
+
+        private ActorSpec CopySpec(ActorSpec source)
+        {
+            return new ActorSpec
+            {
+                Id = source.Id, Name = source.Name, Subtitle = source.Subtitle, Silhouette = source.Silhouette,
+                MaxHp = source.MaxHp, Speed = source.Speed, StartRank = source.StartRank,
+                Attack = source.Attack, Accuracy = source.Accuracy, CritChance = source.CritChance,
+                Dodge = source.Dodge, Defense = source.Defense, SanityOffset = source.SanityOffset,
+                Pattern = source.Pattern, Behavior = source.Behavior, RankWidth = source.RankWidth,
+                Immobile = source.Immobile, ActionInterval = source.ActionInterval, ActionPhase = source.ActionPhase,
+                BossHealOnHeroDeath = source.BossHealOnHeroDeath, GuardReduction = source.GuardReduction,
+                SummonPool = source.SummonPool,
+                BasicSkills = source.BasicSkills, PrimalSkills = source.PrimalSkills, TechnicalSkills = source.TechnicalSkills
+            };
+        }
+
+        private bool MoveEnemy(ActorState enemy, int delta)
+        {
+            int destination = enemy.Rank + delta;
+            if (destination < 0 || destination + enemy.Width > 4) return false;
+            var occupant = Enemies.FirstOrDefault(e => e != enemy && !e.Dead
+                && e.Rank < destination + enemy.Width && destination < e.Rank + e.Width);
+            if (occupant != null)
+            {
+                if (occupant.Definition.Immobile || occupant.Width != 1 || enemy.Width != 1) return false;
+                occupant.Rank = enemy.Rank;
+            }
+            enemy.Rank = destination;
+            return true;
         }
 
         // Limb damage is a second track next to HP, so it only rolls once the attack has actually landed.
@@ -633,6 +1428,8 @@ namespace Ruin.Core
         private void TryLimbDamage(ActorState enemy, ActorState target)
         {
             if (!target.Player) return;
+            // 金丝苹果 locks the limb track too. Returning here also keeps the chance draw untouched.
+            if (AccessorySystem.LimbLock(target)) return;
             var spec = LimbSystem.ForPattern(enemy.Definition.Pattern);
             if (spec == null) return;
             if (spec.HeavyRoundsOnly && Round % 2 != 0) return;
@@ -647,13 +1444,34 @@ namespace Ruin.Core
         public void ChangeSanity(ActorState actor, double amount, string reason)
         {
             if (actor == null || actor.Dead) return;
+            // 理智锁定药剂: the whole battle, in both directions. Returning before the zero check also keeps
+            // the golden apple's direct-death roll out of a locked hero.
+            if (actor.SanityLocked)
+            {
+                Log(actor.Name + " 的理智已被锁定，无法变化。", "sanity", actor.Id);
+                return;
+            }
             double before = actor.Sanity;
             actor.Sanity = SanityProbability.Clamp(before + amount, 0, 100);
             Log(actor.Name + " " + reason + "：理智 " + before.ToString("0.#") + " → " + actor.Sanity.ToString("0.#") + "。", "sanity", actor.Id);
+            // 金丝苹果: crossing to zero triggers one direct-death check, not one per further drain at zero.
+            if (before > 0 && actor.Sanity <= 0 && actor.Player && !actor.Dead
+                && AccessorySystem.Has(actor, AccessoryKind.GoldenApple))
+            {
+                if (Roll(Rules.DeathChance))
+                {
+                    Log(actor.Name + " 的理智归零，金丝苹果停止了心跳。", "death", null, actor.Id);
+                    Kill(actor);
+                }
+                else Log(actor.Name + " 的理智归零，金丝苹果暂时没有夺走生命。", "sanity", actor.Id);
+            }
         }
 
         private void TryMentalState(ActorState actor)
         {
+            // A locked hero's mental state stays where it was, and no draw is spent on a roll that could
+            // not change anything.
+            if (actor == null || actor.SanityLocked) return;
             int state = SanityProbability.Sample(SanityProbability.Distribution(actor.Sanity, new[] {
                 new WeightedOutcome(0.15, 1, SanityGate.High), new WeightedOutcome(0.7, 0), new WeightedOutcome(0.15, -1, SanityGate.Low)
             }, Rules.ProbabilityStrength), Run.Random);
@@ -663,33 +1481,152 @@ namespace Ruin.Core
             Log(actor.Name + " 获得持续状态「" + Rules.Mental(mental).Name + "」。离开理智区间后仍保留。", "mental", actor.Id);
         }
 
-        public void Damage(ActorState actor, int amount, string sourceId = null, bool bleeding = false)
+        // A direct loss skips defence and the round-scoped vulnerability, but still goes through the
+        // accessories that care about HP reaching zero. selfInflicted only excludes the rust medal's own
+        // entry cost from its damage accumulation.
+        public void Damage(ActorState actor, int amount, string sourceId = null, bool bleeding = false,
+            bool direct = false, bool selfInflicted = false)
         {
-            if (actor.Dead || amount <= 0) return;
+            if (actor == null || actor.Dead || amount <= 0) return;
             int actual = amount;
-            if (!bleeding)
+            if (!bleeding && !direct)
             {
                 double reduced = amount * (1 - EffectiveDefense(actor));
                 if (actor.Defending) reduced *= 0.5;
                 if (actor.SelfVulnerable > 0) reduced *= 1 + actor.SelfVulnerable;
+                reduced *= AccessorySystem.DamageTakenFactor(actor);
                 actual = Math.Max(1, (int)Math.Ceiling(reduced - 1e-9));
             }
             bool alreadyDying = actor.DeathDoor;
+
+            // 假寐的药剂: one lethal hit per battle is swallowed whole.
+            if (!bleeding && !direct && actor.Player && !alreadyDying
+                && AccessorySystem.Has(actor, AccessoryKind.SleepPotion)
+                && actor.AccessoryBattle != null && !actor.AccessoryBattle.SleepTriggered
+                && actor.Hp - actual <= 0)
+            {
+                actor.AccessoryBattle.SleepTriggered = true;
+                actor.AccessoryBattle.SleepTurns = 2;
+                Log(actor.Name + " 的假寐药剂吞掉了这次致命伤害。", "system", actor.Id);
+                if (!AccessorySystem.LimbLock(actor))
+                {
+                    var part = AccessorySystem.RandomPart(Run.Random, actor);
+                    int hit = LimbSystem.HitAmount(actor, part, Rules.Limbs);
+                    bool severed = LimbSystem.Damage(actor, part, hit);
+                    Log(actor.Name + " 的" + LimbSystem.PartName(part) + "受到 " + hit + " 点部位伤害，"
+                        + (severed ? "已经断肢！" : "陷入重伤。"), "limb", null, actor.Id, hit);
+                }
+                ChangeSanity(actor, -AccessorySystem.SleepSanityDrain, "假寐药剂的代价");
+                return;
+            }
+
+            // 殉道锁链: at zero HP, spend one intact limb instead of entering the death check.
+            if (!direct && actor.Player && !alreadyDying && actor.Hp > 0 && actor.Hp - actual <= 0
+                && AccessorySystem.Has(actor, AccessoryKind.MartyrChain))
+            {
+                int intact = actor.Limbs == null ? 0 : actor.Limbs.Count(l => l != null && l.Hp > 0);
+                if (intact == 0)
+                {
+                    Log(actor.Name + " 的四肢已经全部断去，殉道锁链再也付不出代价。", "death", null, actor.Id);
+                    Kill(actor, sourceId);
+                    return;
+                }
+                var part = AccessorySystem.RandomPart(Run.Random, actor, true);
+                var limb = LimbSystem.Get(actor, part);
+                if (limb != null) LimbSystem.Damage(actor, part, limb.Hp);
+                actor.Hp = Math.Max(1, (int)Math.Ceiling(actor.Definition.MaxHp * AccessorySystem.MartyrRestore - 1e-9));
+                Log(actor.Name + " 的殉道锁链消耗" + LimbSystem.PartName(part) + "，恢复 " + actor.Hp + " 点生命。",
+                    "heal", null, actor.Id, actor.Hp);
+                ChangeSanity(actor, -AccessorySystem.MartyrSanityLoss, "殉道锁链");
+                return;
+            }
+
+            // 金丝苹果: the HP track is locked at one, so a hit can never take the last point.
+            if (actor.Player && AccessorySystem.HpLock(actor) && actor.Hp - actual <= 0)
+                actual = Math.Min(actual, Math.Max(0, actor.Hp - 1));
+
             actor.Hp = Math.Max(0, actor.Hp - actual);
             Log(actor.Name + " 受到 " + actual + (bleeding ? " 点流血伤害。" : " 点伤害。"), "damage", sourceId, actor.Id, actual);
-            if (!actor.Player && actor.Hp == 0) Kill(actor);
+
+            // 金丝苹果 also drains sanity on every attack that lands on the bearer.
+            if (!bleeding && !direct && actor.Player && AccessorySystem.Has(actor, AccessoryKind.GoldenApple))
+            {
+                ChangeSanity(actor, -AccessorySystem.AppleSanityPerHit, "金丝苹果");
+                if (actor.Dead) return;
+            }
+
+            if (!actor.Player && actor.Hp == 0) Kill(actor, sourceId);
             else if (alreadyDying)
             {
                 bool dies = SanityProbability.Check(Rules.DeathChance, -0.35, actor.Sanity, Run.Random, Rules.ProbabilityStrength);
-                if (dies) Kill(actor); else Log(actor.Name + " 挺过了死亡检定，仍处于濒死。", "deathdoor", null, actor.Id);
+                if (dies) Kill(actor, sourceId); else Log(actor.Name + " 挺过了死亡检定，仍处于濒死。", "deathdoor", null, actor.Id);
             }
             else if (actor.DeathDoor) Log(actor.Name + " 陷入濒死！再次受伤将进行死亡检定。", "deathdoor", null, actor.Id);
+
+            if (actor.Player && !actor.Dead && !direct && !selfInflicted)
+                AccumulateRustDamage(actor, actual);
         }
 
-        private void Kill(ActorState actor)
+        // 锈血勋章 counts real incoming damage. Every full threshold buys one more 「带伤强攻」 use for this
+        // battle only; the shared SkillSpec.Uses is never touched.
+        private void AccumulateRustDamage(ActorState actor, int actual)
         {
+            if (actual <= 0 || !AccessorySystem.Has(actor, AccessoryKind.RustMedal)) return;
+            var state = actor.AccessoryBattle;
+            if (state == null) return;
+            state.RustDamageAccum += actual;
+            int threshold = Math.Max(1, (int)Math.Ceiling(actor.Definition.MaxHp * AccessorySystem.RustThreshold - 1e-9));
+            while (state.RustDamageAccum >= threshold)
+            {
+                state.RustDamageAccum -= threshold;
+                if (AccessorySystem.AddSkillUse(actor, AccessorySystem.RustSkillId, 1))
+                    Log(actor.Name + " 的锈血勋章让「带伤强攻」多出 1 次使用。", "system", actor.Id);
+            }
+        }
+
+        private void Kill(ActorState actor, string sourceId = null)
+        {
+            if (actor == null || actor.Dead) return;
             actor.Dead = true;
             Log(actor.Name + (actor.Player ? " 死亡，本局无法恢复。" : " 被击败。"), "death", null, actor.Id);
+            if (!actor.Player)
+            {
+                // 成瘾物 ends on a kill made by its bearer.
+                var killer = Run.Heroes.FirstOrDefault(h => h != null && h.Id == sourceId);
+                if (killer != null && killer.AccessoryBattle != null && killer.AccessoryBattle.AddictionActive
+                    && AccessorySystem.Has(killer, AccessoryKind.Addiction))
+                {
+                    killer.AccessoryBattle.AddictionActive = false;
+                    killer.AccessoryBattle.AddictionStacks = 0;
+                    Log(killer.Name + " 的成瘾物在击杀后失效，叠加的易伤一并清空。", "system", killer.Id);
+                }
+                // 跃动心脏 succeeds only when the marked target dies within the first two rounds.
+                foreach (var hero in Run.Heroes.Where(h => h != null && h.AccessoryBattle != null
+                    && h.AccessoryBattle.HeartActive && !h.AccessoryBattle.HeartResolved
+                    && h.AccessoryBattle.HeartTargetId == actor.Id).ToArray())
+                {
+                    if (Round > 2) continue;
+                    hero.AccessoryBattle.HeartSuccess = true;
+                    hero.AccessoryBattle.HeartResolved = true;
+                    Log(hero.Name + " 的跃动心脏在时限内杀死了标记目标，增益持续整场。", "system", hero.Id);
+                }
+            }
+            if (!actor.Player && actor.Definition.Behavior == EnemyBehavior.Operator)
+                actor.NextSpawnRound = Round + 1;
+            if (actor.Player) HealBossesOnHeroDeath();
+        }
+
+        // The giant boss's passive: every party death hands it health back. The heal is capped at its
+        // maximum and never revives anything.
+        private void HealBossesOnHeroDeath()
+        {
+            foreach (var boss in Enemies.Where(e => !e.Dead && e.Definition.BossHealOnHeroDeath > 0).ToArray())
+            {
+                int restored = Math.Min(boss.Definition.BossHealOnHeroDeath, boss.Definition.MaxHp - boss.Hp);
+                if (restored <= 0) continue;
+                boss.Hp += restored;
+                Log(boss.Name + " 吸收死亡，恢复 " + restored + " 点生命。", "heal", null, boss.Id, restored);
+            }
         }
 
         private bool CheckEnd()
@@ -705,6 +1642,10 @@ namespace Ruin.Core
             if (Settlement != null) return Settlement;
             if (outcome == BattleOutcome.Active) throw new ArgumentException("Cannot settle active outcome");
             Outcome = outcome; Current = null;
+            // The lock is defined as "this battle only". Both layers go away here, including a pending
+            // lock that never got to mature and the debug settle path.
+            foreach (var hero in Run.Heroes)
+                if (hero != null) { hero.SanityLocked = false; hero.SanityLockPending = false; }
             var result = new BattleSettlement { Outcome = outcome, Before = Run.PlayerSanity };
             foreach (var actor in roster)
                 result.Entries.Add(new FeedbackEntry { Id = actor.Id, Name = actor.Name, Start = startSanity[actor.Id], End = actor.Sanity, Dead = actor.Dead });

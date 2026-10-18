@@ -34,6 +34,7 @@ namespace Ruin.Editor
             var cleaver = Enemy("cleaver", "执斧者", "重劈前排的废墟守卫", 32, 3, EnemyPattern.Cleaver);
             var whisperer = Enemy("whisperer", "低语者", "侵蚀最清醒者的心智", 24, 2, EnemyPattern.Whisperer);
             var hunter = Enemy("hunter", "追猎者", "追击虚弱者并造成流血", 24, 7, EnemyPattern.Hunter);
+            var monsters = BuildMonsters();
             var none = Asset<MentalDefinition>(Data + "/MentalStates/Neutral.asset", x => x.Spec = new MentalSpec { State = MentalState.None, Name = "平稳" });
             var composed = Asset<MentalDefinition>(Data + "/MentalStates/Composed.asset", x => x.Spec = new MentalSpec { State = MentalState.Composed, Name = "凝神", TechnicalMultiplier = 1.25 });
             var agitated = Asset<MentalDefinition>(Data + "/MentalStates/Agitated.asset", x => x.Spec = new MentalSpec { State = MentalState.Agitated, Name = "躁动", PrimalMultiplier = 1.25, AccuracyModifier = -0.05 });
@@ -44,6 +45,7 @@ namespace Ruin.Editor
                 x.MentalStates = new[] { none, composed, agitated };
             });
             Migrate(catalog);
+            EnsureEnemyContent(catalog, monsters);
             if (!File.Exists(ScenePath))
             {
                 var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -220,6 +222,194 @@ namespace Ruin.Editor
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
             Debug.Log("STAGE_ONE_MIGRATED catalog fields backfilled");
+        }
+
+        // ---------------- designed monsters ----------------
+        //
+        // Damage is carried by Attack × Multiplier so the existing resolver (defense, guard, block,
+        // counter) stays in charge. All designed monsters have CritChance 0 and a 0.9 base accuracy:
+        // SkillSpec.Accuracy then reads as the literal hit rate, and the provisional numbers follow the
+        // 怪物设计记录 document's "我方普通单体攻击 8～12 点" scale.
+
+        private sealed class MonsterSet
+        {
+            public CharacterDefinition Minion1, Minion2, Sanity, EliteSanity, Bleed, EliteBleed;
+            public CharacterDefinition High, EliteHigh, Tank, EliteTank, Healer;
+            public CharacterDefinition CopyBoss, GiantBoss, SteamMachine, Operator, RandomSummoner;
+            public CharacterDefinition[] All;
+        }
+
+        private static MonsterSet BuildMonsters()
+        {
+            var minion1 = Monster("minion1", "小怪1", "低生命、低命中的入门敌人", 12, 3, 3, 0.75, EnemyBehavior.Simple, EnemyPattern.Cleaver,
+                new[] { ESkill("e_minion1_strike", "普通攻击", 15, 3, s => s.Multiplier = 1.0) });
+            var minion2 = Monster("minion2", "小怪2", "能碰到我方前排与中排的杂兵", 10, 4, 2, 0.75, EnemyBehavior.Simple, EnemyPattern.Cleaver,
+                new[] { ESkill("e_minion2_strike", "普通攻击", 15, 7, s => s.Multiplier = 1.0) });
+            var sanity = Monster("sanity", "理智怪", "从后排侵蚀我方理智", 20, 5, 3, 0.9, EnemyBehavior.Sanity, EnemyPattern.Whisperer,
+                new[]
+                {
+                    ESkill("e_sanity_drain", "降低理智", 14, 15, s => { s.Effect = SkillEffect.Sanity; s.SanityDamage = 8; s.Multiplier = 0; }),
+                    ESkill("e_sanity_melee", "近身攻击", 1, 3, s => s.Multiplier = 1.0)
+                });
+            var eliteSanity = Monster("elite_sanity", "精英理智怪", "理智侵蚀会波及相邻角色", 38, 5, 5, 0.9, EnemyBehavior.Sanity, EnemyPattern.Whisperer,
+                new[]
+                {
+                    ESkill("e_elite_sanity_drain", "降低理智", 14, 15, s => { s.Effect = SkillEffect.Sanity; s.SanityDamage = 12; s.SanityAdjacent = 4; s.Multiplier = 0; }),
+                    ESkill("e_elite_sanity_melee", "近身攻击", 1, 3, s => s.Multiplier = 1.0)
+                });
+            var bleed = Monster("bleed", "流血怪", "优先攻击流血最多的角色", 22, 5, 3, 0.9, EnemyBehavior.Bleed, EnemyPattern.Hunter,
+                new[]
+                {
+                    ESkill("e_bleed_strike", "流血攻击", 15, 7, s => { s.Multiplier = 1.0; s.Bleed = 2; s.BleedTurns = 2; s.TargetRule = EnemyTargetRule.MostBleed; })
+                });
+            var eliteBleed = Monster("elite_bleed", "精英流血怪", "更重的流血压力", 40, 5, 5, 0.9, EnemyBehavior.Bleed, EnemyPattern.Hunter,
+                new[]
+                {
+                    ESkill("e_elite_bleed_strike", "流血攻击", 15, 7, s => { s.Multiplier = 1.0; s.Bleed = 3; s.BleedTurns = 2; s.TargetRule = EnemyTargetRule.MostBleed; })
+                });
+            var high = Monster("high", "高伤怪", "站前排时伤害极高，后排则明显减弱", 26, 3, 14, 0.9, EnemyBehavior.HighDamage, EnemyPattern.Cleaver,
+                new[]
+                {
+                    ESkill("e_high_close", "近距离攻击", 3, 3, s => { s.Multiplier = 1.0; s.Accuracy = 0.9; }),
+                    ESkill("e_high_far", "远距离攻击", 12, 3, s => { s.Multiplier = 0.5; s.Accuracy = 0.65; })
+                });
+            var eliteHigh = Monster("elite_high", "精英高伤怪", "前排一击足以致命", 46, 4, 20, 0.9, EnemyBehavior.HighDamage, EnemyPattern.Cleaver,
+                new[]
+                {
+                    ESkill("e_elite_high_close", "近距离攻击", 3, 3, s => { s.Multiplier = 1.0; s.Accuracy = 0.9; }),
+                    ESkill("e_elite_high_far", "远距离攻击", 12, 3, s => { s.Multiplier = 0.5; s.Accuracy = 0.65; })
+                });
+            var tank = Monster("tank", "肉盾怪", "按功能优先级守护同伴", 45, 3, 5, 0.85, EnemyBehavior.Tank, EnemyPattern.Cleaver,
+                new[]
+                {
+                    ESkill("e_tank_guard", "守护", 15, 15, s => { s.Effect = SkillEffect.Protect; s.Multiplier = 0; }),
+                    ESkill("e_tank_strike", "普通攻击", 3, 3, s => s.Multiplier = 1.0)
+                });
+            var eliteTank = Monster("elite_tank", "精英肉盾怪", "守护时额外减免四分之一的伤害", 75, 3, 7, 0.85, EnemyBehavior.Tank, EnemyPattern.Cleaver,
+                new[]
+                {
+                    ESkill("e_elite_tank_guard", "强化守护", 15, 15, s => { s.Effect = SkillEffect.Protect; s.Multiplier = 0; s.GuardReduction = 0.25; }),
+                    ESkill("e_elite_tank_strike", "普通攻击", 3, 3, s => s.Multiplier = 1.0)
+                });
+            var healer = Monster("healer", "回血怪", "精英战专属支援单位，没有攻击能力", 30, 6, 10, 0.9, EnemyBehavior.Healer, EnemyPattern.Whisperer,
+                new[]
+                {
+                    ESkill("e_healer_heal", "治疗", 14, 15, s => { s.Effect = SkillEffect.Heal; s.Multiplier = 1.0; })
+                });
+            var copyBoss = Monster("copy_boss", "首领·复制者", "复制我方队员，死亡后补召", 90, 5, 10, 0.9, EnemyBehavior.CopyBoss, EnemyPattern.Whisperer,
+                new[] { ESkill("e_copy_boss_strike", "复制打击", 15, 15, s => s.Multiplier = 1.0) });
+            var giantBoss = Monster("giant_boss", "首领·巨型聚合体", "占据1～3号位，按1→2→1→2→3循环", 180, 4, 16, 0.9, EnemyBehavior.GiantBoss, EnemyPattern.Cleaver,
+                new[]
+                {
+                    ESkill("e_giant_all", "全体低伤攻击", 15, 15, s => { s.Multiplier = 0.25; s.Accuracy = 0.9; s.TargetCount = 4; }),
+                    ESkill("e_giant_three", "三人中伤攻击", 15, 15, s => { s.Multiplier = 0.5; s.Accuracy = 0.85; s.TargetCount = 3; }),
+                    ESkill("e_giant_one", "单体高伤攻击", 15, 15, s => { s.Multiplier = 1.0; s.Accuracy = 0.8; s.TargetCount = 1; })
+                },
+                x => { x.RankWidth = 3; x.Immobile = true; x.BossHealOnHeroDeath = 15; });
+            var steamMachine = Monster("steam_machine", "蒸汽机器", "占据2～3号位，累计操作2次后爆发", 100, 2, 12, 0.9, EnemyBehavior.SteamMachine, EnemyPattern.Cleaver,
+                new[] { ESkill("e_steam_blast", "蒸汽爆发", 15, 15, s => { s.Multiplier = 1.0; s.TargetCount = 4; }) },
+                x => { x.RankWidth = 2; x.Immobile = true; });
+            var op = Monster("operator", "操作怪", "只在4号位操作机器，死亡后下回合补召", 30, 8, 0, 0.9, EnemyBehavior.Operator, EnemyPattern.Hunter,
+                new SkillSpec[0], x => x.ActionInterval = 2);
+            var summoner = Monster("random_summoner", "随机召唤怪", "每两回合行动一次，会变成随机普通怪", 1, 4, 0, 0.9, EnemyBehavior.RandomSummoner, EnemyPattern.Whisperer,
+                new SkillSpec[0], x =>
+                {
+                    x.ActionInterval = 2;
+                    x.SummonPool = new[] { minion1, minion2, bleed, sanity, tank };
+                });
+            return new MonsterSet
+            {
+                Minion1 = minion1, Minion2 = minion2, Sanity = sanity, EliteSanity = eliteSanity,
+                Bleed = bleed, EliteBleed = eliteBleed, High = high, EliteHigh = eliteHigh,
+                Tank = tank, EliteTank = eliteTank, Healer = healer, CopyBoss = copyBoss,
+                GiantBoss = giantBoss, SteamMachine = steamMachine, Operator = op, RandomSummoner = summoner,
+                All = new[] { minion1, minion2, sanity, eliteSanity, bleed, eliteBleed, high, eliteHigh,
+                    tank, eliteTank, healer, copyBoss, giantBoss, steamMachine, op, summoner }
+            };
+        }
+
+        private static CharacterDefinition Monster(string id, string name, string subtitle, int hp, int speed, int attack,
+            double accuracy, EnemyBehavior behavior, EnemyPattern pattern, SkillSpec[] skills, Action<CharacterDefinition> extra = null)
+        {
+            return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x =>
+            {
+                x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = "enemy";
+                x.MaxHp = hp; x.Speed = speed; x.Attack = attack; x.Accuracy = accuracy;
+                x.CritChance = 0; x.Dodge = 0; x.Defense = 0;
+                x.EnemyPattern = pattern; x.Behavior = behavior; x.EnemySkills = skills;
+                if (extra != null) extra(x);
+            });
+        }
+
+        private static SkillSpec ESkill(string id, string name, int actors, int targets, Action<SkillSpec> setup)
+        {
+            var spec = new SkillSpec { Id = id, Name = name, Description = name, ActorRanks = actors, TargetRanks = targets };
+            setup(spec);
+            return spec;
+        }
+
+        private static void EnsureEnemyContent(GameCatalog catalog, MonsterSet monsters)
+        {
+            bool dirty = false;
+            if (catalog.Monsters == null || catalog.Monsters.Length == 0) { catalog.Monsters = monsters.All; dirty = true; }
+            if (catalog.NormalEncounters == null || catalog.NormalEncounters.Length == 0)
+            { catalog.NormalEncounters = NormalLineups(monsters); dirty = true; }
+            if (catalog.EliteEncounters == null || catalog.EliteEncounters.Length == 0)
+            { catalog.EliteEncounters = EliteLineups(monsters); dirty = true; }
+            if (catalog.BossEncounters == null || catalog.BossEncounters.Length == 0)
+            { catalog.BossEncounters = BossLineups(monsters); dirty = true; }
+            if (!dirty) return;
+            EditorUtility.SetDirty(catalog);
+            AssetDatabase.SaveAssets();
+            Debug.Log("STAGE_ONE_MONSTERS catalog formations backfilled");
+        }
+
+        private static EnemyLineup Lineup(string id, params CharacterDefinition[] slots)
+        {
+            var line = new EnemyLineup { Id = id, Slots = new CharacterDefinition[4] };
+            for (int i = 0; i < slots.Length && i < 4; i++) line.Slots[i] = slots[i];
+            return line;
+        }
+
+        // 普通战 01～08，按 1 号位到 4 号位排列；null 表示空位。
+        private static EnemyLineup[] NormalLineups(MonsterSet m)
+        {
+            return new[]
+            {
+                Lineup("普通01", m.Minion1, m.Minion2, m.Minion2),
+                Lineup("普通02", m.Minion1, m.Minion2, m.Sanity),
+                Lineup("普通03", m.Minion1, m.Bleed, m.Minion2),
+                Lineup("普通04", m.High, m.Minion1, m.Minion2),
+                Lineup("普通05", m.Tank, m.Minion1, m.Minion2, m.Sanity),
+                Lineup("普通06", m.High, m.Minion1, m.Bleed, m.Minion2),
+                Lineup("普通07", m.Tank, m.Minion2, m.Bleed, m.Sanity),
+                Lineup("普通08", m.Minion1, m.Bleed, m.High, m.Sanity)
+            };
+        }
+
+        // 精英战 01～06，不使用普通怪填充空位。
+        private static EnemyLineup[] EliteLineups(MonsterSet m)
+        {
+            return new[]
+            {
+                Lineup("精英01", m.EliteTank, m.EliteBleed, m.EliteSanity),
+                Lineup("精英02", m.EliteHigh, m.EliteBleed, m.Healer),
+                Lineup("精英03", m.EliteTank, m.EliteHigh, m.EliteBleed, m.EliteSanity),
+                Lineup("精英04", m.EliteTank, m.EliteBleed, m.EliteSanity, m.Healer),
+                Lineup("精英05", m.EliteTank, m.EliteHigh, m.EliteBleed, m.Healer),
+                Lineup("精英06", m.EliteBleed, m.EliteSanity, m.EliteHigh, m.Healer)
+            };
+        }
+
+        // 三个首领各一套。组合首领按 1 号位随机召唤怪、2～3 号位蒸汽机器、4 号位操作怪摆放。
+        private static EnemyLineup[] BossLineups(MonsterSet m)
+        {
+            return new[]
+            {
+                Lineup("Boss01-复制", m.CopyBoss),
+                Lineup("Boss02-巨型", m.GiantBoss),
+                Lineup("Boss03-组合", m.RandomSummoner, m.SteamMachine, null, m.Operator)
+            };
         }
 
         private static T Asset<T>(string path, Action<T> setup) where T : ScriptableObject

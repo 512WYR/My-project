@@ -21,6 +21,128 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 18744466fd924ac4a8bb7d16ae2aee73, type: 2}
   - {fileID: 11400000, guid: b9c2a7f7ad9c5ec45b2ccdf83802cc81, type: 2}
   - {fileID: 11400000, guid: 90ff312790df14c4abbfdb5f3c4011ab, type: 2}
+  Monsters:
+  - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+  - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+  - {fileID: 11400000, guid: 7c54bf856346131478507188b844d5b2, type: 2}
+  - {fileID: 11400000, guid: 68f4435957dc6964890b9943ac1cc326, type: 2}
+  - {fileID: 11400000, guid: 4dc20924609cc6b4cbd6750bc7a34401, type: 2}
+  - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+  - {fileID: 11400000, guid: 77939da618593b848812da938fb86409, type: 2}
+  - {fileID: 11400000, guid: ff8fd4f93a60ebe49a03ae4a560472b5, type: 2}
+  - {fileID: 11400000, guid: 6e5bbece67bdae64bb1bea485d59bd13, type: 2}
+  - {fileID: 11400000, guid: 57647fb05a84aef4c8af9f53cacb6727, type: 2}
+  - {fileID: 11400000, guid: 7544f82a436a5e4478d7cb94e70881fb, type: 2}
+  - {fileID: 11400000, guid: 7c128930c12184a4b891f15020c7ff47, type: 2}
+  - {fileID: 11400000, guid: 4cc7e27bbc6c6d34993290bfbf218c6e, type: 2}
+  - {fileID: 11400000, guid: b06b1c39f4dbef34780a6bb989f047bd, type: 2}
+  - {fileID: 11400000, guid: 67a604d855b08714e8e528711d4bac02, type: 2}
+  - {fileID: 11400000, guid: 236094556d327964d87b584444e6a768, type: 2}
+  NormalEncounters:
+  - Id: "\u666E\u901A01"
+    Slots:
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 0}
+  - Id: "\u666E\u901A02"
+    Slots:
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 11400000, guid: 7c54bf856346131478507188b844d5b2, type: 2}
+    - {fileID: 0}
+  - Id: "\u666E\u901A03"
+    Slots:
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 4dc20924609cc6b4cbd6750bc7a34401, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 0}
+  - Id: "\u666E\u901A04"
+    Slots:
+    - {fileID: 11400000, guid: 77939da618593b848812da938fb86409, type: 2}
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 0}
+  - Id: "\u666E\u901A05"
+    Slots:
+    - {fileID: 11400000, guid: 6e5bbece67bdae64bb1bea485d59bd13, type: 2}
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 11400000, guid: 7c54bf856346131478507188b844d5b2, type: 2}
+  - Id: "\u666E\u901A06"
+    Slots:
+    - {fileID: 11400000, guid: 77939da618593b848812da938fb86409, type: 2}
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 4dc20924609cc6b4cbd6750bc7a34401, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+  - Id: "\u666E\u901A07"
+    Slots:
+    - {fileID: 11400000, guid: 6e5bbece67bdae64bb1bea485d59bd13, type: 2}
+    - {fileID: 11400000, guid: 370b0f8054bb2984c8885a2db6f341c2, type: 2}
+    - {fileID: 11400000, guid: 4dc20924609cc6b4cbd6750bc7a34401, type: 2}
+    - {fileID: 11400000, guid: 7c54bf856346131478507188b844d5b2, type: 2}
+  - Id: "\u666E\u901A08"
+    Slots:
+    - {fileID: 11400000, guid: 9ac211e79d922264ba47c086908107b4, type: 2}
+    - {fileID: 11400000, guid: 4dc20924609cc6b4cbd6750bc7a34401, type: 2}
+    - {fileID: 11400000, guid: 77939da618593b848812da938fb86409, type: 2}
+    - {fileID: 11400000, guid: 7c54bf856346131478507188b844d5b2, type: 2}
+  EliteEncounters:
+  - Id: "\u7CBE\u82F101"
+    Slots:
+    - {fileID: 11400000, guid: 57647fb05a84aef4c8af9f53cacb6727, type: 2}
+    - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+    - {fileID: 11400000, guid: 68f4435957dc6964890b9943ac1cc326, type: 2}
+    - {fileID: 0}
+  - Id: "\u7CBE\u82F102"
+    Slots:
+    - {fileID: 11400000, guid: ff8fd4f93a60ebe49a03ae4a560472b5, type: 2}
+    - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+    - {fileID: 11400000, guid: 7544f82a436a5e4478d7cb94e70881fb, type: 2}
+    - {fileID: 0}
+  - Id: "\u7CBE\u82F103"
+    Slots:
+    - {fileID: 11400000, guid: 57647fb05a84aef4c8af9f53cacb6727, type: 2}
+    - {fileID: 11400000, guid: ff8fd4f93a60ebe49a03ae4a560472b5, type: 2}
+    - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+    - {fileID: 11400000, guid: 68f4435957dc6964890b9943ac1cc326, type: 2}
+  - Id: "\u7CBE\u82F104"
+    Slots:
+    - {fileID: 11400000, guid: 57647fb05a84aef4c8af9f53cacb6727, type: 2}
+    - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+    - {fileID: 11400000, guid: 68f4435957dc6964890b9943ac1cc326, type: 2}
+    - {fileID: 11400000, guid: 7544f82a436a5e4478d7cb94e70881fb, type: 2}
+  - Id: "\u7CBE\u82F105"
+    Slots:
+    - {fileID: 11400000, guid: 57647fb05a84aef4c8af9f53cacb6727, type: 2}
+    - {fileID: 11400000, guid: ff8fd4f93a60ebe49a03ae4a560472b5, type: 2}
+    - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+    - {fileID: 11400000, guid: 7544f82a436a5e4478d7cb94e70881fb, type: 2}
+  - Id: "\u7CBE\u82F106"
+    Slots:
+    - {fileID: 11400000, guid: f9a0bdbaa31fa6042b5bfb2d8813247a, type: 2}
+    - {fileID: 11400000, guid: 68f4435957dc6964890b9943ac1cc326, type: 2}
+    - {fileID: 11400000, guid: ff8fd4f93a60ebe49a03ae4a560472b5, type: 2}
+    - {fileID: 11400000, guid: 7544f82a436a5e4478d7cb94e70881fb, type: 2}
+  BossEncounters:
+  - Id: "Boss01-\u590D\u5236"
+    Slots:
+    - {fileID: 11400000, guid: 7c128930c12184a4b891f15020c7ff47, type: 2}
+    - {fileID: 0}
+    - {fileID: 0}
+    - {fileID: 0}
+  - Id: "Boss02-\u5DE8\u578B"
+    Slots:
+    - {fileID: 11400000, guid: 4cc7e27bbc6c6d34993290bfbf218c6e, type: 2}
+    - {fileID: 0}
+    - {fileID: 0}
+    - {fileID: 0}
+  - Id: "Boss03-\u7EC4\u5408"
+    Slots:
+    - {fileID: 11400000, guid: 236094556d327964d87b584444e6a768, type: 2}
+    - {fileID: 11400000, guid: b06b1c39f4dbef34780a6bb989f047bd, type: 2}
+    - {fileID: 0}
+    - {fileID: 11400000, guid: 67a604d855b08714e8e528711d4bac02, type: 2}
   MentalStates:
   - {fileID: 11400000, guid: 6a8ca0b051aeb94499b44ea7d3a0d96a, type: 2}
   - {fileID: 11400000, guid: f00c46188323d374784ee70d79d1b896, type: 2}
@@ -54,11 +176,6 @@ MonoBehaviour:
   - 0.31
   - 0.38
   - 0.31
-  Events:
-  - {fileID: 11400000, guid: 0a3144690948c1048b6ea03fe565a248, type: 2}
-  - {fileID: 11400000, guid: 58d8eb034b8756f4b93493160c4e536b, type: 2}
-  - {fileID: 11400000, guid: c0a13b640a0ecfa468ba5a1e54175e96, type: 2}
-  - {fileID: 11400000, guid: f4cf658e9073d0247879d4f611fdb47e, type: 2}
   SupplyHealRatio: 0.35
   SuppliesPerBattle: 2
   SuppliesPerElite: 4

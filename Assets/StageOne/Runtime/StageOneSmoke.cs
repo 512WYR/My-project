@@ -62,10 +62,12 @@ namespace Ruin.Runtime
             // 事件文案里出现的新词也一并探一遍：字体是动态 OS 字体，缺字要在这里就暴露出来。
             app.View.InterfaceFont.RequestCharactersInTexture("界限之间战士盾卫枪手奶妈理智凝神躁动濒死祭坛事件补给站电梯井首领增益坚韧锋锐清明部位义肢断修复重创"
                 + "矿道挖穿矿脉次数用尽齿轮咬袖子撬外壳弹零件划伤紧闭铁门敲击靠近对话远离药剂箱蓝红全部喝下队员医疗室药柜稳定剂休整守夜角落打乱站位失控机器工坊安装议价适配搏动组织岔道无视探索通道第五个人查清状况"
-                + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤", 24, FontStyle.Normal);
+                + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤"
+                + "一三上不与专东丝两严中为么也了予于些亡交亮什仅仍从仓代以任份伍会低体何作你使例供侧便保倍值假做先入八六共具养内再冒写决净减出分切列则初判利到制削前剧剩劈力功加勋化区十单南占卡即卸历原去及友反发取受变叠另只可右号各合名后否告命和品唯四回因固图在地场均型基境墟声处备多大头套好始威存它完宝实害家容寐察将少尝就局层属峙已带常干平并库应废度延建开弃式引弱强归当录形往待得御循心必态急性恢情意成我或截房所才扣执技把护抽拦择持指按挡损换据掉排掩提操擎支改攻放效敌救文斗斧新方旧易是显普暂暴更替最有未末本杀束来果标样格案档检概槛止正此殉殊段每比没治沿活流消源演点炼然片版物特独猎献率玩环现生由留瘾登的目相看着知破础确示种程空立章端符等筒算管类精累纯线练终经结继续缺网置群者耗肠胁胜能脏腿臂自至致色节英苹获藏血行被西要观解计记试该详语说请读调象败账走起跃跟跨路跳身躯达过返还这追送速遇避邻都里量金针钮链锁锈闪防阵阶际除险随隐集需静面页项额饰馈高法其满", 24, FontStyle.Normal);
             Require(("界限之间战士盾卫枪手奶妈理智濒死祭坛事件补给站电梯井首领增益部位义肢断修复"
                 + "矿道挖穿矿脉次数用尽齿轮咬袖子撬外壳弹零件划伤紧闭铁门敲击靠近对话远离药剂箱蓝红全部喝下队员医疗室药柜稳定剂休整守夜角落打乱站位失控机器工坊安装议价适配搏动组织岔道无视探索通道第五个人查清状况"
-                + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤")
+                + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤"
+                + "一三上不与专东丝两严中为么也了予于些亡交亮什仅仍从仓代以任份伍会低体何作你使例供侧便保倍值假做先入八六共具养内再冒写决净减出分切列则初判利到制削前剧剩劈力功加勋化区十单南占卡即卸历原去及友反发取受变叠另只可右号各合名后否告命和品唯四回因固图在地场均型基境墟声处备多大头套好始威存它完宝实害家容寐察将少尝就局层属峙已带常干平并库应废度延建开弃式引弱强归当录形往待得御循心必态急性恢情意成我或截房所才扣执技把护抽拦择持指按挡损换据掉排掩提操擎支改攻放效敌救文斗斧新方旧易是显普暂暴更替最有未末本杀束来果标样格案档检概槛止正此殉殊段每比没治沿活流消源演点炼然片版物特独猎献率玩环现生由留瘾登的目相看着知破础确示种程空立章端符等筒算管类精累纯线练终经结继续缺网置群者耗肠胁胜能脏腿臂自至致色节英苹获藏血行被西要观解计记试该详语说请读调象败账走起跃跟跨路跳身躯达过返还这追送速遇避邻都里量金针钮链锁锈闪防阵阶际除险随隐集需静面页项额饰馈高法其满")
                 .All(c => app.View.InterfaceFont.HasCharacter(c)), "Chinese font glyphs available");
             yield return Capture("map-1080.png", 1920, 1080);
             yield return Capture("map-720.png", 1280, 720);
@@ -284,6 +286,55 @@ namespace Ruin.Runtime
             Require(app.Map.SupplyHealed, "The supply room heals the party once per visit");
             Click("SupplyCalm"); yield return null;
             Require(app.Map.SupplyCalmed, "The supply room steadies the party once per visit");
+
+            // 饰品：验收工具发放八件，补给站的面板负责装备与卸下。专属限制由按钮禁用兜底。
+            app.DebugGrantAllAccessories(); yield return null;
+            Require(app.Run.AccessoryStock.Count >= 8, "The acceptance tool grants every accessory");
+            Click("SupplyAccessories"); yield return null;
+            Require(app.AccessoryEditorOpen, "The supply room opens the accessory panel");
+            var gunner = app.Run.Heroes.FirstOrDefault(h => h.Definition.Silhouette == "gunner");
+            Require(gunner != null, "The party carries a gunner");
+            Click("AccessoryHero_" + gunner.Id); yield return null;
+            yield return Capture("accessories-1080.png", 1920, 1080);
+            int stockBeforeFit = app.Run.AccessoryStock.Count;
+            Click("Equip_0"); yield return null;
+            Require(gunner.EquippedAccessories.Count == 1 && app.Run.AccessoryStock.Count == stockBeforeFit - 1,
+                "The panel moves an accessory from the stock onto the hero");
+            string fitted = gunner.EquippedAccessories[0].Id;
+            Click("Unequip_" + gunner.Id + "_" + fitted); yield return null;
+            Require(gunner.EquippedAccessories.Count == 0 && app.Run.AccessoryStock.Count == stockBeforeFit,
+                "Unequipping puts the accessory back into the stock");
+            Click("CloseAccessories"); yield return null;
+            Require(!app.AccessoryEditorOpen && app.Room == RoomView.Supply, "Closing the panel stays in the supply room");
+
+            // 一次性道具：验收工具发放三件，面板在补给站同样可用。血量药立即结算，理智锁定在战斗外
+            // 只预置到下一场；手术包保留在库存里，按钮禁用。
+            app.DebugGrantAllConsumables(); yield return null;
+            Require(app.Run.Consumables.Count >= 3, "The acceptance tool grants every consumable");
+            var patient = app.Run.Heroes.FirstOrDefault(h => !h.Dead);
+            Require(patient != null, "The party has a living hero");
+            patient.Hp = Math.Max(1, patient.Hp / 2);
+            Click("Consumables"); yield return null;
+            Require(app.ConsumableEditorOpen && app.Room == RoomView.Supply, "The consumable panel opens from a room page");
+            Click("ConsumableHero_" + patient.Id); yield return null;
+            int hpBeforePotion = patient.Hp;
+            int itemsBeforePotion = app.Run.Consumables.Count;
+            Click("UseConsumable_1"); yield return null;
+            Require(patient.Hp > hpBeforePotion && app.Run.Consumables.Count == itemsBeforePotion - 1,
+                "The healing potion restores health and spends one item");
+            int lockIndex = app.Run.Consumables.FindIndex(c => c != null && c.Kind == ConsumableKind.SanityLock);
+            Require(lockIndex >= 0, "The sanity lock is still in the stock");
+            Click("UseConsumable_" + lockIndex); yield return null;
+            Require(patient.SanityLockPending, "Using the sanity lock outside battle primes the next fight");
+            Require(app.ConsumableEditorOpen, "Outside battle the panel stays open for another item");
+            int kitIndex = app.Run.Consumables.FindIndex(c => c != null && c.Kind == ConsumableKind.SurgeryKit);
+            Require(kitIndex >= 0, "The surgery kit is still in the stock");
+            var kitButton = FindObjectsOfType<Button>().FirstOrDefault(b => b.name == "UseConsumable_" + kitIndex);
+            Require(kitButton != null && !kitButton.interactable, "The surgery kit is catalogued but cannot be used");
+            yield return Capture("consumables-1080.png", 1920, 1080);
+            Click("CloseConsumables"); yield return null;
+            Require(!app.ConsumableEditorOpen && app.Room == RoomView.Supply, "Closing the consumable panel stays in the supply room");
+
             Click("LeaveRoom"); yield return null;
             Require(app.AwaitingNode && app.Room == RoomView.Map, "Leaving the supply room returns to the route");
 
@@ -307,6 +358,7 @@ namespace Ruin.Runtime
             Click("Node_0"); yield return WaitReady();
             Require(app.Battle != null && app.Battle.Enemies.All(e => e.Name.StartsWith("首领")),
                 "The boss room scales the enemies into bosses");
+            Require(patient.SanityLocked, "The lock bought outside battle activates in the next fight");
             yield return Fight();
             bool bossWon = app.Battle.Outcome == BattleOutcome.Victory;
             Click("ContinueBattle"); yield return null;

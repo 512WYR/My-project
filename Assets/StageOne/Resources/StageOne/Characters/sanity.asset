@@ -1,0 +1,133 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
+  m_Name: sanity
+  m_EditorClassIdentifier: 
+  Id: sanity
+  DisplayName: "\u7406\u667A\u602A"
+  Subtitle: "\u4ECE\u540E\u6392\u4FB5\u8680\u6211\u65B9\u7406\u667A"
+  Silhouette: enemy
+  MaxHp: 20
+  Speed: 5
+  SanityOffset: 0
+  EnemyPattern: 1
+  Attack: 3
+  Accuracy: 0.9
+  CritChance: 0
+  Dodge: 0
+  Defense: 0
+  BasicSkills: []
+  PrimalSkills: []
+  TechnicalSpecial: {fileID: 0}
+  Behavior: 1
+  EnemySkills:
+  - Id: e_sanity_drain
+    Name: "\u964D\u4F4E\u7406\u667A"
+    Description: "\u964D\u4F4E\u7406\u667A"
+    Effect: 4
+    Target: 0
+    Multiplier: 0
+    ActorRanks: 14
+    TargetRanks: 15
+    Uses: 0
+    Bleed: 0
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 0
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: 0
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 0
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0
+    FollowupPercent: 50
+    SanityDamage: 8
+    SanityAdjacent: 0
+    TargetCount: 0
+    TargetRule: 0
+    GuardReduction: 0
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 0
+      Area: 0
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 0
+  - Id: e_sanity_melee
+    Name: "\u8FD1\u8EAB\u653B\u51FB"
+    Description: "\u8FD1\u8EAB\u653B\u51FB"
+    Effect: 0
+    Target: 0
+    Multiplier: 1
+    ActorRanks: 1
+    TargetRanks: 3
+    Uses: 0
+    Bleed: 0
+    Interrupt: 0
+    Cleanse: 0
+    Accuracy: 0.9
+    Targeting: 0
+    Area: 0
+    AreaMax: 2
+    AreaRatio: 0.5
+    AreaDecay: 0
+    SelfMove: 0
+    PullToFront: 0
+    PullChance: 0
+    Imbalance: 0
+    BleedTurns: 2
+    BleedChance: 0
+    IgnoreLimbPenalty: 0
+    HpMissingDamageScale: 0
+    LimbBonusPerStack: 0
+    MaxLimbBonusStacks: 2
+    SelfVulnerable: 0
+    Grant: 0
+    SelfGrant: 0
+    GrantDefense: 0
+    GrantAccuracy: 0
+    FollowupPercent: 50
+    SanityDamage: 0
+    SanityAdjacent: 0
+    TargetCount: 0
+    TargetRule: 0
+    GuardReduction: 0
+    RandomTarget: 0
+    FriendlyFireChance: 0
+    Rider:
+      Kind: 0
+      Area: 0
+      Ratio: 1
+      SpreadRatio: 0.5
+      Amount: 0
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []
