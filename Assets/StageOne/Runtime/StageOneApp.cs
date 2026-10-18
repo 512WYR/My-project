@@ -10,7 +10,7 @@ namespace Ruin.Runtime
     // by AwaitingNode being false, exactly as it was before the route rework.
     public enum RoomView { Map, Buff, Supply, Event, Elevator, Treasure }
 
-    public sealed class StageOneApp : MonoBehaviour
+    public sealed partial class StageOneApp : MonoBehaviour
     {
         public GameCatalog Catalog;
         public RunState Run { get; private set; }
@@ -84,14 +84,20 @@ namespace Ruin.Runtime
 #endif
         }
 
+        // The authored debug console is outside this assembly's UI, so it publishes the two facts the
+        // game loop needs: whether it currently owns the screen, and whether it already consumed Esc in
+        // this frame. Without the second flag the app would also cancel a pending target whenever the
+        // console closes, depending on which Update ran first.
+        public static bool DebugOverlayOpen;
+        public static int DebugOverlayEscapeFrame = -1;
+
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F1)) ToggleHelp();
-            if (Input.GetKeyDown(KeyCode.I)) ToggleConsumableEditor();
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (Input.GetKeyDown(KeyCode.F3)) ToggleLab();
-#endif
-            if (Input.GetKeyDown(KeyCode.Escape))
+            // The debug console is opened from its own on-screen launcher, and the help / item panels
+            // have their own buttons, so no acceptance feature depends on a function key any more.
+            if (Input.GetKeyDown(KeyCode.Escape)
+                && !DebugOverlayOpen
+                && DebugOverlayEscapeFrame != Time.frameCount)
             {
                 if (ConsumableEditorOpen) CloseConsumableEditor();
                 else if (AccessoryEditorOpen) CloseAccessoryEditor();
@@ -103,7 +109,7 @@ namespace Ruin.Runtime
             }
         }
 
-        public void NewRun(double? preset = null)
+        public void NewRun(double? preset = null, uint? seed = null)
         {
             StopAllCoroutines(); Busy = false; ClearPending(); HelpOpen = false; LabOpen = false;
             AccessoryEditorOpen = false; AccessoryHeroId = null;
@@ -112,7 +118,7 @@ namespace Ruin.Runtime
             RunEndNote = null;
             // The limb rules travel with the rest of the combat rules, so the catalog's part ratios and
             // penalties seed every hero's limb table.
-            Run = RunState.Create(Catalog.Heroes.Select(a => a.ToSpec()).ToArray(), DefaultSeed, preset, Catalog.Rules());
+            Run = RunState.Create(Catalog.Heroes.Select(a => a.ToSpec()).ToArray(), seed ?? DefaultSeed, preset, Catalog.Rules());
             // The seed preset only writes each hero's own sanity. The shared player sanity is a different
             // field, and it is what the map odds and every event's high/low gate read, so the debug
             // presets have to move it too — otherwise "sanity 15" still reads 50 and every event quietly
@@ -641,7 +647,7 @@ namespace Ruin.Runtime
             }
             Busy = false;
             if (Battle.Current != null && Battle.Current.Player) InspectedId = Battle.Current.Id;
-            Hint = "选择技能，再点击高亮目标。F1查看说明，I使用道具，F3打开验收工具。";
+            Hint = "选择技能，再点击高亮目标。Esc 取消目标；右上角「调试台」提供验收命令与后台信息。";
             Refresh();
         }
 
@@ -675,7 +681,10 @@ namespace Ruin.Runtime
         public event Action Changed;
         public void Refresh() { if (View) View.Render(); Changed?.Invoke(); }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // ---- acceptance commands ----
+        // Reached only from the authored debug console (Assets/IndustrialDebugUI). The commands stay
+        // compiled in every build because that console is a scene object rather than generated code;
+        // the console itself hides outside the editor and development builds.
         public void DebugSetSanity(double value)
         {
             if (Battle == null) return;
@@ -912,6 +921,5 @@ namespace Ruin.Runtime
             step.Candidates.Add(new NodeState { Floor = step.Floor, Index = step.Index, Type = type, OptionIndex = 0 });
             SelectNode(0);
         }
-#endif
     }
 }

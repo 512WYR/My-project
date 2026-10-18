@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using GameMake.IndustrialDebugUI;
 using Ruin.Core;
 using Ruin.Runtime;
 using UnityEngine;
@@ -52,7 +53,6 @@ namespace GameMake.GothicHUD
 
         private StageOneApp bound;
         private bool hooked;
-        private bool debugOpen;
 
         private void OnEnable() { Bind(); Sync(); }
         private void Start() { Bind(); Sync(); }
@@ -85,12 +85,14 @@ namespace GameMake.GothicHUD
             if (Presentation && Presentation.DisplacementButton)
                 Presentation.DisplacementButton.onClick.AddListener(SelectSwap);
             // Wired here rather than as persistent listeners: the prefab is built in a scene that has no
-            // StageOneApp yet, so only a runtime reference can reach one.
-            if (DebugButton) DebugButton.onClick.AddListener(() => SetDebugOpen(!debugOpen));
-            if (DebugCloseButton) DebugCloseButton.onClick.AddListener(() => SetDebugOpen(false));
-            if (HelpButton) HelpButton.onClick.AddListener(() => { if (BattleSource) BattleSource.ToggleHelp(); });
-            if (LabButton) LabButton.onClick.AddListener(() => { if (BattleSource) BattleSource.ToggleLab(); });
-            if (NewRunButton) NewRunButton.onClick.AddListener(NewRun);
+            // StageOneApp yet, so only a runtime reference can reach one. The old in-prefab sheet is kept
+            // only as serialized history; the authored console owns every readout and command now.
+            if (DebugButton)
+            {
+                DebugButton.onClick.AddListener(IndustrialDebugConsole.ToggleFromHud);
+                var caption = DebugButton.GetComponentInChildren<Text>(true);
+                if (caption) caption.text = "调试台";
+            }
             foreach (var card in Cards())
                 if (card && card.Hit) card.Hit.onClick.AddListener(() => SelectCard(card));
             for (int i = 0; i < QuickItems.Length; i++)
@@ -130,15 +132,6 @@ namespace GameMake.GothicHUD
         {
             if (BattleSource && card && !string.IsNullOrEmpty(card.ActorId)) BattleSource.SelectActor(card.ActorId);
         }
-        private void NewRun() { SetDebugOpen(false); if (BattleSource) BattleSource.NewRun(); }
-
-        private void SetDebugOpen(bool open)
-        {
-            debugOpen = open;
-            if (DebugRoot) DebugRoot.SetActive(open);
-            Sync();
-        }
-
         private void SelectParty(int index)
         {
             var app = BattleSource;
@@ -157,10 +150,9 @@ namespace GameMake.GothicHUD
             foreach (var chrome in ChromeRoots) if (chrome) chrome.SetActive(live);
             bool quickItems = live && battle.Current != null && battle.Current.Player && !app.Busy;
             foreach (var button in QuickItems) if (button) button.interactable = quickItems;
-            // The sheet follows the button rather than the battle, so 新开演练 stays reachable from the
-            // route and the rooms as well.
-            if (DebugRoot) DebugRoot.SetActive(debugOpen);
-            if (debugOpen) SyncDebug(app, battle);
+            // The old sheet is never shown: the authored console replaced it. Hiding it here also keeps
+            // a stale prefab from covering the laid-out page if the scene was saved while it was open.
+            if (DebugRoot) DebugRoot.SetActive(false);
             if (!live) return;
 
             SyncPresentation(app);
@@ -238,7 +230,8 @@ namespace GameMake.GothicHUD
                 // This page has no action title, so the description panel is the only place a blocked turn
                 // can say why. Without it an all-grey skill row tells the player nothing.
                 Panel.DescriptionTitle.text = "技能介绍";
-                Panel.DescriptionBody.text = BlockedReason(app, battle, skills) ?? (app.Hint ?? "点击技能槽选择技能，再点击高亮目标。");
+                Panel.DescriptionBody.text = BlockedReason(app, battle, skills)
+                    ?? (app.Hint ?? "点击技能槽选择技能，再点击高亮目标。\n\n图例：●可选 ○不可；斜杠前为己方站位，斜杠后为目标位置（阵营见效果说明），1→4号位。");
             }
         }
 
@@ -259,7 +252,12 @@ namespace GameMake.GothicHUD
             string count = skill.Uses > 0 ? " · 剩" + actor.UsesLeft(skill) + "次" : "";
             string value = skill.Effect == SkillEffect.Attack ? "伤害 " + battle.SkillValue(actor, skill) + " · "
                 : skill.Effect == SkillEffect.Heal ? "恢复 " + battle.SkillValue(actor, skill) + " · " : "";
-            return value + skill.Description + count;
+            // The first description line holds the position/target symbols and has to stay alone.
+            // Put the live value and remaining uses on the effect line instead.
+            int split = skill.Description.IndexOf('\n');
+            if (split < 0) return value + skill.Description + count;
+            return skill.Description.Substring(0, split) + "\n"
+                + value + skill.Description.Substring(split + 1) + count;
         }
 
         private void SyncStage(StageOneApp app, BattleEngine battle)

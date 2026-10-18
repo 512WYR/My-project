@@ -69,7 +69,7 @@ GothicHudPanel.OnSkillSelected 提供技能选择事件，技能效果由游戏�
 
 ## 接管全部页面：mainScene
 
-GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity。该场景把 StageOneApp 的 External Battle Ui 打开，于是 StageOneView 不再绘制任何页面——战斗页全部让出，只保留结算弹窗、F1 帮助和 F3 验收工具；它的 Canvas 排序为 50，所以弹窗仍盖在 HUD（排序 10）之上。
+GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity。该场景把 StageOneApp 的 External Battle Ui 打开，于是 StageOneView 不再绘制任何页面——战斗页全部让出，只保留结算弹窗、饰品与道具弹窗；它的 Canvas 排序为 50，所以这些弹窗仍盖在 HUD（排序 10）之上。帮助、验收命令与后台信息改由独立的 `IndustrialDebugConsole.prefab` 提供（Canvas 排序 80），入口是屏幕上的「调试台」按钮，不再使用 F1 / F3。
 
 > 生成场景前必须先跑一次 **GameMake / Gothic HUD / Rebuild Modular HUD**：新组件与它们的引用都写在预制体和场景实例上，只重建其中一个不够。
 >
@@ -84,7 +84,7 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 | 技能槽 / 位移 / 说明 / 位置卡 | GothicBattleHudController | 唯一写入者，只更新已存在对象，不重建层级 |
 | 路线页 / 房间选择 | ExplorationMapController | 场景内独立 Canvas，接管 `RoomView.Map` |
 | 事件房间 | IndustrialEventPage | 场景内独立 Canvas，接管 `RoomView.Event` |
-| 调试页 | GothicBattleHudController | 唯一写入者；「调试」按钮在所有页面都可见，战斗外的行显示为「—」 |
+| 调试台 | IndustrialDebugConsole | 独立 prefab 与 Canvas（排序 80）；屏幕按钮或 HUD 的「调试台」按钮打开，不占用功能键 |
 
 战斗页本身只承担位置、血量、技能三件事，其余都收进调试页：
 
@@ -93,7 +93,7 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 | 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、状态行（我方）或敌人意图（敌方）、行动/可选标记、阵亡叉 |
 | 血量 | ModularHudController / Vitals | 当前被查看角色的生命与理智 |
 | 技能 | ModularHudController / Skills | 五个技能槽、位移键、技能说明 |
-| 调试页 | GothicBattleHudController | 玩家理智、层数/场次/回合、当前行动者、提示、敌人意图、帮助 F1、验收 F3、新开演练 |
+| 调试台 | IndustrialDebugConsole | 九个页签：概览、队伍、战斗、地图与房间、事件、部位与义肢、物品与饰品、规则与目录、日志；包含新开演练、玩家/队员理智、生命、精神状态、强制房间与事件、战斗结算、义肢与饰品管理 |
 
 位置卡不显示理智，理智看 Vitals 区。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
 

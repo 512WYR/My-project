@@ -122,6 +122,7 @@ namespace Ruin.Runtime
             var current = battle.Current;
             var skills = battle.SkillsFor(current);
             BattleLabUi.SubTitle("技能（禁用原因会显示在按钮后）");
+            BattleLabUi.Small("图例：●可选 ○不可；斜杠前为己方站位，斜杠后为目标位置（阵营见效果说明），1→4号位。");
             for (int i = 0; i < skills.Length; i++)
             {
                 var skill = skills[i];

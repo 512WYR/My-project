@@ -15,7 +15,7 @@ MonoBehaviour:
   Spec:
     Id: s_bulwark
     Name: "\u58C1\u5792"
-    Description: "\u63D0\u9AD8\u5168\u961F\u9632\u5FA1\u529B"
+    Description: "\u25CF\u25CF\u25CB\u25CB/\u25CF\u25CF\u25CF\u25CF\n\u5168\u961F\u9632\u5FA1+20%\uFF08\u672C\u56DE\u5408\uFF09\uFF0C\u4E0D\u53E0\u52A0"
     Effect: 3
     Target: 1
     Multiplier: 0

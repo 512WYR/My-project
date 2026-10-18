@@ -15,7 +15,7 @@ MonoBehaviour:
   Spec:
     Id: w_cleave
     Name: "\u65A9\u5288"
-    Description: "\u5411\u524D\u79FB\u52A8\u4E00\u4F4D\u5E76\u653B\u51FB\u654C\u65B91\u30012\u53F7\u4F4D"
+    Description: "\u25CF\u25CF\u25CF\u25CB/\u25CF\u25CF\u25CB\u25CB\n\u524D\u79FB1\u4F4D\uFF0C\u9020\u6210\u653B\u51FB\u529B100%\u7684\u4F24\u5BB3\uFF0C\u9884\u8BA110\u70B9"
     Effect: 0
     Target: 0
     Multiplier: 1

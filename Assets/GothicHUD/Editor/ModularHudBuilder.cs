@@ -240,43 +240,16 @@ namespace GameMake.GothicHUDEditor
                 enemies[rank] = Card(enemyRoot, "Enemy " + (rank + 1), rank * CardStep, 0, false);
             }
 
-            // ---- everything that has no place on the authored layout yet lives behind one button ----
-            var debugButton = HudButton(root, "Debug Button", "调试", 1720, 24, 180, 52);
-            var debug = Group(root, "Debug Page - 调试", 0, 0, Width, Height);
-            // The scrim has to swallow clicks, or a stray press next to the sheet would land on a position
-            // card underneath and issue a real battle command.
-            var scrim = Solid(debug, "Scrim", 0, 0, Width, Height, new Color32(5, 7, 9, 238));
-            scrim.raycastTarget = true;
-            var sheet = Group(debug, "Sheet", 510, 190, 900, 700);
-            Art(sheet, "Sheet Frame", "OperationFrame", 0, 0, 900, 700, true, 2);
-            Label(sheet, "Title", "调试 · Debug", 34, 20, 500, 40, 26, Gold);
-            var debugSanity = Label(sheet, "Player Sanity", "", 34, 76, 832, 30, 17, Cyan);
-            var debugFloor = Label(sheet, "Progress", "", 34, 110, 832, 30, 16, Muted);
-            var debugTurn = Label(sheet, "Turn", "", 34, 144, 832, 30, 16, Ink);
-            var debugHint = Label(sheet, "Hint", "", 34, 176, 832, 56, 15, Gold);
-            Label(sheet, "Intent Heading", "敌人意图", 34, 240, 400, 28, 18, Rust);
-            var debugIntent = Label(sheet, "Intent Body", "", 34, 272, 832, 178, 15, Muted, TextAnchor.UpperLeft);
-            var helpButton = HudButton(sheet, "Help", "帮助 F1", 34, 480, 190, 56);
-            var labButton = HudButton(sheet, "Lab", "验收 F3", 240, 480, 190, 56);
-            var newRunButton = HudButton(sheet, "New Run", "新开演练", 446, 480, 190, 56);
-            var closeButton = HudButton(sheet, "Close", "关闭", 652, 480, 214, 56);
-            debug.gameObject.SetActive(false);
+            // ---- one entrance to the authored acceptance console (§Assets/IndustrialDebugUI). The
+            // console itself is a separate prefab added to the scene by its installer, so nothing that
+            // belongs to it is generated here. ----
+            var debugButton = HudButton(root, "Debug Button", "调试台", 1720, 24, 180, 52);
 
             var chrome = root.gameObject.AddComponent<GothicBattleHudController>();
             chrome.Panel = panel;
             chrome.Presentation = controller;
             chrome.Counter = counter;
-            chrome.PlayerSanityText = debugSanity;
-            chrome.FloorText = debugFloor;
-            chrome.TurnText = debugTurn;
-            chrome.HintText = debugHint;
-            chrome.DebugIntentText = debugIntent;
-            chrome.DebugRoot = debug.gameObject;
             chrome.DebugButton = debugButton;
-            chrome.DebugCloseButton = closeButton;
-            chrome.HelpButton = helpButton;
-            chrome.LabButton = labButton;
-            chrome.NewRunButton = newRunButton;
             chrome.Allies = allies;
             chrome.Enemies = enemies;
             // The debug button stays out of the chrome roots: the sheet follows the button rather than the
