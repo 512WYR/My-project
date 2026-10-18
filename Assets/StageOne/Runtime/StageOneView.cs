@@ -924,7 +924,7 @@ namespace Ruin.Runtime
             Button(p, "ForceSupply", "进入补给站", "替换当前候选", 36, 602, 151, 50, () => app.DebugForceRoom(NodeType.Supply), false, true, 15);
             Button(p, "ForceEvent", "进入事件房间", "随机一条", 199, 602, 151, 50, () => app.DebugForceRoom(NodeType.Event), false, true, 15);
             Button(p, "ForceAltar", "进入祭坛房间", "替换当前候选", 362, 602, 151, 50, () => app.DebugForceRoom(NodeType.Altar), false, true, 15);
-            Button(p, "ForceTreasure", "进入宝箱房", "内容待定", 525, 602, 151, 50, () => app.DebugForceRoom(NodeType.Treasure), false, true, 15);
+            Button(p, "ForceTreasure", "进入宝箱房", "发一件随机饰品", 525, 602, 151, 50, () => app.DebugForceRoom(NodeType.Treasure), false, true, 15);
             Button(p, "ForceElevator", "进入电梯井", "替换当前候选", 688, 602, 151, 50, () => app.DebugForceRoom(NodeType.Elevator), false, true, 15);
             Button(p, "LabEvents", "事件验收", "十条事件各钉一条", 851, 602, 151, 50, app.ToggleLabEvents, false, true, 15);
             Label(p, "LimbLabHeading", "身体与义肢（作用于选中队员，可在房间页使用）", 36, 664, 600, 26, 17, Gold);
