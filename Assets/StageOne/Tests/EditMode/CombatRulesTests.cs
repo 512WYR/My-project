@@ -447,6 +447,79 @@ namespace Ruin.Tests
             Assert.IsTrue(battle.Events.Any(e => e.Message.Contains("失衡免疫")), "免疫回合要写明本次失衡未生效");
         }
 
+        [Test] public void ImbalanceAutoHitsDisplacementsForTwoRoundsButSkipsOnlyOneAction()
+        {
+            var rules = catalog.Rules();
+            var bash = new SkillSpec
+            {
+                Id = "test_bash", Name = "测试猛击", Effect = SkillEffect.Attack,
+                Target = TargetSide.Enemy, Targeting = SkillTargeting.Choose,
+                Multiplier = 0.1, ActorRanks = 15, TargetRanks = 15, Accuracy = 1, Imbalance = true
+            };
+            var pull = new SkillSpec
+            {
+                Id = "test_pull", Name = "测试拖拽射击", Effect = SkillEffect.Attack,
+                Target = TargetSide.Enemy, Targeting = SkillTargeting.Choose,
+                Multiplier = 1.0, ActorRanks = 15, TargetRanks = 15, Accuracy = 0.9,
+                PullToFront = true, PullChance = 1.0
+            };
+            var bashHero = new ActorSpec
+            {
+                Id = "test_basher", Name = "测试猛击手", MaxHp = 40, Speed = 100, Attack = 10,
+                Accuracy = 1, CritChance = 0, Dodge = 0, Defense = 0, BasicSkills = new[] { bash }
+            };
+            var pullHero = new ActorSpec
+            {
+                Id = "test_puller", Name = "测试枪手", MaxHp = 40, Speed = 90, Attack = 10,
+                // Accuracy 0 means only the imbalance window can make this attack land.
+                Accuracy = 0, CritChance = 0, Dodge = 0, Defense = 0, BasicSkills = new[] { pull }
+            };
+            var run = RunState.Create(new[] { bashHero, pullHero }, 7, 50, rules);
+            var enemySpec = new ActorSpec
+            {
+                Id = "test_target", Name = "测试目标", MaxHp = 1000, Speed = 1, StartRank = 2,
+                Attack = 0, Accuracy = 0, Dodge = 0, Behavior = EnemyBehavior.Simple,
+                BasicSkills = ActorSpec.EmptySkills
+            };
+            var battle = new BattleEngine(run, new[] { enemySpec }, rules);
+            var target = battle.Enemies.Single();
+            string error;
+
+            Assert.AreSame(battle.Current, run.Heroes[0]);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
+            Assert.AreEqual(1, target.Imbalance, "失衡仍只跳过下一次行动");
+            Assert.AreEqual(battle.Round + 1, target.ImbalanceAutoHitUntilRound, "默认位移必中覆盖两个回合");
+            Assert.That(battle.Intent(target), Does.Contain("失衡"));
+
+            // 第 1 回合剩余的行动人直接跳过；敌人被失衡跳过一次行动后进入第 2 回合。
+            Assert.IsTrue(battle.SkipCurrentTurn(out error), error);
+            Assert.AreEqual(2, battle.Round);
+            Assert.AreEqual(0, target.Imbalance, "跳过一次行动后失衡计数应已消耗");
+            Assert.That(battle.Intent(target), Does.Contain("位移必中"), "第二回合仍应看得到位移必中");
+
+            // 第 2 回合：敌人已经消耗掉跳行动，但位移必中的第二回合仍然生效。
+            Assert.IsTrue(battle.SkipCurrentTurn(out error), error);
+            Assert.AreSame(battle.Current, run.Heroes[1]);
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
+            Assert.AreEqual(0, target.Rank, "第二回合的拖拽仍应必定命中并把目标拖到 1 号位");
+
+            // 敌人正常行动，验证打断没有延续到第二次行动。
+            Assert.IsFalse(battle.Current.Player);
+            battle.ExecuteEnemy();
+            Assert.AreEqual(3, battle.Round);
+            Assert.AreEqual(1, battle.Events.Count(e => e.Message.Contains("因失衡跳过行动")), "打断只跳过一次行动");
+            Assert.AreEqual(0, target.Imbalance);
+
+            // 第 3 回合：必中窗口结束，拖拽手 0 命中，拖拽不应再命中。
+            target.Rank = 2;
+            Assert.IsTrue(battle.SkipCurrentTurn(out error), error);
+            Assert.AreSame(battle.Current, run.Heroes[1]);
+            int before = battle.Events.Count;
+            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, target.Id, 0), out error), error);
+            Assert.IsTrue(battle.Events.Skip(before).Any(e => e.Message.Contains("未命中")), "窗口结束后应恢复普通命中判定");
+            Assert.AreEqual(2, target.Rank, "未命中时不应拖拽目标");
+        }
+
         [Test] public void PullMovesTheChosenEnemyEvenWhenAGuardTakesTheDamage()
         {
             var rules = catalog.Rules();

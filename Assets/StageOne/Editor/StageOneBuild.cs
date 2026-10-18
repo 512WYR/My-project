@@ -75,7 +75,7 @@ namespace Ruin.Editor
         {
             // 战士 · 位置 2 / 3 / 4 都能站，前排技能要求 1/2/3。
             var cleave = Skill("w_cleave", "斩劈", "●●●○/●●○○\n前移1位，造成攻击力100%的伤害，预计10点", 7, 3, s => { s.Multiplier = 1.0; s.SelfMove = -1; });
-            var bash = Skill("w_bash", "猛击", "●●○○/●●●○\n造成攻击力70%的伤害，预计7点；命中后失衡：本回合无法行动、位移必中", 3, 7, s => { s.Multiplier = 0.7; s.Imbalance = true; });
+            var bash = Skill("w_bash", "猛击", "●●○○/●●●○\n造成攻击力70%的伤害，预计7点；命中后失衡：跳过下一次行动，位移必中2回合", 3, 7, s => { s.Multiplier = 0.7; s.Imbalance = true; });
             var sweep = Skill("w_sweep", "扩散斩击", "○●●○/●●●○\n主目标受到攻击力80%的伤害，预计8点；左右相邻各受攻击力40%，预计4点", 6, 7, s => { s.Multiplier = 0.8; s.Area = SkillArea.Adjacent; s.AreaRatio = 0.5; });
             var gambit = Skill("w_gambit", "带伤强攻", "●●●○/●●●○\n忽略肢体减益，造成攻击力100%的伤害，预计10点；自身损血与肢体损伤增伤，用后受伤+25%，每场1次", 7, 7, s => {
                 s.Multiplier = 1.0; s.Uses = 1; s.IgnoreLimbPenalty = true;

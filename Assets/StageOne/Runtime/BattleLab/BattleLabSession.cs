@@ -431,6 +431,7 @@ namespace Ruin.Runtime
             actor.Interrupted = 0;
             actor.Imbalance = 0;
             actor.ImbalanceImmuneRound = -1;
+            actor.ImbalanceAutoHitUntilRound = -1;
             actor.Defending = false;
             actor.ProtectorId = null;
             actor.BlockCharges = 0;

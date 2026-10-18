@@ -1119,7 +1119,8 @@ namespace GameMake.IndustrialDebugUI
                 + "   暴击倍率 ×" + combat.CritMultiplier.ToString("0.00"));
             text.AppendLine("追击 " + combat.FollowupRatio.ToString("0.00")
                 + "   反击 " + combat.CounterRatio.ToString("0.00")
-                + "   失衡免疫 " + combat.ImbalanceImmuneRounds + " 回合");
+                + "   失衡免疫 " + combat.ImbalanceImmuneRounds + " 回合"
+                + "   位移必中 " + combat.ImbalanceAutoHitRounds + " 回合");
             var limbs = LimbSystem.Resolve(combat.Limbs);
             text.AppendLine();
             text.AppendLine("【部位规则】  单次命中移除部位生命的 " + (limbs.HitRatio * 100).ToString("0") + "%");

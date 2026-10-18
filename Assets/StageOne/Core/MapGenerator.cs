@@ -13,16 +13,17 @@ namespace Ruin.Core
     public static class MapGenerator
     {
         // Danger leans are deliberately smaller than the lucid leans, so low sanity stays risky but not
-        // extreme: elite rooms plus altars reach about 54% of the table at sanity 15 and about 14% at 85.
-        // The four older entries are scaled by 0.90 so the chest room takes the remaining 10% at sanity 50
-        // without changing how the other four relate to each other. The table still sums to exactly 1.
+        // extreme: elite rooms plus the sanity-neutral altar reach about 39% of the table at sanity 15 and
+        // about 13% at 85. The sanity-neutral altar and treasure each hold 8.5% at sanity 50, so a party
+        // that always enters either one should meet about three per run; the other three entries are
+        // scaled proportionally to keep the table summing to exactly 1.
         public static readonly NodeOddsSpec[] DefaultOdds =
         {
-            new NodeOddsSpec(NodeType.Battle, 0.315, 0),
-            new NodeOddsSpec(NodeType.EliteBattle, 0.135, -1.0),
-            new NodeOddsSpec(NodeType.Altar, 0.180, -1.0),
-            new NodeOddsSpec(NodeType.Event, 0.270, 1.0),
-            new NodeOddsSpec(NodeType.Treasure, 0.100, 0)
+            new NodeOddsSpec(NodeType.Battle, 0.363138, 0),
+            new NodeOddsSpec(NodeType.EliteBattle, 0.155586, -1.0),
+            new NodeOddsSpec(NodeType.Altar, 0.085, 0),
+            new NodeOddsSpec(NodeType.Event, 0.311276, 1.0),
+            new NodeOddsSpec(NodeType.Treasure, 0.085, 0)
         };
 
         public static readonly double[] DefaultBranchWeights = { 0.31, 0.38, 0.31 };

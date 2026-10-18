@@ -331,6 +331,7 @@ namespace Ruin.Runtime
                 rules.ProbabilityStrength = rng.NextUnit() * 3;
                 rules.FeedbackFactor = rng.NextUnit();
                 rules.ImbalanceImmuneRounds = (int)(rng.NextUnit() * 3);
+                rules.ImbalanceAutoHitRounds = (int)(rng.NextUnit() * 4);
                 cfg.Rules = rules;
             }
             return cfg;

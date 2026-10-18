@@ -54,7 +54,7 @@ namespace Ruin.Core
             actor.Form = SkillForm.Basic; actor.Defending = false; actor.ProtectorId = null;
             actor.Interrupted = 0; actor.BleedDamage = 0; actor.BleedTurns = 0;
             actor.BlockCharges = 0; actor.Counter = false; actor.Followup = false; actor.FollowupAttack = 0;
-            actor.Imbalance = 0; actor.ImbalanceImmuneRound = -1;
+            actor.Imbalance = 0; actor.ImbalanceImmuneRound = -1; actor.ImbalanceAutoHitUntilRound = -1;
             actor.DefenseBuff = 0; actor.AccuracyBuff = 0; actor.SelfVulnerable = 0;
             actor.GuardReduction = 0; actor.EnemyActionCount = 0;
             actor.Operations = 0; actor.BlastRound = 0; actor.NextSpawnRound = 0;
@@ -355,8 +355,9 @@ namespace Ruin.Core
             var main = primary ?? set.FirstOrDefault();
             if (main == null) return false;
 
-            // A displaced enemy that is imbalanced this round cannot dodge the displacement.
-            bool autoHit = skill.PullToFront && main.Imbalance > 0 && main.ImbalanceImmuneRound != Round;
+            // A displaced enemy in the imbalance window cannot dodge the displacement. The window is
+            // independent of the skipped action, so it survives the enemy's consumed turn.
+            bool autoHit = skill.PullToFront && main.ImbalanceAutoHitUntilRound >= Round;
             if (!autoHit)
             {
                 if (!Roll(EffectiveAccuracy(actor, skill)))
@@ -535,7 +536,10 @@ namespace Ruin.Core
                 {
                     target.Imbalance = 1;
                     target.ImbalanceImmuneRound = Round + Rules.ImbalanceImmuneRounds;
-                    Log(target.Name + " 失衡：下一次行动将被跳过。", "control", actor.Id, target.Id);
+                    target.ImbalanceAutoHitUntilRound = Rules.ImbalanceAutoHitRounds > 0
+                        ? Round + Rules.ImbalanceAutoHitRounds - 1 : -1;
+                    Log(target.Name + " 失衡：下一次行动将被跳过；位移必中 " + Rules.ImbalanceAutoHitRounds + " 回合。",
+                        "control", actor.Id, target.Id);
                 }
                 else
                 {
@@ -793,8 +797,11 @@ namespace Ruin.Core
         {
             if (enemy.Dead) return "已被击败";
             // Imbalance has to be visible on the enemy card; otherwise a skipped turn looks like the
-            // skill did nothing at all.
-            if (enemy.Imbalance > 0) return "失衡：下次行动跳过";
+            // skill did nothing at all. The displacement window can outlive the skipped action, so it is
+            // shown separately as well.
+            if (enemy.Imbalance > 0)
+                return enemy.ImbalanceAutoHitUntilRound >= Round ? "失衡：下次行动跳过 · 位移必中" : "失衡：下次行动跳过";
+            if (enemy.ImbalanceAutoHitUntilRound >= Round) return "失衡余波：位移必中";
             if (enemy.Interrupted > 0) return "下一次行动被打断";
             bool noSkills = enemy.Definition.BasicSkills == null || enemy.Definition.BasicSkills.Length == 0;
             return noSkills && enemy.Definition.Behavior == EnemyBehavior.Simple

@@ -275,6 +275,8 @@ namespace Ruin.Runtime
                 if (actor.BleedTurns > 0) GUILayout.Label("流血 " + actor.BleedDamage + "×" + actor.BleedTurns, BattleLabUi.Hint);
                 if (actor.Interrupted > 0) GUILayout.Label("打断 " + actor.Interrupted, BattleLabUi.Hint);
                 if (actor.Imbalance > 0) GUILayout.Label("失衡 " + actor.Imbalance, BattleLabUi.Hint);
+                if (actor.ImbalanceAutoHitUntilRound >= battle.Round)
+                    GUILayout.Label("位移必中至 R" + actor.ImbalanceAutoHitUntilRound, BattleLabUi.Hint);
                 if (actor.Defending) GUILayout.Label("防御中", BattleLabUi.Hint);
                 if (actor.ProtectorId != null) GUILayout.Label("守护 " + actor.ProtectorId, BattleLabUi.Hint);
                 if (actor.BlockCharges > 0) GUILayout.Label("格挡 " + actor.BlockCharges, BattleLabUi.Hint);
@@ -386,6 +388,7 @@ namespace Ruin.Runtime
             if (actor.BleedTurns > 0) statusTags.Add("流血");
             if (actor.Interrupted > 0) statusTags.Add("打断");
             if (actor.Imbalance > 0) statusTags.Add("失衡");
+            if (Session.Battle != null && actor.ImbalanceAutoHitUntilRound >= Session.Battle.Round) statusTags.Add("位移必中");
             if (actor.Defending) statusTags.Add("防御");
             if (actor.BlockCharges > 0) statusTags.Add("格挡");
             if (actor.Counter) statusTags.Add("反击");
@@ -410,6 +413,13 @@ namespace Ruin.Runtime
                 GUILayout.Label("失衡", GUILayout.Width(32));
                 int imbalance = BattleLabUi.IntField("edit-imbalance", actor.Imbalance, GUILayout.Width(44));
                 if (imbalance != actor.Imbalance) { actor.Imbalance = Math.Max(0, imbalance); Session.Touch(actor.Name + " 失衡 → " + actor.Imbalance); }
+                GUILayout.Label("必中至", GUILayout.Width(32));
+                int autoHitUntil = BattleLabUi.IntField("edit-auto-hit", actor.ImbalanceAutoHitUntilRound, GUILayout.Width(44));
+                if (autoHitUntil != actor.ImbalanceAutoHitUntilRound)
+                {
+                    actor.ImbalanceAutoHitUntilRound = Math.Max(-1, autoHitUntil);
+                    Session.Touch(actor.Name + " 位移必中至 → R" + actor.ImbalanceAutoHitUntilRound);
+                }
                 GUILayout.Label("格挡层数", GUILayout.Width(58));
                 int block = BattleLabUi.IntField("edit-block", actor.BlockCharges, GUILayout.Width(44));
                 if (block != actor.BlockCharges) { actor.BlockCharges = Math.Max(0, block); Session.Touch(actor.Name + " 格挡 → " + actor.BlockCharges); }

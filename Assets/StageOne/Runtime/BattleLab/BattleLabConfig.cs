@@ -87,6 +87,7 @@ namespace Ruin.Runtime
             rules.CritMultiplier = Clamp(rules.CritMultiplier, 1, 3);
             if (rules.MindStep <= 0) rules.MindStep = defaults.MindStep;
             if (rules.ImbalanceImmuneRounds < 0) rules.ImbalanceImmuneRounds = 0;
+            if (rules.ImbalanceAutoHitRounds < 0) rules.ImbalanceAutoHitRounds = 0;
             rules.TechnicalWeight = Math.Max(0, rules.TechnicalWeight);
             rules.BasicWeight = Math.Max(0, rules.BasicWeight);
             rules.PrimalWeight = Math.Max(0, rules.PrimalWeight);

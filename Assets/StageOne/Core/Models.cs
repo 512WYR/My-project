@@ -193,6 +193,9 @@ namespace Ruin.Core
         public double FollowupRatio = 0.5;
         public double CounterRatio = 1.0;
         public int ImbalanceImmuneRounds = 1;
+        // Displacement skills auto-hit for this many rounds after imbalance lands. The skipped action is
+        // still a separate, one-shot effect controlled by ActorState.Imbalance.
+        public int ImbalanceAutoHitRounds = 2;
         public LimbRules Limbs = new LimbRules();
     }
 
@@ -235,6 +238,9 @@ namespace Ruin.Core
         public int FollowupAttack;    // The warrior's base attack when the buff was handed out.
         public int Imbalance;         // > 0 skips the actor's next turn.
         public int ImbalanceImmuneRound = -1; // The round on which imbalance is refused.
+        // Last round on which a displacement skill auto-hits this actor. Independent of Imbalance, so the
+        // guaranteed hit survives the skipped turn and lasts the full configured window.
+        public int ImbalanceAutoHitUntilRound = -1;
         public double DefenseBuff;    // Temporary team defence bump.
         public double AccuracyBuff;   // Temporary team accuracy bump.
         public double SelfVulnerable; // Damage taken is raised by this share for the round.

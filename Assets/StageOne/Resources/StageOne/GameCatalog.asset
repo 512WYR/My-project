@@ -154,19 +154,19 @@ MonoBehaviour:
   MapBranchAffinity: 1.5
   MapNodeOdds:
   - Type: 0
-    Weight: 0.315
+    Weight: 0.363138
     Affinity: 0
   - Type: 1
-    Weight: 0.135
+    Weight: 0.155586
     Affinity: -1
   - Type: 5
-    Weight: 0.18
-    Affinity: -1
+    Weight: 0.085
+    Affinity: 0
   - Type: 2
-    Weight: 0.27
+    Weight: 0.311276
     Affinity: 1
   - Type: 8
-    Weight: 0.1
+    Weight: 0.085
     Affinity: 0
   MapBranchWeights:
   - 0.31

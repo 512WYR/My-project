@@ -137,6 +137,7 @@ namespace Ruin.Runtime
                 GUILayout.Label("理智步长", GUILayout.Width(70)); rules.MindStep = BattleLabUi.IntField("cfg-rule-mindstep", rules.MindStep, GUILayout.Width(56));
                 GUILayout.Label("技能命中基准", GUILayout.Width(90)); rules.SkillAccuracyBaseline = BattleLabUi.DoubleField("cfg-rule-accbase", rules.SkillAccuracyBaseline, GUILayout.Width(56));
                 GUILayout.Label("失衡免疫回合", GUILayout.Width(90)); rules.ImbalanceImmuneRounds = BattleLabUi.IntField("cfg-rule-immune", rules.ImbalanceImmuneRounds, GUILayout.Width(56));
+                GUILayout.Label("失衡必中回合", GUILayout.Width(90)); rules.ImbalanceAutoHitRounds = BattleLabUi.IntField("cfg-rule-auto-hit", rules.ImbalanceAutoHitRounds, GUILayout.Width(56));
                 GUILayout.EndHorizontal();
 
                 BattleLabUi.SubTitle("追击与反击");
