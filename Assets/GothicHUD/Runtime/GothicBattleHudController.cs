@@ -143,7 +143,7 @@ namespace GameMake.GothicHUD
         {
             var app = BattleSource;
             if (!app || app.Run == null || index < 0 || index >= app.Run.Heroes.Count) return;
-            app.SelectActor(app.Run.Heroes[index].Id);
+            app.OpenCharacterPanel(index);
         }
 
         // ---- the single sync path, driven by StageOneApp.Changed ----

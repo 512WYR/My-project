@@ -154,6 +154,7 @@ namespace GameMake.IndustrialBattleEditor
             SetRect(panel.DescriptionBody.transform,68,77,365,170); Type(panel.DescriptionBody,18,new Color32(166,194,163,255),TextAnchor.UpperLeft);
 
             var party=Find(root,"Party - 四人队伍"); SetRect(party,14,183,172,536);
+            party.localScale=new Vector3(.88f,.88f,1);
             Skin(Find(party,"Party Mechanical Frame"),"角色框"); SetRect(Find(party,"Party Mechanical Frame"),0,0,172,536);
             details.PartyNames=new Text[4]; details.PartyFigures=new SilhouetteGraphic[4];
             var catalog=AssetDatabase.LoadAssetAtPath<GameCatalog>("Assets/StageOne/Resources/StageOne/GameCatalog.asset");

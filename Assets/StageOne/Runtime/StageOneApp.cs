@@ -10,7 +10,7 @@ namespace Ruin.Runtime
     // by AwaitingNode being false, exactly as it was before the route rework.
     public enum RoomView { Map, Buff, Supply, Event, Elevator, Treasure }
 
-    public sealed class StageOneApp : MonoBehaviour
+    public sealed partial class StageOneApp : MonoBehaviour
     {
         public GameCatalog Catalog;
         public RunState Run { get; private set; }
@@ -86,6 +86,11 @@ namespace Ruin.Runtime
 
         private void Update()
         {
+            if (CharacterPanelOpen)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) CloseCharacterPanel();
+                return;
+            }
             if (Input.GetKeyDown(KeyCode.F1)) ToggleHelp();
             if (Input.GetKeyDown(KeyCode.I)) ToggleConsumableEditor();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -105,6 +110,7 @@ namespace Ruin.Runtime
 
         public void NewRun(double? preset = null)
         {
+            CharacterPanelOpen = false; CharacterHeroId = null;
             StopAllCoroutines(); Busy = false; ClearPending(); HelpOpen = false; LabOpen = false;
             AccessoryEditorOpen = false; AccessoryHeroId = null;
             ConsumableEditorOpen = false; ConsumableHeroId = null;
@@ -150,6 +156,7 @@ namespace Ruin.Runtime
 
         public void SelectNode(int index)
         {
+            if (CharacterPanelOpen) return;
             if (Busy || HelpOpen || LabOpen || AccessoryEditorOpen || ConsumableEditorOpen
                 || Run == null || Run.Map.Finished) return;
             if (Room != RoomView.Map) return;
@@ -264,6 +271,7 @@ namespace Ruin.Runtime
         // that is standing on a node, so it works on the route page and inside a room alike.
         public void OpenAccessoryEditor(string heroId = null)
         {
+            if (CharacterPanelOpen) return;
             if (Run == null || Busy || !AwaitingNode || ConsumableEditorOpen) return;
             var hero = !string.IsNullOrEmpty(heroId) ? Run.Heroes.FirstOrDefault(h => h.Id == heroId) : null;
             if (hero == null) hero = Run.Heroes.FirstOrDefault(h => h.Id == AccessoryHeroId)
@@ -327,6 +335,7 @@ namespace Ruin.Runtime
 
         public void OpenConsumableEditor(string heroId = null)
         {
+            if (CharacterPanelOpen) return;
             if (Run == null || Busy || HelpOpen || LabOpen) return;
             if (!AwaitingNode && (Battle == null || Battle.Outcome != BattleOutcome.Active
                 || Battle.Current == null || !Battle.Current.Player)) return;
@@ -585,6 +594,7 @@ namespace Ruin.Runtime
 
         public void SelectSkill(int index)
         {
+            if (CharacterPanelOpen) return;
             if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
             string reason = Battle.SkillDisabledReason(index);
             if (reason != null) { Hint = reason; Refresh(); return; }
@@ -595,6 +605,7 @@ namespace Ruin.Runtime
 
         public void SelectSwap()
         {
+            if (CharacterPanelOpen) return;
             if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
             string reason = Battle.SwapDisabledReason();
             if (reason != null) { Hint = reason; Refresh(); return; }
@@ -607,6 +618,7 @@ namespace Ruin.Runtime
 
         public void SelectActor(string id)
         {
+            if (CharacterPanelOpen) return;
             if (AwaitingNode || Battle == null || ConsumableEditorOpen) return;
             InspectedId = id;
             if (!Busy && PendingSkill.HasValue && Battle.Targets(PendingSkill.Value).Any(a => a.Id == id))
@@ -647,11 +659,13 @@ namespace Ruin.Runtime
 
         public void ToggleHelp()
         {
+            if (CharacterPanelOpen) return;
             if (AccessoryEditorOpen || ConsumableEditorOpen) return;
             HelpOpen = !HelpOpen; LabOpen = false; ClearPending(); Refresh();
         }
         public void ToggleLab()
         {
+            if (CharacterPanelOpen) return;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // Closing always wins: a forced room can open a page while the tool is up, and without this the
             // tool would be stuck open because the room page blocks the reopen path.

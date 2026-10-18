@@ -84,6 +84,7 @@ namespace GameMake.ExplorationUI
         {
             if (index < 0 || index >= Party.Length) return;
             SelectedCharacter = index; UpdateParty(); OnCharacterSelected.Invoke(index);
+            if (Source) Source.OpenCharacterPanel(index);
         }
         void Choose(int index)
         {
