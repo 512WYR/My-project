@@ -363,25 +363,6 @@ namespace Ruin.Runtime
             return true;
         }
 
-        public bool SetMental(ActorState actor, MentalState state, out string note)
-        {
-            if (actor == null) { note = "没有选中角色。"; return false; }
-            if (Battle == null) { note = "没有战斗。"; return false; }
-            if (Battle.Rules == null || Battle.Rules.MentalStates == null
-                || !Battle.Rules.MentalStates.Any(m => m != null && m.State == state))
-            {
-                note = "Rules.MentalStates 中没有 " + state + "，设置被拒绝。";
-                SetNote(note, true);
-                return false;
-            }
-            actor.Mental = state;
-            MarkMutation();
-            SyncLog();
-            note = actor.Name + " 的精神状态 → " + state;
-            SetNote(note);
-            return true;
-        }
-
         public bool SetForm(ActorState actor, SkillForm form, out string note)
         {
             if (actor == null) { note = "没有选中角色。"; return false; }

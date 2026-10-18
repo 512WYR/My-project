@@ -271,7 +271,7 @@ namespace Ruin.Runtime
                     + " · HP " + actor.Hp + "/" + actor.Definition.MaxHp
                     + (actor.Dead ? " · 死亡" : actor.DeathDoor ? " · 死门" : "")
                     + " · 理智 " + actor.Sanity.ToString("0.#")
-                    + " · " + actor.Mental + " / " + actor.Form, BattleLabUi.Body);
+                    + " · 形态 " + actor.Form, BattleLabUi.Body);
                 if (actor.BleedTurns > 0) GUILayout.Label("流血 " + actor.BleedDamage + "×" + actor.BleedTurns, BattleLabUi.Hint);
                 if (actor.Interrupted > 0) GUILayout.Label("打断 " + actor.Interrupted, BattleLabUi.Hint);
                 if (actor.Imbalance > 0) GUILayout.Label("失衡 " + actor.Imbalance, BattleLabUi.Hint);
@@ -317,7 +317,7 @@ namespace Ruin.Runtime
             bool vitals = Ui.GroupOpen("edit-vitals", true);
             bool vitalsNext = BattleLabUi.Foldout(vitals, "生命与理智",
                 "HP " + actor.Hp + "/" + definition.MaxHp + " · 理智 " + actor.Sanity.ToString("0.#")
-                + " · " + actor.Mental + " / " + actor.Form);
+                + " · 形态 " + actor.Form);
             Ui.SetGroupOpen("edit-vitals", vitalsNext);
             if (vitalsNext)
             {
@@ -338,9 +338,6 @@ namespace Ruin.Runtime
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();
-                GUILayout.Label("精神", GUILayout.Width(32));
-                int mental = BattleLabUi.ValueGrid((int)actor.Mental, MentalValues, MentalLabels, 3);
-                if (mental != (int)actor.Mental) { Session.SetMental(actor, (MentalState)mental, out string note); Note(note); }
                 GUILayout.Label("形态", GUILayout.Width(32));
                 int form = BattleLabUi.ValueGrid((int)actor.Form, FormValues, FormLabels, 3);
                 if (form != (int)actor.Form) { Session.SetForm(actor, (SkillForm)form, out string note); Note(note); }

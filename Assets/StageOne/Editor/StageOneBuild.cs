@@ -21,7 +21,6 @@ namespace Ruin.Editor
         {
             Directory.CreateDirectory(Data + "/Skills");
             Directory.CreateDirectory(Data + "/Characters");
-            Directory.CreateDirectory(Data + "/MentalStates");
             Directory.CreateDirectory(Data + "/Events");
             Directory.CreateDirectory("Assets/StageOne/Scenes");
             // Every folder above has to exist before this call: CreateAsset cannot write into a directory
@@ -35,14 +34,10 @@ namespace Ruin.Editor
             var whisperer = Enemy("whisperer", "低语者", "侵蚀最清醒者的心智", 24, 2, EnemyPattern.Whisperer);
             var hunter = Enemy("hunter", "追猎者", "追击虚弱者并造成流血", 24, 7, EnemyPattern.Hunter);
             var monsters = BuildMonsters();
-            var none = Asset<MentalDefinition>(Data + "/MentalStates/Neutral.asset", x => x.Spec = new MentalSpec { State = MentalState.None, Name = "平稳" });
-            var composed = Asset<MentalDefinition>(Data + "/MentalStates/Composed.asset", x => x.Spec = new MentalSpec { State = MentalState.Composed, Name = "凝神", TechnicalMultiplier = 1.25 });
-            var agitated = Asset<MentalDefinition>(Data + "/MentalStates/Agitated.asset", x => x.Spec = new MentalSpec { State = MentalState.Agitated, Name = "躁动", PrimalMultiplier = 1.25, AccuracyModifier = -0.05 });
             var catalog = Asset<GameCatalog>(Data + "/GameCatalog.asset", x => {
                 // Rank follows array order: front to back, so the shield stands at position 1.
                 x.Heroes = new[] { shield, warrior, medic, gunner };
                 x.Enemies = new[] { cleaver, whisperer, hunter };
-                x.MentalStates = new[] { none, composed, agitated };
             });
             Migrate(catalog);
             EnsureEnemyContent(catalog, monsters);

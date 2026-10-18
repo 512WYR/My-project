@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Ruin.Core;
@@ -61,13 +62,20 @@ namespace GameMake.IndustrialDebugUI
         public Button[] PartySelect = new Button[4];
         public Text[] PartySelectLabels = new Text[4];
         public Text PartyBody;
-        public Button[] PartySanity = new Button[3];
-        public Button[] PartyMental = new Button[3];
+        // Sanity is a slider plus a field: dragging applies on release, the field applies on "应用".
+        public Slider PartySanitySlider;
+        public InputField PartySanityInput;
+        public Button PartySanityApply;
+        public Text PartySanityNow;
+        public Button[] PartyForm = new Button[3];
         public Button[] PartyHp = new Button[2];
 
         [Header("Run / 运行")]
-        public Button[] PlayerSanity = new Button[4];
-        public Button[] NewRunButtons = new Button[4];
+        public Slider PlayerSanitySlider;
+        public InputField PlayerSanityInput;
+        public Button PlayerSanityApply;
+        public Text PlayerSanityNow;
+        public Button[] NewRunButtons = new Button[3];
 
         [Header("Battle / 战斗")]
         public Text BattleStage;
@@ -79,8 +87,11 @@ namespace GameMake.IndustrialDebugUI
         public Button BattleRest;
         public Button BattleDeathDoor;
         public Button BattleFeedback;
-        public Button[] BattleSanity = new Button[3];
-        public Button[] BattleMental = new Button[3];
+        public Slider BattleSanitySlider;
+        public InputField BattleSanityInput;
+        public Button BattleSanityApply;
+        public Text BattleSanityNow;
+        public Button[] BattleForm = new Button[3];
 
         [Header("Map / 地图与房间")]
         public Text MapBody;
@@ -132,6 +143,11 @@ namespace GameMake.IndustrialDebugUI
         private string heroId;
         private string lastHint;
         private float nextPoll;
+        // Sliders only raise these when the user moves them; Sync writes with SetValueWithoutNotify,
+        // so a value shown for information never counts as an edit of its own.
+        private bool partySanityDirty;
+        private bool battleSanityDirty;
+        private bool playerSanityDirty;
         private readonly List<string> hintHistory = new List<string>();
         private static readonly NodeType[] ForcedRooms =
         {
@@ -142,6 +158,12 @@ namespace GameMake.IndustrialDebugUI
         {
             "EVT-001", "EVT-002", "EVT-003", "EVT-004", "EVT-005", "EVT-006",
             "EVT-007", "EVT-008", "EVT-H001", "EVT-L001", ""
+        };
+        // Button order on both pages. SkillForm's own numeric order is Technical, Basic, Primal,
+        // which reads badly in the UI, so the buttons use this explicit order instead.
+        private static readonly SkillForm[] FormOrder =
+        {
+            SkillForm.Basic, SkillForm.Technical, SkillForm.Primal
         };
 
         private void Awake() { Instance = this; }
@@ -175,6 +197,7 @@ namespace GameMake.IndustrialDebugUI
             }
             if (Time.unscaledTime < nextPoll) return;
             nextPoll = Time.unscaledTime + 0.15f;
+            ApplySliderEdits();
             Sync();
         }
 
@@ -191,6 +214,8 @@ namespace GameMake.IndustrialDebugUI
 
         public void Close()
         {
+            // Closing within one poll interval must not drop a slider value the user just released.
+            if (opened) ApplySliderEdits(true);
             opened = false;
             StageOneApp.DebugOverlayOpen = false;
             if (ConsoleRoot) ConsoleRoot.SetActive(false);
@@ -223,41 +248,51 @@ namespace GameMake.IndustrialDebugUI
                 int index = i;
                 Wire(PartySelect[i], () => SelectHero(index));
             }
-            for (int i = 0; i < 3; i++)
+            Wire(PartySanityApply, ApplyPartySanity);
+            Wire(BattleSanityApply, ApplyBattleSanity);
+            SubmitOnEnter(PartySanityInput, ApplyPartySanity);
+            SubmitOnEnter(BattleSanityInput, ApplyBattleSanity);
+            MarkOnChange(PartySanitySlider, () => partySanityDirty = true);
+            MarkOnChange(BattleSanitySlider, () => battleSanityDirty = true);
+            MarkOnChange(PlayerSanitySlider, () => playerSanityDirty = true);
+            for (int i = 0; i < FormOrder.Length; i++)
             {
-                double preset = i == 0 ? 15 : i == 1 ? 50 : 85;
-                Wire(PartySanity[i], () => WithHero(id => Source.DebugSetHeroSanity(id, preset)));
-                Wire(BattleSanity[i], () => WithHero(id => Source.DebugSetHeroSanity(id, preset)));
+                var form = FormOrder[i];
+                Wire(PartyForm[i], () => WithHero(id => Source.DebugSetHeroForm(id, form)));
+                Wire(BattleForm[i], () => WithHero(id => Source.DebugSetHeroForm(id, form)));
             }
-            Wire(PartyMental[0], () => WithHero(id => Source.DebugSetHeroMental(id, MentalState.Composed)));
-            Wire(PartyMental[1], () => WithHero(id => Source.DebugSetHeroMental(id, MentalState.Agitated)));
-            Wire(PartyMental[2], () => WithHero(id => Source.DebugSetHeroMental(id, MentalState.None)));
-            Wire(BattleMental[0], () => WithHero(id => Source.DebugSetHeroMental(id, MentalState.Composed)));
-            Wire(BattleMental[1], () => WithHero(id => Source.DebugSetHeroMental(id, MentalState.Agitated)));
-            Wire(BattleMental[2], () => WithHero(id => Source.DebugSetHeroMental(id, MentalState.None)));
             Wire(PartyHp[0], () => WithHero(id => Source.DebugSetHeroHp(id, HeroMaxHp(id))));
             Wire(PartyHp[1], () => WithHero(id => Source.DebugSetHeroHp(id, 0)));
 
-            for (int i = 0; i < PlayerSanity.Length; i++)
+            Wire(PlayerSanityApply, ApplyPlayerSanity);
+            SubmitOnEnter(PlayerSanityInput, ApplyPlayerSanity);
+            // New runs take their sanity from the slider instead of fixed presets: the first button
+            // uses the catalog default, the second keeps the value currently on the player slider, and
+            // the third also keeps the seed, which reproduces the same route for A/B checks.
+            Wire(NewRunButtons[0], () =>
             {
-                double value = i == 0 ? 15 : i == 1 ? 50 : i == 2 ? 85 : 100;
-                Wire(PlayerSanity[i], () => { if (Source) Source.DebugSetPlayerSanity(value); });
-            }
-            for (int i = 0; i < NewRunButtons.Length; i++)
+                if (!Source) return;
+                Source.NewRun();
+                heroId = null;
+                Sync();
+            });
+            Wire(NewRunButtons[1], () =>
             {
-                int index = i;
-                double? preset = null;
-                if (index == 1) preset = 15;
-                else if (index == 2) preset = 50;
-                else if (index == 3) preset = 85;
-                Wire(NewRunButtons[i], () =>
-                {
-                    if (!Source) return;
-                    Source.NewRun(preset);
-                    heroId = null;
-                    Sync();
-                });
-            }
+                if (!Source || Source.Run == null) return;
+                double sanity = Source.Run.PlayerSanity;
+                Source.NewRun(sanity);
+                heroId = null;
+                Sync();
+            });
+            Wire(NewRunButtons[2], () =>
+            {
+                if (!Source || Source.Run == null) return;
+                double sanity = Source.Run.PlayerSanity;
+                uint seed = Source.Run.Seed;
+                Source.NewRun(sanity, seed);
+                heroId = null;
+                Sync();
+            });
 
             Wire(BattleWin, () => { if (Source) Source.DebugWinBattle(); });
             Wire(BattleRetreat, () => { if (Source) Source.DebugSettle(); });
@@ -348,6 +383,88 @@ namespace GameMake.IndustrialDebugUI
             if (!button || action == null) return;
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(() => action());
+        }
+
+        private static void MarkOnChange(Slider slider, Action action)
+        {
+            if (!slider || action == null) return;
+            slider.onValueChanged.RemoveAllListeners();
+            slider.onValueChanged.AddListener(_ => action());
+        }
+
+        private static void SubmitOnEnter(InputField field, Action action)
+        {
+            if (!field || action == null) return;
+            field.onEndEdit.RemoveAllListeners();
+            field.onEndEdit.AddListener(_ =>
+            {
+                if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) action();
+            });
+        }
+
+        // The slider writes its value while the user drags, but applying on every intermediate value
+        // would flood the hint history and re-roll battle state dozens of times. Instead the drag is
+        // applied once, after the mouse is released (or via Enter / 应用 in the field).
+        private void ApplySliderEdits(bool force = false)
+        {
+            if (Source == null || Source.Run == null) return;
+            if (!force && Input.GetMouseButton(0)) return;
+            var hero = SelectedHero();
+            if (partySanityDirty)
+            {
+                partySanityDirty = false;
+                if (hero != null && PartySanitySlider)
+                    Source.DebugSetHeroSanity(hero.Id, PartySanitySlider.value);
+            }
+            if (battleSanityDirty)
+            {
+                battleSanityDirty = false;
+                if (hero != null && BattleSanitySlider && Source.Battle != null && !Source.AwaitingNode
+                    && Source.Battle.Outcome == BattleOutcome.Active)
+                    Source.DebugSetHeroSanity(hero.Id, BattleSanitySlider.value);
+            }
+            if (playerSanityDirty)
+            {
+                playerSanityDirty = false;
+                if (PlayerSanitySlider) Source.DebugSetPlayerSanity(PlayerSanitySlider.value);
+            }
+        }
+
+        private void ApplyPartySanity()
+        {
+            partySanityDirty = false;
+            ApplySanityField(PartySanityInput,
+                value => WithHero(id => Source.DebugSetHeroSanity(id, value)));
+        }
+
+        private void ApplyBattleSanity()
+        {
+            battleSanityDirty = false;
+            ApplySanityField(BattleSanityInput,
+                value => WithHero(id => Source.DebugSetHeroSanity(id, value)));
+        }
+
+        private void ApplyPlayerSanity()
+        {
+            playerSanityDirty = false;
+            ApplySanityField(PlayerSanityInput,
+                value => { if (Source) Source.DebugSetPlayerSanity(value); });
+        }
+
+        private void ApplySanityField(InputField field, Action<double> apply)
+        {
+            if (!field || apply == null) return;
+            string raw = (field.text ?? "").Trim();
+            double value;
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                && !double.TryParse(raw, out value))
+            {
+                if (Source) Source.DebugNote("「" + raw + "」不是有效数值；请输入 0 到 100。");
+                Sync();
+                return;
+            }
+            apply(value);
+            Sync();
         }
 
         private void OnChanged()
@@ -480,7 +597,7 @@ namespace GameMake.IndustrialDebugUI
             {
                 var hero = run.Heroes[i];
                 text.AppendLine("  #" + hero.Rank + " " + hero.Name + "   生命 " + hero.Hp + " / " + MaxHp(hero)
-                    + "   理智 " + hero.Sanity.ToString("0.0") + "   精神 " + MentalName(hero.Mental)
+                    + "   理智 " + hero.Sanity.ToString("0.0")
                     + "   部位 " + LimbSummary(hero) + (hero.Dead ? "   [阵亡]" : ""));
             }
             text.AppendLine();
@@ -542,7 +659,9 @@ namespace GameMake.IndustrialDebugUI
                     PartySelectLabels[i].color = hero != null && hero.Id == member.Id ? Gold : Ink;
                 }
             }
-            SetInteractable(PlayerSanity, true);
+            SyncPlayerSanity(app);
+            SyncHeroSanity(hero, PartySanitySlider, PartySanityInput, PartySanityApply,
+                PartySanityNow, PartyForm, true, partySanityDirty);
             SetInteractable(NewRunButtons, true);
             if (PartyBody == null) return;
             if (hero == null) { PartyBody.text = "没有队员。"; return; }
@@ -554,8 +673,7 @@ namespace GameMake.IndustrialDebugUI
             {
                 text.AppendLine("副标题        " + definition.Subtitle + "   剪影 " + definition.Silhouette);
                 text.AppendLine("生命          " + hero.Hp + " / " + definition.MaxHp
-                    + "      理智  " + hero.Sanity.ToString("0.0")
-                    + "      精神  " + MentalName(hero.Mental));
+                    + "      理智  " + hero.Sanity.ToString("0.0"));
                 text.AppendLine("速度 " + definition.Speed + "   攻击 " + definition.Attack
                     + "   命中 " + definition.Accuracy.ToString("0.00")
                     + "   暴击 " + definition.CritChance.ToString("0.00")
@@ -659,14 +777,66 @@ namespace GameMake.IndustrialDebugUI
             SetInteractable(BattleRest, active);
             SetInteractable(BattleDeathDoor, active);
             SetInteractable(BattleFeedback, app.Run != null);
-            SetInteractable(BattleSanity, active);
-            SetInteractable(BattleMental, app.Run != null);
+            SyncHeroSanity(SelectedHero(), BattleSanitySlider, BattleSanityInput, BattleSanityApply,
+                BattleSanityNow, BattleForm, active, battleSanityDirty);
+        }
+
+        // Keeps a sanity slider/field pair showing the live value without fighting the user: the
+        // slider is left alone while the mouse is held, and the field is left alone while focused.
+        private void SyncHeroSanity(ActorState hero, Slider slider, InputField input, Button apply,
+            Text now, Button[] formButtons, bool enabled, bool sliderDirty)
+        {
+            bool has = hero != null;
+            if (slider)
+            {
+                slider.interactable = has && enabled;
+                if (has && !sliderDirty && !Input.GetMouseButton(0))
+                    slider.SetValueWithoutNotify((float)hero.Sanity);
+            }
+            if (input)
+            {
+                input.interactable = has && enabled;
+                if (!input.isFocused) input.text = has ? hero.Sanity.ToString("0.0") : "";
+            }
+            SetInteractable(apply, has && enabled);
+            SetInteractable(formButtons, has && enabled);
+            if (now)
+            {
+                if (!has) now.text = "无队员";
+                else if (slider && (sliderDirty || Input.GetMouseButton(0)))
+                    now.text = "拖动 " + slider.value.ToString("0") + " / 100";
+                else now.text = "当前 " + hero.Sanity.ToString("0.0") + " / 100";
+            }
+            if (formButtons == null) return;
+            for (int i = 0; i < formButtons.Length && i < FormOrder.Length; i++)
+            {
+                var label = formButtons[i] ? formButtons[i].GetComponentInChildren<Text>(true) : null;
+                if (label)
+                    label.text = (has && hero.Form == FormOrder[i] ? "▶ " : "") + FormLabel(FormOrder[i]);
+            }
+        }
+
+        private void SyncPlayerSanity(StageOneApp app)
+        {
+            if (PlayerSanitySlider)
+            {
+                PlayerSanitySlider.interactable = true;
+                if (!playerSanityDirty && !Input.GetMouseButton(0))
+                    PlayerSanitySlider.SetValueWithoutNotify((float)app.Run.PlayerSanity);
+            }
+            if (PlayerSanityInput && !PlayerSanityInput.isFocused)
+                PlayerSanityInput.text = app.Run.PlayerSanity.ToString("0.0");
+            SetInteractable(PlayerSanityApply, true);
+            if (PlayerSanityNow)
+                PlayerSanityNow.text = PlayerSanitySlider && (playerSanityDirty || Input.GetMouseButton(0))
+                    ? "拖动 " + PlayerSanitySlider.value.ToString("0") + " / 100"
+                    : "当前 " + app.Run.PlayerSanity.ToString("0.0") + " / 100";
         }
 
         private string HeroBattleLine(ActorState hero)
         {
             return "#" + hero.Rank + " " + hero.Name + "  HP " + hero.Hp + "/" + MaxHp(hero)
-                + "  理智 " + hero.Sanity.ToString("0.0") + "  精神 " + MentalName(hero.Mental)
+                + "  理智 " + hero.Sanity.ToString("0.0")
                 + "  形态 " + FormName(hero.Form) + "  " + BattleFlags(hero);
         }
 
@@ -950,11 +1120,6 @@ namespace GameMake.IndustrialDebugUI
             text.AppendLine("追击 " + combat.FollowupRatio.ToString("0.00")
                 + "   反击 " + combat.CounterRatio.ToString("0.00")
                 + "   失衡免疫 " + combat.ImbalanceImmuneRounds + " 回合");
-            text.AppendLine("精神形态：");
-            foreach (var mental in combat.MentalStates)
-                text.AppendLine("  " + mental.Name + "  技术 ×" + mental.TechnicalMultiplier.ToString("0.00")
-                    + "  原始 ×" + mental.PrimalMultiplier.ToString("0.00")
-                    + "  命中 " + mental.AccuracyModifier.ToString("+0.00;-0.00;0.00"));
             var limbs = LimbSystem.Resolve(combat.Limbs);
             text.AppendLine();
             text.AppendLine("【部位规则】  单次命中移除部位生命的 " + (limbs.HitRatio * 100).ToString("0") + "%");
@@ -1030,8 +1195,7 @@ namespace GameMake.IndustrialDebugUI
             "03  每回合只能使用该角色当前的技能，或与相邻队员换位。\n" +
             "      部分技能每场限次；用尽或站位不符时按钮上会写明原因。\n\n" +
             "04  理智低于30技能会发生变化，高于70会解锁特殊技能。\n" +
-            "      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n" +
-            "      敌方低语可能带来凝神或躁动；持续状态跨战斗保留。\n\n" +
+            "      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n\n" +
             "05  敌人卡片下方显示下一次攻击。用格挡、反击、守护、打断或换位应对。\n" +
             "      奶妈可以治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
             "06  战斗结束（胜利或全队阵亡）都会反馈玩家理智：队员平均净变化 × 0.5。\n" +
@@ -1066,6 +1230,16 @@ namespace GameMake.IndustrialDebugUI
             }
         }
 
+        private static string FormLabel(SkillForm form)
+        {
+            switch (form)
+            {
+                case SkillForm.Primal: return "原始（低理智）";
+                case SkillForm.Technical: return "技术（高理智）";
+                default: return "常态";
+            }
+        }
+
         private static string OutcomeName(BattleOutcome outcome)
         {
             switch (outcome)
@@ -1075,13 +1249,6 @@ namespace GameMake.IndustrialDebugUI
                 case BattleOutcome.Defeat: return "失败";
                 default: return "进行中";
             }
-        }
-
-        private string MentalName(MentalState state)
-        {
-            if (Source == null || Source.Catalog == null) return state.ToString();
-            var rules = Source.Catalog.Rules();
-            return rules == null ? state.ToString() : rules.Mental(state).Name;
         }
 
         private static string LimbSummary(ActorState hero)

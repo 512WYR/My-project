@@ -106,9 +106,6 @@ namespace Ruin.Runtime
                     if (limb.MaxHp < 1) issues.Add(who + " 的" + LimbSystem.PartName(limb.Part) + " MaxHp 小于 1。");
                 }
             }
-            if (battle.Rules != null && battle.Rules.MentalStates != null
-                && !battle.Rules.MentalStates.Any(m => m != null && m.State == actor.Mental))
-                issues.Add(who + " 的精神状态 " + actor.Mental + " 不在 Rules.MentalStates 中。");
             if (!Enum.IsDefined(typeof(SkillForm), actor.Form))
                 issues.Add(who + " 的 Form 枚举值无效：" + (int)actor.Form);
             if (actor.ProtectorId != null && battle.Find(actor.ProtectorId) == null)

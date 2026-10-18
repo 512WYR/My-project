@@ -708,15 +708,6 @@ namespace Ruin.Runtime
             Refresh();
         }
 
-        public void DebugMental(MentalState mental)
-        {
-            if (Battle == null) return;
-            var actor = Battle.Find(InspectedId);
-            if (actor == null || !actor.Player || actor.Dead) actor = Run.Heroes.FirstOrDefault(a => !a.Dead);
-            if (actor == null) return;
-            actor.Mental = mental; Refresh();
-        }
-
         public void DebugSettle()
         {
             if (Battle == null) return;
@@ -759,7 +750,7 @@ namespace Ruin.Runtime
         {
             if (Battle == null) return;
             foreach (var hero in Run.Heroes.Where(a => !a.Dead)) hero.Hp = hero.Definition.MaxHp;
-            Hint = "验收工具已整备全队生命；部位、个人理智、精神状态和死亡记录沿用。";
+            Hint = "验收工具已整备全队生命；部位、个人理智和死亡记录沿用。";
             Refresh();
         }
 

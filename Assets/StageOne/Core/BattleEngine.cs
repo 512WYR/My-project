@@ -42,7 +42,7 @@ namespace Ruin.Core
                 });
             }
             Run.Battles++;
-            Log("第 " + Run.Battles + " 场演练开始。队员理智与持续精神状态沿用。", "system");
+            Log("第 " + Run.Battles + " 场演练开始。队员理智沿用。", "system");
             if (roster.Count == 0) { Finish(BattleOutcome.Defeat); return; }
             if (Enemies.Count == 0) { Finish(BattleOutcome.Victory); return; }
             ApplyBattleStartAccessories();
@@ -107,7 +107,6 @@ namespace Ruin.Core
 
         public double[] FormProbabilities(ActorState actor)
         {
-            var mental = Rules.Mental(actor.Mental);
             // A hero the medicine chest rewired (EVT-004) never falls back on the plain kit, so the basic
             // row is pinned to zero instead of being offered. Dropping the row would change the shape the
             // inspector and the tests read, and zeroing the weight while keeping the 30/70 gates would make
@@ -117,15 +116,15 @@ namespace Ruin.Core
             if (actor != null && actor.SanitySkillsOnly)
             {
                 var split = SanityProbability.Distribution(actor.Sanity, new[] {
-                    new WeightedOutcome(Rules.TechnicalWeight * mental.TechnicalMultiplier, 1),
-                    new WeightedOutcome(Rules.PrimalWeight * mental.PrimalMultiplier, -1)
+                    new WeightedOutcome(Rules.TechnicalWeight, 1),
+                    new WeightedOutcome(Rules.PrimalWeight, -1)
                 }, Rules.ProbabilityStrength);
                 return new[] { split[0], 0.0, split[1] };
             }
             return SanityProbability.Distribution(actor.Sanity, new[] {
-                new WeightedOutcome(Rules.TechnicalWeight * mental.TechnicalMultiplier, 1, SanityGate.High),
+                new WeightedOutcome(Rules.TechnicalWeight, 1, SanityGate.High),
                 new WeightedOutcome(Rules.BasicWeight, 0),
-                new WeightedOutcome(Rules.PrimalWeight * mental.PrimalMultiplier, -1, SanityGate.Low)
+                new WeightedOutcome(Rules.PrimalWeight, -1, SanityGate.Low)
             }, Rules.ProbabilityStrength);
         }
 
@@ -625,7 +624,7 @@ namespace Ruin.Core
             if (rider.Kind == RiderKind.SanityRestore)
             {
                 var chosen = rider.Area == RiderArea.Chosen ? primary : actor;
-                if (chosen != null && !chosen.Dead) { ChangeSanity(chosen, rider.Amount, skill.Name); TryMentalState(chosen); }
+                if (chosen != null && !chosen.Dead) ChangeSanity(chosen, rider.Amount, skill.Name);
                 return;
             }
             var targets = new List<ActorState> { actor };
@@ -734,7 +733,6 @@ namespace Ruin.Core
             if (actor == null || skill == null) return 0;
             double value = SanityProbability.Clamp(actor.Definition.Accuracy * LimbSystem.AccuracyFactor(actor, Rules.Limbs)
                 + (skill.Accuracy - Rules.SkillAccuracyBaseline)
-                + Rules.Mental(actor.Mental).AccuracyModifier
                 + actor.AccuracyBuff, 0, 1);
             // 穿肠弹 raises accuracy to a floor, not to a fixed value.
             return Math.Max(value, AccessorySystem.AccuracyFloor(actor));
@@ -969,7 +967,7 @@ namespace Ruin.Core
                 if (guarded) amount = ReduceForGuard(amount, target);
                 Damage(target, amount, enemy.Id);
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Whisperer)
-                { ChangeSanity(target, -14, "受到低语侵蚀"); TryMentalState(target); }
+                { ChangeSanity(target, -14, "受到低语侵蚀"); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
                 { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id); }
                 if (!target.Dead) TryLimbDamage(enemy, target);
@@ -1204,13 +1202,12 @@ namespace Ruin.Core
             if (pool.Length == 0) { Wait(enemy); return; }
             var target = DrawRandom(pool);
             Log(enemy.Name + " · " + skill.Name + " → " + target.Name, "action", enemy.Id, target.Id);
-            if (skill.SanityDamage > 0) { ChangeSanity(target, -skill.SanityDamage, skill.Name); TryMentalState(target); }
+            if (skill.SanityDamage > 0) ChangeSanity(target, -skill.SanityDamage, skill.Name);
             if (skill.SanityAdjacent > 0)
             {
                 foreach (var neighbour in Run.Heroes.Where(a => !a.Dead && a != target && Math.Abs(a.Rank - target.Rank) == 1).OrderBy(a => a.Rank).ToArray())
                 {
                     ChangeSanity(neighbour, -skill.SanityAdjacent, skill.Name + "波及");
-                    TryMentalState(neighbour);
                 }
             }
             enemy.EnemyActionCount++;
@@ -1534,20 +1531,6 @@ namespace Ruin.Core
                 }
                 else Log(actor.Name + " 的理智归零，金丝苹果暂时没有夺走生命。", "sanity", actor.Id);
             }
-        }
-
-        private void TryMentalState(ActorState actor)
-        {
-            // A locked hero's mental state stays where it was, and no draw is spent on a roll that could
-            // not change anything.
-            if (actor == null || actor.SanityLocked) return;
-            int state = SanityProbability.Sample(SanityProbability.Distribution(actor.Sanity, new[] {
-                new WeightedOutcome(0.15, 1, SanityGate.High), new WeightedOutcome(0.7, 0), new WeightedOutcome(0.15, -1, SanityGate.Low)
-            }, Rules.ProbabilityStrength), Run.Random);
-            var mental = state == 0 ? MentalState.Composed : state == 2 ? MentalState.Agitated : actor.Mental;
-            if (mental == actor.Mental) return;
-            actor.Mental = mental;
-            Log(actor.Name + " 获得持续状态「" + Rules.Mental(mental).Name + "」。离开理智区间后仍保留。", "mental", actor.Id);
         }
 
         // A direct loss skips defence and the round-scoped vulnerability, but still goes through the

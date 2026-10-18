@@ -92,22 +92,14 @@ namespace Ruin.Tests
             Assert.AreEqual(30, s.Entries[0].End);
         }
 
-        [Test] public void PersonalSanityAndMentalStateSurviveNewBattle()
+        [Test] public void PersonalSanitySurvivesNewBattle()
         {
             var run = Run(15); var battle = Battle(run);
-            run.Heroes[0].Mental = MentalState.Agitated;
             battle.ChangeSanity(run.Heroes[0], 35, "recover"); battle.Finish(BattleOutcome.Retreat);
             var second = Battle(run);
-            Assert.AreEqual(50, run.Heroes[0].Sanity); Assert.AreEqual(MentalState.Agitated, run.Heroes[0].Mental);
+            Assert.AreEqual(50, run.Heroes[0].Sanity);
             Assert.AreEqual(0, second.FormProbabilities(run.Heroes[0])[2]);
             Assert.AreEqual(0, second.Finish(BattleOutcome.Retreat).RawDelta);
-        }
-
-        [Test] public void MentalModifierCannotBypassGates()
-        {
-            var run = Run(50); var battle = Battle(run); run.Heroes[0].Mental = MentalState.Composed;
-            Assert.AreEqual(0, battle.FormProbabilities(run.Heroes[0])[0]);
-            run.Heroes[0].Mental = MentalState.Agitated; Assert.AreEqual(0, battle.FormProbabilities(run.Heroes[0])[2]);
         }
 
         [Test] public void FormDoesNotRerollWhenSanityChangesDuringTurn()

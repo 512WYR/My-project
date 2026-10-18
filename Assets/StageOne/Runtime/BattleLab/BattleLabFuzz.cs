@@ -271,7 +271,6 @@ namespace Ruin.Runtime
                 }
                 enabled++;
                 slot.Sanity = rng.NextUnit() * 100;
-                slot.Mental = (MentalState)Math.Min(2, (int)(rng.NextUnit() * 3));
                 slot.SanityLockPending = rng.NextUnit() < 0.08;
                 slot.SanitySkillsOnly = rng.NextUnit() < 0.08;
                 if (randomizeStats) RandomizeStats(slot.Spec, rng, true);
@@ -332,14 +331,6 @@ namespace Ruin.Runtime
                 rules.ProbabilityStrength = rng.NextUnit() * 3;
                 rules.FeedbackFactor = rng.NextUnit();
                 rules.ImbalanceImmuneRounds = (int)(rng.NextUnit() * 3);
-                var states = rules.MentalStates;
-                if (states != null && states.Length >= 3)
-                {
-                    states[0].TechnicalMultiplier = 0.5 + rng.NextUnit() * 1.5;
-                    states[0].PrimalMultiplier = 0.5 + rng.NextUnit() * 1.5;
-                    states[1].TechnicalMultiplier = 0.5 + rng.NextUnit() * 1.5;
-                    states[2].PrimalMultiplier = 0.5 + rng.NextUnit() * 1.5;
-                }
                 cfg.Rules = rules;
             }
             return cfg;

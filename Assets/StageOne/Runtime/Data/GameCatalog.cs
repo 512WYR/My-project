@@ -29,7 +29,6 @@ namespace Ruin.Runtime
         public EnemyLineup[] NormalEncounters;
         public EnemyLineup[] EliteEncounters;
         public EnemyLineup[] BossEncounters;
-        public MentalDefinition[] MentalStates;
         [Range(0, 3)] public float ProbabilityStrength = 1.5f;
         [Range(0, 1)] public float FeedbackFactor = 0.5f;
         [Range(0, 1)] public float DeathChance = 0.25f;
@@ -111,7 +110,7 @@ namespace Ruin.Runtime
         {
             return new CombatRules { ProbabilityStrength = ProbabilityStrength, FeedbackFactor = FeedbackFactor,
                 DeathChance = DeathChance, CritMultiplier = CritMultiplier, MindStep = MindStep,
-                MentalStates = MentalStates.Select(m => m.Spec).ToArray(), Limbs = LimbRules() };
+                Limbs = LimbRules() };
         }
 
         // The prosthetic table stays in LimbSystem.DefaultProsthetics for the same reason the node weight

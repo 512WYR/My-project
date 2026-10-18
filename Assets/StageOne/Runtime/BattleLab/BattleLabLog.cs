@@ -26,7 +26,7 @@ namespace Ruin.Runtime
     {
         public static readonly string[] Kinds =
         {
-            "system", "round", "action", "damage", "heal", "sanity", "mental", "control",
+            "system", "round", "action", "damage", "heal", "sanity", "control",
             "limb", "death", "deathdoor", "bleed", "form", "move", "guard", "miss", "dodge",
             "settlement", "debug"
         };

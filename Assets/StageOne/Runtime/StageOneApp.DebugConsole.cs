@@ -19,6 +19,15 @@ namespace Ruin.Runtime
             Refresh();
         }
 
+        // Used by the console for its own validation messages, so a rejected input still leaves a
+        // readable line in the hint history instead of silently doing nothing.
+        public void DebugNote(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            Hint = message;
+            Refresh();
+        }
+
         public void DebugSetPlayerSanity(double value)
         {
             if (Run == null) return;
@@ -49,14 +58,18 @@ namespace Ruin.Runtime
             Refresh();
         }
 
-        public void DebugSetHeroMental(string heroId, MentalState mental)
+        // Direct form override. The battle engine rolls a hero's form at the start of their turn, so
+        // this is mainly for inspecting a form's skill list on the spot; the next turn rolls again.
+        public void DebugSetHeroForm(string heroId, SkillForm form)
         {
             if (Run == null) return;
             var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
             if (hero == null) return;
-            hero.Mental = mental;
-            string name = Catalog == null ? mental.ToString() : Catalog.Rules().Mental(mental).Name;
-            Hint = hero.Name + " 的持续精神状态已设为「" + name + "」。";
+            hero.Form = form;
+            string name = form == SkillForm.Technical ? "技术"
+                : form == SkillForm.Primal ? "原始" : "常态";
+            Hint = hero.Name + " 的形态已设为「" + name
+                + "」。战斗中形态会在该角色下个回合开始时按理智重新抽取。";
             Refresh();
         }
 

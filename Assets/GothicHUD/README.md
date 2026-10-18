@@ -93,7 +93,7 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 | 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、状态行（我方）或敌人意图（敌方）、行动/可选标记、阵亡叉 |
 | 血量 | ModularHudController / Vitals | 当前被查看角色的生命与理智 |
 | 技能 | ModularHudController / Skills | 五个技能槽、位移键、技能说明 |
-| 调试台 | IndustrialDebugConsole | 九个页签：概览、队伍、战斗、地图与房间、事件、部位与义肢、物品与饰品、规则与目录、日志；包含新开演练、玩家/队员理智、生命、精神状态、强制房间与事件、战斗结算、义肢与饰品管理 |
+| 调试台 | IndustrialDebugConsole | 九个页签：概览、队伍、战斗、地图与房间、事件、部位与义肢、物品与饰品、规则与目录、日志；包含新开演练、玩家/队员理智拖动条与输入框、常态/技术/原始形态按钮、生命、强制房间与事件、战斗结算、义肢与饰品管理 |
 
 位置卡不显示理智，理智看 Vitals 区。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
 

@@ -182,7 +182,6 @@ Modal Layer - 模态层
 | --- | --- |
 | `Preset15` / `Preset50` / `Preset85` | `app.NewRun(15 / 50 / 85)` |
 | `Set15` / `Set50` / `Set85` | `app.DebugSetSanity(...)` |
-| `SetComposed` / `SetAgitated` / `ClearMental` | `app.DebugMental(MentalState.Composed / Agitated / None)` |
 | `FeedbackExample` | `app.DebugFeedbackExample()` |
 | `DeathDoorExample` | `app.DebugDeathDoor()` |
 | `EndBattleDebug` | `app.DebugSettle()` |

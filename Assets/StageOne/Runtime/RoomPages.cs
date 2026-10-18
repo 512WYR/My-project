@@ -254,7 +254,7 @@ namespace Ruin.Runtime
         {
             var view = Base(app, "层级终端", "电梯井", "ELEVATOR / 第 " + app.Map.Floor + " 层");
             view.Body = "第 " + app.Map.Floor + " 层到此为止。\n"
-                + "下行之后不会自动整备生命，个人理智与精神状态保留。\n\n"
+                + "下行之后不会自动整备生命，个人理智保留。\n\n"
                 + string.Join("\n", app.Run.Heroes.Select(h =>
                 {
                     string limbs = LimbSystem.Summary(h);

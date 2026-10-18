@@ -20,7 +20,7 @@ namespace GameMake.IndustrialDebugUI.EditorTools
         // Bump this whenever the layout or the serialized fields change. The installer rebuilds the
         // prefab after a domain reload when the stored version is older, so the scene instance picks
         // the new fields up without the user having to find the menu item.
-        public const int Version = 3;
+        public const int Version = 7;
         public const string BuildVersionKey = "GameMake.IndustrialDebugUI.BuildVersion";
         private const string FontPath = "Assets/IndustrialBattleUI/Art/HudChinese.ttf";
 
@@ -173,7 +173,7 @@ namespace GameMake.IndustrialDebugUI.EditorTools
 
         private static void BuildParty(Transform parent, IndustrialDebugConsole console)
         {
-            var content = Page(parent, "Page 1 - 队伍", 1180, out console.Pages[1]);
+            var content = Page(parent, "Page 1 - 队伍", 1140, out console.Pages[1]);
             Label(content, "Title", "队伍", 20, 12, 1540, 36, 24, Gold);
             console.PartySelect = new Button[4];
             console.PartySelectLabels = new Text[4];
@@ -185,53 +185,60 @@ namespace GameMake.IndustrialDebugUI.EditorTools
             console.PartyBody = Body(content, "Party Body", 20, 126, 1540, 450);
 
             Label(content, "Adjust Title", "调整选中队员", 20, 588, 1540, 30, 20, Gold);
-            console.PartySanity = new Button[3];
-            string[] sanity = { "理智 15", "理智 50", "理智 85" };
+            Label(content, "Sanity Label", "理智", 20, 630, 80, 44, 18, Ink, TextAnchor.MiddleLeft);
+            console.PartySanitySlider = SliderBar(content, "Party Sanity Slider", 104, 632, 900, 40);
+            console.PartySanityInput = InputBox(content, "Party Sanity Input", "50", 1020, 630, 180, 44);
+            console.PartySanityApply = Btn(content, "Party Sanity Apply", "应用", 1216, 630, 120, 44, out _, 17);
+            console.PartySanityNow = Label(content, "Party Sanity Now", "",
+                1350, 630, 190, 44, 16, Muted, TextAnchor.MiddleLeft);
+
+            Label(content, "Form Label", "技能形态", 20, 688, 80, 44, 18, Ink, TextAnchor.MiddleLeft);
+            console.PartyForm = new Button[3];
+            string[] forms = { "常态", "技术（高理智）", "原始（低理智）" };
             for (int i = 0; i < 3; i++)
-                console.PartySanity[i] = Btn(content, "Sanity " + i, sanity[i],
-                    20 + i * 266, 628, 250, 54, out _, 18);
-            console.PartyMental = new Button[3];
-            string[] mental = { "给予凝神", "给予躁动", "清除状态" };
-            for (int i = 0; i < 3; i++)
-                console.PartyMental[i] = Btn(content, "Mental " + i, mental[i],
-                    20 + i * 266, 692, 250, 54, out _, 18);
+                console.PartyForm[i] = Btn(content, "Party Form " + i, forms[i],
+                    104 + i * 280, 688, 260, 44, out _, 17);
+
             console.PartyHp = new Button[2];
-            console.PartyHp[0] = Btn(content, "Hp Full", "恢复满血", 20, 756, 370, 54, out _, 18);
-            console.PartyHp[1] = Btn(content, "Hp Death Door", "设为濒死（0 生命）", 406, 756, 370, 54, out _, 18);
+            console.PartyHp[0] = Btn(content, "Hp Full", "恢复满血", 104, 746, 400, 48, out _, 17);
+            console.PartyHp[1] = Btn(content, "Hp Death Door", "设为濒死（0 生命）", 524, 746, 400, 48, out _, 17);
             var note = Label(content, "Note",
-                "理智调整只改数值，不重抽本回合形态：战斗中下回合才生效。凝神 / 躁动是跨战斗保留的持续状态。\n"
-                + "“设为濒死”用于检查奶妈救治与死亡检定；阵亡标记不会被生命值清除。",
-                20, 828, 1540, 70, 15, Muted);
+                "拖动滑块或输入数值后按「应用」（输入框内按回车也可）修改理智；拖动在松开鼠标时写入。\n"
+                + "形态按钮直接切换该队员当前的技能组；对战中会在该角色下个回合开始时按理智重新抽取。\n"
+                + "「设为濒死」用于检查奶妈救治与死亡检定。",
+                20, 800, 1540, 56, 15, Muted);
             note.verticalOverflow = VerticalWrapMode.Overflow;
 
             // Player sanity is the shared value that drives candidate count and room-type odds, so it
             // belongs next to the per-hero controls. The four new-run buttons mirror the old lab presets.
-            Label(content, "Run Title", "运行控制", 20, 916, 1540, 30, 20, Gold);
-            console.PlayerSanity = new Button[4];
-            string[] playerSanity = { "玩家理智 15", "玩家理智 50", "玩家理智 85", "玩家理智 100" };
-            for (int i = 0; i < playerSanity.Length; i++)
-                console.PlayerSanity[i] = Btn(content, "Player Sanity " + i, playerSanity[i],
-                    20 + i * 386, 956, 370, 52, out _, 18);
+            Label(content, "Run Title", "运行控制", 20, 872, 1540, 30, 20, Gold);
+            Label(content, "Player Sanity Label", "玩家理智", 20, 914, 126, 44, 18, Ink, TextAnchor.MiddleLeft);
+            console.PlayerSanitySlider = SliderBar(content, "Player Sanity Slider", 150, 916, 800, 40);
+            console.PlayerSanityInput = InputBox(content, "Player Sanity Input", "50", 970, 914, 170, 44);
+            console.PlayerSanityApply = Btn(content, "Player Sanity Apply", "应用", 1156, 914, 120, 44, out _, 17);
+            console.PlayerSanityNow = Label(content, "Player Sanity Now", "",
+                1290, 914, 250, 44, 16, Muted, TextAnchor.MiddleLeft);
 
-            console.NewRunButtons = new Button[4];
+            console.NewRunButtons = new Button[3];
             string[] runCaptions =
             {
-                "新开演练（默认种子）", "新开演练 · 理智 15", "新开演练 · 理智 50", "新开演练 · 理智 85"
+                "新开演练（默认理智 50）", "新开演练 · 沿用当前玩家理智", "新开演练 · 沿用当前理智与种子"
             };
             for (int i = 0; i < runCaptions.Length; i++)
                 console.NewRunButtons[i] = Btn(content, "New Run " + i, runCaptions[i],
-                    20 + i * 386, 1020, 370, 52, out _, 18);
+                    20 + i * 520, 970, 480, 52, out _, 17);
 
             var runNote = Label(content, "Run Note",
-                "新开会重置整局并回到初始增益房；预设只改变玩家理智，队员属性与规则不变。\n"
+                "新开会重置整局并回到初始增益房；「沿用当前玩家理智」读取上面滑块的值，队员属性与规则不变。\n"
+                + "「沿用当前理智与种子」会重放同一条路线，适合对照修改前后的战斗结果。\n"
                 + "玩家理智影响候选数量与房间类型，事件的高/低理智分支读取的也是它。",
-                20, 1084, 1540, 70, 15, Muted);
+                20, 1032, 1540, 80, 15, Muted);
             runNote.verticalOverflow = VerticalWrapMode.Overflow;
         }
 
         private static void BuildBattle(Transform parent, IndustrialDebugConsole console)
         {
-            var content = Page(parent, "Page 2 - 战斗", 1100, out console.Pages[2]);
+            var content = Page(parent, "Page 2 - 战斗", 1060, out console.Pages[2]);
             Label(content, "Title", "战斗", 20, 12, 1540, 36, 24, Gold);
             console.BattleStage = Label(content, "Stage", "", 20, 56, 1540, 28, 17, Cyan);
             console.BattleBody = Body(content, "Battle Body", 20, 92, 980, 570, 16);
@@ -241,25 +248,30 @@ namespace GameMake.IndustrialDebugUI.EditorTools
             console.BattleLog = Body(content, "Battle Log", 1016, 366, 548, 296, 14, Muted);
 
             Label(content, "Control Title", "战斗命令（作用于选中队员）", 20, 676, 1540, 30, 20, Gold);
-            console.BattleSanity = new Button[3];
-            string[] sanity = { "理智 15", "理智 50", "理智 85" };
+            Label(content, "Sanity Label", "理智", 20, 714, 62, 44, 18, Ink, TextAnchor.MiddleLeft);
+            console.BattleSanitySlider = SliderBar(content, "Battle Sanity Slider", 104, 716, 740, 40);
+            console.BattleSanityInput = InputBox(content, "Battle Sanity Input", "50", 860, 714, 150, 44);
+            console.BattleSanityApply = Btn(content, "Battle Sanity Apply", "应用", 1020, 714, 110, 44, out _, 17);
+            console.BattleSanityNow = Label(content, "Battle Sanity Now", "",
+                1146, 714, 394, 44, 16, Muted, TextAnchor.MiddleLeft);
+
+            Label(content, "Form Label", "技能形态", 20, 772, 80, 44, 18, Ink, TextAnchor.MiddleLeft);
+            console.BattleForm = new Button[3];
+            string[] forms = { "常态", "技术（高理智）", "原始（低理智）" };
             for (int i = 0; i < 3; i++)
-                console.BattleSanity[i] = Btn(content, "Battle Sanity " + i, sanity[i],
-                    20 + i * 266, 714, 250, 52, out _, 18);
-            console.BattleMental = new Button[3];
-            string[] mental = { "给予凝神", "给予躁动", "清除状态" };
-            for (int i = 0; i < 3; i++)
-                console.BattleMental[i] = Btn(content, "Battle Mental " + i, mental[i],
-                    20 + i * 266, 776, 250, 52, out _, 18);
-            console.BattleWin = Btn(content, "Win", "直接胜利", 20, 842, 300, 54, out _, 18);
-            console.BattleRetreat = Btn(content, "Retreat", "撤退结算", 336, 842, 300, 54, out _, 18);
-            console.BattleRest = Btn(content, "Rest", "整备全队生命", 652, 842, 300, 54, out _, 18);
-            console.BattleDeathDoor = Btn(content, "Death Door", "濒死演练", 20, 906, 300, 54, out _, 18);
-            console.BattleFeedback = Btn(content, "Feedback", "反馈样例（−2.5）", 336, 906, 300, 54, out _, 18);
+                console.BattleForm[i] = Btn(content, "Battle Form " + i, forms[i],
+                    84 + i * 280, 772, 260, 44, out _, 17);
+
+            console.BattleWin = Btn(content, "Win", "直接胜利", 20, 830, 300, 54, out _, 18);
+            console.BattleRetreat = Btn(content, "Retreat", "撤退结算", 336, 830, 300, 54, out _, 18);
+            console.BattleRest = Btn(content, "Rest", "整备全队生命", 652, 830, 300, 54, out _, 18);
+            console.BattleDeathDoor = Btn(content, "Death Door", "濒死演练", 20, 894, 300, 54, out _, 18);
+            console.BattleFeedback = Btn(content, "Feedback", "反馈样例（−2.5）", 336, 894, 300, 54, out _, 18);
             var note = Label(content, "Note",
                 "直接胜利会正常走结算与奖励流程；撤退只记录结果、不发奖励。\n"
+                + "理智用滑块或输入框修改，松开鼠标 / 点「应用」时写入；形态按钮直接切换当前技能组。\n"
                 + "「反馈样例」会新开一局并直接进入战斗，把四名队员的理智净变化设为 −20 / −10 / 0 / +10。",
-                20, 974, 1540, 60, 15, Muted);
+                20, 960, 1540, 70, 15, Muted);
             note.verticalOverflow = VerticalWrapMode.Overflow;
         }
 
@@ -455,6 +467,66 @@ namespace GameMake.IndustrialDebugUI.EditorTools
             var text = Label(parent, name, "", x, y, w, h, size, color ?? Ink);
             text.lineSpacing = 1.15f;
             return text;
+        }
+
+        // A plain 0-100 slider. The Slider component owns fill/handle anchors, so those rects only
+        // need a size; the visible colours mirror the rest of the console.
+        private static Slider SliderBar(Transform parent, string name, float x, float y, float w, float h)
+        {
+            var rt = Group(parent, name, x, y, w, h);
+            var slider = rt.gameObject.AddComponent<Slider>();
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = 0f;
+            slider.maxValue = 100f;
+            slider.wholeNumbers = true;
+            slider.navigation = new Navigation { mode = Navigation.Mode.None };
+
+            var background = Solid(rt, "Background", 0, 0, w, h, ButtonBg, true);
+            background.raycastTarget = true;
+            slider.targetGraphic = background;
+
+            var fill = Solid(rt, "Fill", 0, 0, w, h, Gold, false);
+            var fillRect = fill.rectTransform;
+            fillRect.anchorMin = new Vector2(0f, 0.3f);
+            fillRect.anchorMax = new Vector2(0f, 0.7f);
+            fillRect.pivot = new Vector2(0f, 0.5f);
+            fillRect.anchoredPosition = Vector2.zero;
+            fillRect.sizeDelta = Vector2.zero;
+            slider.fillRect = fillRect;
+
+            var handle = Solid(rt, "Handle", 0, 0, 24, h, Ink, true);
+            var handleRect = handle.rectTransform;
+            handleRect.anchorMin = new Vector2(0f, 0.15f);
+            handleRect.anchorMax = new Vector2(0f, 0.85f);
+            handleRect.pivot = new Vector2(0.5f, 0.5f);
+            handleRect.anchoredPosition = Vector2.zero;
+            handleRect.sizeDelta = new Vector2(24, 0);
+            slider.handleRect = handleRect;
+            slider.value = 50f;
+            return slider;
+        }
+
+        // A single-line numeric field. The console reads/writes it directly; the input field only
+        // needs a text child, a placeholder and a raycastable background.
+        private static InputField InputBox(Transform parent, string name, string value,
+            float x, float y, float w, float h)
+        {
+            var background = Solid(parent, name, x, y, w, h, ButtonBg, true);
+            var field = background.gameObject.AddComponent<InputField>();
+            var text = Label(background.transform, "Text", value, 10, 0, w - 20, h, 17, Ink,
+                TextAnchor.MiddleLeft);
+            text.supportRichText = false;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            var placeholder = Label(background.transform, "Placeholder", "0-100", 10, 0, w - 20, h,
+                17, Muted, TextAnchor.MiddleLeft);
+            field.textComponent = text;
+            field.placeholder = placeholder;
+            field.text = value;
+            field.contentType = InputField.ContentType.DecimalNumber;
+            field.characterLimit = 6;
+            field.navigation = new Navigation { mode = Navigation.Mode.None };
+            return field;
         }
 
         private static RectTransform Group(Transform parent, string name, float x, float y, float w, float h)

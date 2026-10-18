@@ -161,7 +161,7 @@ namespace Ruin.Runtime
                 sb.AppendLine("[" + (actor.Player ? "英雄" : "敌人") + "] " + actor.Name + " (" + actor.Id + ")");
                 sb.AppendLine("  HP " + actor.Hp + "/" + (actor.Definition == null ? 0 : actor.Definition.MaxHp)
                     + (actor.Dead ? " 已死亡" : actor.DeathDoor ? " 濒死" : "")
-                    + "  理智 " + actor.Sanity.ToString("0.#") + "  精神 " + actor.Mental + "  形态 " + actor.Form
+                    + "  理智 " + actor.Sanity.ToString("0.#") + "  形态 " + actor.Form
                     + "  站位 " + (actor.Rank + 1) + "×" + actor.Width);
                 sb.AppendLine("  流血 " + actor.BleedDamage + "×" + actor.BleedTurns
                     + "  打断 " + actor.Interrupted + "  失衡 " + actor.Imbalance

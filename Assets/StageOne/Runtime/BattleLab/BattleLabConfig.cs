@@ -80,20 +80,6 @@ namespace Ruin.Runtime
         {
             if (rules == null) return;
             var defaults = new CombatRules();
-            rules.MentalStates = rules.MentalStates ?? defaults.MentalStates;
-            // Every MentalState value must be present: BattleEngine.Rules.Mental uses First() and throws
-            // if a state was deleted from the table.
-            var list = rules.MentalStates.Where(x => x != null).ToList();
-            foreach (var fallback in defaults.MentalStates)
-                if (!list.Any(x => x.State == fallback.State))
-                    list.Add(new MentalSpec
-                    {
-                        State = fallback.State, Name = fallback.Name,
-                        TechnicalMultiplier = fallback.TechnicalMultiplier,
-                        PrimalMultiplier = fallback.PrimalMultiplier,
-                        AccuracyModifier = fallback.AccuracyModifier
-                    });
-            rules.MentalStates = list.ToArray();
             rules.Limbs = LimbSystem.Resolve(rules.Limbs);
             rules.ProbabilityStrength = Clamp(rules.ProbabilityStrength, 0, 3);
             rules.FeedbackFactor = Clamp(rules.FeedbackFactor, 0, 1);
@@ -155,7 +141,6 @@ namespace Ruin.Runtime
         public ActorSpec Spec = new ActorSpec();
         public int Rank = -1;                 // -1 = use the compact order of enabled slots.
         public double Sanity = 50;
-        public MentalState Mental = MentalState.None;
         public bool SanitySkillsOnly;
         public bool SanityLockPending;
         public LabLimbState[] Limbs = { LabLimbState.Intact, LabLimbState.Intact, LabLimbState.Intact, LabLimbState.Intact };

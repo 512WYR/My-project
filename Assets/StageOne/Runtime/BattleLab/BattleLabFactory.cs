@@ -96,7 +96,7 @@ namespace Ruin.Runtime
         public static BattleLabConfig CreateDefault(GameCatalog catalog)
         {
             var cfg = new BattleLabConfig();
-            if (catalog != null && catalog.MentalStates != null && catalog.MentalStates.Length > 0)
+            if (catalog != null)
                 cfg.Rules = CloneRules(catalog.Rules());
             cfg.Normalize();
 
@@ -281,9 +281,6 @@ namespace Ruin.Runtime
             cfg.Normalize();
             if (catalog == null) errors.Add("找不到 GameCatalog，无法解析角色。");
             if (!cfg.TryGetSeed(out _, out string seedError)) errors.Add(seedError);
-            if (cfg.UseCatalogRules && catalog != null
-                && (catalog.MentalStates == null || catalog.MentalStates.Length == 0))
-                errors.Add("Catalog 没有精神状态表，请改用配置内规则。");
 
             ValidateHeroes(cfg, errors);
             ValidateEnemies(cfg, errors);
@@ -379,8 +376,6 @@ namespace Ruin.Runtime
                     if (hero.Limbs[part] != LabLimbState.Severed)
                         errors.Add(name + " 的" + LimbSystem.PartName((LimbPart)part) + "未断肢，不能安装「" + prosthetic.Name + "」。");
                 }
-                if (!Enum.IsDefined(typeof(MentalState), hero.Mental))
-                    errors.Add(name + " 的精神状态枚举值无效。");
             }
         }
 
@@ -390,7 +385,7 @@ namespace Ruin.Runtime
         {
             CombatRules rules;
             if (cfg == null) rules = new CombatRules();
-            else if (cfg.UseCatalogRules && catalog != null && catalog.MentalStates != null && catalog.MentalStates.Length > 0)
+            else if (cfg.UseCatalogRules && catalog != null)
                 rules = CloneRules(catalog.Rules());
             else
                 rules = CloneRules(cfg.Rules);
@@ -511,7 +506,6 @@ namespace Ruin.Runtime
                 if (hero == null || hero.Definition == null) continue;
 
                 hero.Sanity = SanityProbability.Clamp(heroCfg.Sanity, 0, 100);
-                hero.Mental = heroCfg.Mental;
                 hero.SanitySkillsOnly = heroCfg.SanitySkillsOnly;
                 hero.SanityLockPending = heroCfg.SanityLockPending;
 

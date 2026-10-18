@@ -176,7 +176,7 @@ namespace Ruin.Runtime
             Label(rect, "ActorName", actor.Name, 4, 149, 104, 29, 19, actor.Dead ? Muted : Ink, TextAnchor.MiddleCenter);
             Meter(rect, "HealthMeter", 9, 184, 94, 6, (float)actor.Hp / actor.Definition.MaxHp, actor.DeathDoor ? Rust : accent);
             Label(rect, "Health", actor.Dead ? "已死亡" : actor.DeathDoor ? "濒死 · 需要治疗" : actor.Hp + " / " + actor.Definition.MaxHp, 3, 194, 106, 21, 12, actor.DeathDoor ? Rust : Ink, TextAnchor.MiddleCenter);
-            string status = actor.Player ? "理智 " + actor.Sanity.ToString("0.#") + " · " + app.Battle.Rules.Mental(actor.Mental).Name : "速度 " + actor.Speed;
+            string status = actor.Player ? "理智 " + actor.Sanity.ToString("0.#") : "速度 " + actor.Speed;
             Label(rect, "Status", status, 3, 220, 106, 21, 11, actor.Player ? Cyan : Muted, TextAnchor.MiddleCenter);
             if (actor.Dead) Label(rect, "DeadCross", "×", 31, 63, 52, 65, 54, Rust, TextAnchor.MiddleCenter);
             if (actor.Player)
@@ -209,8 +209,7 @@ namespace Ruin.Runtime
                 double[] p = app.Battle.FormProbabilities(actor);
                 Label(box, "FormRow", "高理智 " + (p[0] * 100).ToString("0.0") + "%   常态 " + (p[1] * 100).ToString("0.0")
                     + "%   低理智 " + (p[2] * 100).ToString("0.0") + "%", 20, 174, 300, 20, 12, Muted);
-                Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 198, 300, 18, 11, Muted);
-                Label(box, "Attributes", AttributeText(actor), 20, 218, 300, 30, 11, Muted);
+                Label(box, "Attributes", AttributeText(actor), 20, 198, 300, 30, 11, Muted);
                 Label(box, "Accessories", "饰品  " + AccessorySystem.Summary(actor), 20, 252, 300, 20, 11, Gold);
                 Label(box, "LimbHeading", "部位损伤  ·  重伤→断肢→义肢", 20, 276, 300, 20, 13, Gold);
                 LimbRow(box, actor, LimbPart.Head, 300);
@@ -566,7 +565,7 @@ namespace Ruin.Runtime
         private void ElevatorRoom(RectTransform root)
         {
             Label(root, "ElevatorHeading", "电梯井", 34, 190, 900, 38, 29, Ink);
-            Label(root, "ElevatorNote", "第 " + app.Map.Floor + " 层到此为止。下行之后不会自动整备生命，个人理智与精神状态保留。",
+            Label(root, "ElevatorNote", "第 " + app.Map.Floor + " 层到此为止。下行之后不会自动整备生命，个人理智保留。",
                 36, 230, 1240, 24, 15, Muted);
             var panel = Box(root, "ElevatorPanel", 34, 268, 1532, 330, Panel);
             Label(panel, "ElevatorRoute", "本层路线   " + FloorSummary(app.Map.Floor), 22, 20, 1488, 30, 17, Gold);
@@ -750,7 +749,7 @@ namespace Ruin.Runtime
                 "03  每回合只能使用该角色当前的技能，或与相邻队员换位。\n      部分技能每场限次；用尽或站位不符时按钮上会写明原因。\n" +
                 "      技能说明第一行以 ●/○ 表示可选/不可选位置：斜杠前为己方站位，斜杠后为目标位置，\n" +
                 "      均按1→4号位排列；目标阵营与限制见下一行效果说明。\n\n" +
-                "04  理智低于30技能会发生变化，高于70会解锁特殊技能。\n      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n      敌方低语可能带来凝神或躁动；持续状态跨战斗保留。\n\n" +
+                "04  理智低于30技能会发生变化，高于70会解锁特殊技能。\n      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n\n" +
                 "05  敌人卡片下方显示下一次攻击。用格挡、反击、守护、打断或换位应对。\n      奶妈可以治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
                 "06  战斗结束（胜利或全队阵亡）都会反馈玩家理智：队员平均净变化 × 0.5。\n      全队阵亡本局立即结束；结算后继续前进，理智决定候选数量与房间类型。\n\n" +
                 "07  命中、暴击与闪避由角色属性直接决定，不随理智变化。\n      技能伤害 = 基础攻击力 × 技能倍率；受伤按目标防御比例减少。\n\n" +
@@ -912,9 +911,6 @@ namespace Ruin.Runtime
             Button(p, "Set15", "设为15", "实际理智变化", 36, 304, 151, 54, () => app.DebugSetSanity(15), false, true, 16);
             Button(p, "Set50", "设为50", "实际理智变化", 200, 304, 151, 54, () => app.DebugSetSanity(50), false, true, 16);
             Button(p, "Set85", "设为85", "实际理智变化", 364, 304, 151, 54, () => app.DebugSetSanity(85), false, true, 16);
-            Button(p, "SetComposed", "给予凝神", "持续精神状态", 528, 304, 151, 54, () => app.DebugMental(MentalState.Composed), false, true, 16);
-            Button(p, "SetAgitated", "给予躁动", "持续精神状态", 692, 304, 151, 54, () => app.DebugMental(MentalState.Agitated), false, true, 16);
-            Button(p, "ClearMental", "治疗状态", "清除持续状态", 856, 304, 148, 54, () => app.DebugMental(MentalState.None), false, true, 16);
             Label(p, "ScenariosHeading", "结算与濒死样例", 36, 389, 920, 26, 17, Gold);
             Button(p, "FeedbackExample", "反馈 −2.5", "变化 −20 / −10 / 0 / +10", 36, 432, 310, 67, app.DebugFeedbackExample, false, true, 18);
             Button(p, "DeathDoorExample", "濒死演练", "盾卫0生命 · 尝试救治", 365, 432, 310, 67, app.DebugDeathDoor, false, true, 18);
