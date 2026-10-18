@@ -18,9 +18,7 @@
 - Enemy Positions：敌方 4 个位置卡，压在敌方站位横条正上方。
 - Debug Button：右上角「调试」按钮，打开调试页。
 - Debug Page：默认隐藏的调试页，收纳目前没有落位的信息与功能。它在任何页面都可见。
-- Node Pages / Route Page：默认隐藏的路线页，候选节点竖直排列。
-- Node Pages / Room Page：默认隐藏的房间页，通用边框 + 配图块 + 文字块 + 选项块 + 右下角继续按钮。
-- Node Pages / Run End Page：默认隐藏的本局结束页。
+- ~~Node Pages / Route Page / Room Page / Run End Page~~：已整体删除，预制体不再包含节点页。
 
 Canvas 基准为 1920×1080，顶部居中、队伍靠左上、底栏贴底，Expand 适配宽屏。透明 PNG 直接使用默认 UI 材质。头像与肢体血条在 Sprite Editor 中配置有效裁切区域，原始图片未修改。
 
@@ -71,18 +69,21 @@ GothicHudPanel.OnSkillSelected 提供技能选择事件，技能效果由游戏�
 
 ## 接管全部页面：mainScene
 
-GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity。该场景把 StageOneApp 的 External Battle Ui 打开，于是 StageOneView 不再绘制任何页面——战斗页与节点页全部让出，只保留结算弹窗、F1 帮助和 F3 验收工具；它的 Canvas 排序为 50，所以弹窗仍盖在 HUD（排序 10）之上。
+GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity。该场景把 StageOneApp 的 External Battle Ui 打开，于是 StageOneView 不再绘制任何页面——战斗页全部让出，只保留结算弹窗、F1 帮助和 F3 验收工具；它的 Canvas 排序为 50，所以弹窗仍盖在 HUD（排序 10）之上。
 
 > 生成场景前必须先跑一次 **GameMake / Gothic HUD / Rebuild Modular HUD**：新组件与它们的引用都写在预制体和场景实例上，只重建其中一个不够。
+>
+> 旧版本生成的预制体若仍带 `Node Pages - 节点页`，运行一次 **GameMake / Gothic HUD / Remove Node Pages - 节点页**，它会删除整棵子树并清掉根节点上失效的 `GothicNodeHudController`。生成器已不再创建这些对象。
 
-数据来源都是 StageOneApp 的 Changed 事件，两个控制器各管一半，互不写对方的对象：
+数据来源都是 StageOneApp 的 Changed 事件，各控制器只写自己的对象：
 
 | 归属 | 组件 | 说明 |
 |---|---|---|
 | 生命 / 理智 / 肢体 / 队伍头像 | ModularHudController | Follow Stage One Battle 关闭，由战斗控制器写 Characters 后调用 RefreshView |
 | 回合数 | MechanicalRoundCounter | Follow Stage One Battle 关闭，由战斗控制器调用 SetRound |
 | 技能槽 / 位移 / 说明 / 位置卡 | GothicBattleHudController | 唯一写入者，只更新已存在对象，不重建层级 |
-| 路线页 / 六个房间页 / 本局结束页 | GothicNodeHudController | 唯一写入者，同样只更新已存在对象 |
+| 路线页 / 房间选择 | ExplorationMapController | 场景内独立 Canvas，接管 `RoomView.Map` |
+| 事件房间 | IndustrialEventPage | 场景内独立 Canvas，接管 `RoomView.Event` |
 | 调试页 | GothicBattleHudController | 唯一写入者；「调试」按钮在所有页面都可见，战斗外的行显示为「—」 |
 
 战斗页本身只承担位置、血量、技能三件事，其余都收进调试页：
@@ -96,28 +97,15 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 
 位置卡不显示理智，理智看 Vitals 区。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
 
-### 节点页
+### 节点页（已移除）
 
-节点页与战斗页由 `AwaitingNode` 天然互斥：一边显示时另一边整组隐藏。每个节点页共用同一套骨架，边框一律是「通用边框」（GeneralFrame）：
+旧版的 `Node Pages - 节点页`（路线页、六个房间页、本局结束页）以及驱动它们的 `GothicNodeHudController`、`GothicNodeOption`、`GothicRouteNode` 已整体删除，`Rebuild Modular HUD` 也不再创建它们。
 
-```
-┌ 通用边框 ────────────────────────────────────────────┐
-│  房间名 / 标题            [帮助 F1] [验收 F3]        │
-│ ┌ 配图块 ┐  ┌ 文字块：标题 / 正文 / 结果 ────────┐   │
-│ └────────┘  └────────────────────────────────────┘   │
-│ ┌ 选项块：选项卡（按数量居中） ────────────────────┐ │
-│ └──────────────────────────────────────────────────┘ │
-│  提示文字                                [ 继续 ] ←──┘
-└──────────────────────────────────────────────────────┘
-```
+- 路线与房间选择由场景内的 `ExplorationMapController` 负责。
+- 事件房间由场景内的 `IndustrialEventPage` 负责。
+- 增益房、补给站、电梯井、宝箱房和本局结束页由 `IndustrialEventPage` 统一按事件页结构显示，内容来自 `Ruin.Runtime.RoomPages`。
 
-- **配图块**：EventSpec 目前没有图片字段，所以每页都是带标注的占位框，边框用节点类型色描边。将来给 EventSpec 加 Sprite 时，这里是唯一的填充点。
-- **继续按钮**：固定放在窗口右下角同一个位置，承担「节点做完 → 回到路线选下一个节点」。事件房/增益房/补给站/宝箱房是「离开」，电梯井是「下楼」，本局结束页是「新开一局」。将来若有窗口要关闭按钮，放同一处即可。按钮左侧那行提示文字说明它为什么暂时不可点。
-- **路线页**：内容与内置页一致，只有候选节点由横向一排改成**竖直排列**（右侧一列）。左侧是概率行与已经过的位置。点候选卡本身就是前进，所以路线页没有继续按钮。
-- **补给站**：治疗全队与静养进了选项块；「按角色 × 按部位」的修复与安装义肢塞不进这套骨架，先用文字占位——**这几项在 mainScene 里暂时不可达**（StageOne.unity 的内置补给页不受影响）。义肢仍可用 F3 验收工具发放。
-- **电梯井 / 宝箱房**：没有选项，选项块显示说明文字，继续位分别是「下楼」与「离开」。
-
-保留 Follow Stage One Battle 为默认值的原因为：StageOne.unity 与该场景的自动化测试（StageOneSmoke、StageOneFlowTests）都走内置页面，External Battle Ui 默认关闭，行为不变（该开关现在覆盖整页，但取值和默认值没变）。
+保留 Follow Stage One Battle 为默认值的原因为：StageOne.unity 与该场景的自动化测试（StageOneSmoke、StageOneFlowTests）都走内置页面，External Battle Ui 默认关闭，行为不变。
 
 战场卡点击会选中该角色，选中技能或位移后可作为目标；`StageOneView.RegisterCardImage` 让打击闪红在 HUD 上照常工作。
 

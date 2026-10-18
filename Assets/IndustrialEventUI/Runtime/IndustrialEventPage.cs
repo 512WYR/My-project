@@ -28,6 +28,10 @@ namespace GameMake.EventUI
         public bool ActionsReady { get; private set; }
         StageOneApp bound;
         NodeState shownNode;
+        RoomView shownRoom;
+        bool shownFinished;
+        RoomPageView current;
+        readonly RoomPageContext context = new RoomPageContext();
         string signature, fullText;
         int[] characterStarts;
         int revealed, continueChoice=-1;
@@ -62,16 +66,23 @@ namespace GameMake.EventUI
         {
             choice.Hit.onClick.AddListener(()=>{
                 if(!ActionsReady || !choice.Available || !Live()) return;
-                ActionsReady=false; Lock(); Source.ChooseEventOption(choice.ChoiceIndex);
+                ActionsReady=false; Lock();
+                // The route, the buff, the supply station and the chest all speak through their own
+                // page object; only the event branch falls back to the scripted event command.
+                if(current!=null && current.Choose!=null) current.Choose(choice.ChoiceIndex);
+                else Source.ChooseEventOption(choice.ChoiceIndex);
+                Sync();
             });
         }
-        bool Live()=>Source && Source.Run!=null && Source.AwaitingNode && Source.Room==RoomView.Event
-            && !Source.HelpOpen && !Source.LabOpen;
+        bool Live()=>RoomPages.Visible(Source);
         void Advance()
         {
             if(!ActionsReady || !Live()) return;
             ActionsReady=false; Lock();
-            if(leave) Source.LeaveRoom(); else if(continueChoice>=0) Source.ChooseEventOption(continueChoice);
+            if(leave && current!=null && current.Advance!=null) current.Advance();
+            else if(leave) Source.LeaveRoom();
+            else if(continueChoice>=0) Source.ChooseEventOption(continueChoice);
+            Sync();
         }
         void Lock()
         {
@@ -86,24 +97,35 @@ namespace GameMake.EventUI
         public void Sync()
         {
             if(!Page || !Body) return;
-            if(!Live()) { Cancel(); Page.SetActive(false); return; }
+            if(!Live()) { Cancel(); Page.SetActive(false); context.Reset(); shownNode=null; return; }
             var node=Source.ActiveNode;
-            var content=EventScripts.Page(node,Source.Run,Source.Catalog.MapRules());
+
+            // Every non-battle node is drawn as an event page now, so the header, location and action set
+            // come from RoomPages instead of from the event script alone. The supply subpages (hero, limb)
+            // are view state and reset when the room changes.
+            bool roomChanged=shownRoom!=Source.Room || shownFinished!=Source.Run.Map.Finished;
+            if(roomChanged) context.Reset();
+            shownRoom=Source.Room; shownFinished=Source.Run.Map.Finished;
+
+            var content=RoomPages.Build(Source,context);
             string story=(content.Body??"");
             if(!string.IsNullOrEmpty(Source.RoomNote)) story+="\n\n"+Source.RoomNote;
             if(!string.IsNullOrEmpty(content.Hint)) story+="\n\n"+content.Hint;
-            var key=new StringBuilder(content.Title).Append('|').Append(story).Append('|').Append(content.CanLeave);
+            var key=new StringBuilder(content.Header).Append('|').Append(content.Title).Append('|')
+                .Append(content.Code).Append('|').Append(content.Location).Append('|')
+                .Append(story).Append('|').Append(content.CanLeave).Append('|').Append(content.AdvanceLabel);
             foreach(var c in content.Choices) key.Append('|').Append(c.Label).Append(c.Detail).Append(c.Shown).Append(c.Enabled);
             string next=key.ToString();
-            bool changed=shownNode!=node || signature!=next;
+            bool changed=shownNode!=node || roomChanged || signature!=next;
             bool reopening=!Page.activeSelf;
             Page.SetActive(true);
             if(!changed && !reopening && (reveal!=null || ActionsReady)) return;
+            current=content;
             Cancel();
-            Header.text="事件终端";
-            ScreenTitle.text=content.Title;
-            ScreenCode.text=(node?.EventId??"EVENT")+"  /  "+(content.CanLeave?"记录结束":content.StepCount>0?"阶段 "+content.Step+" / "+content.StepCount:"事件记录");
-            ScreenLocation.text="第 "+(node?.Floor??1).ToString("D2")+" 层  ·  房间 "+((node?.Index??0)+1).ToString("D2");
+            Header.text=content.Header??"事件终端";
+            ScreenTitle.text=content.Title??"";
+            ScreenCode.text=content.Code??"";
+            ScreenLocation.text=content.Location??"";
             EventIllustration.enabled=EventIllustration.sprite;
             if(changed)
             {
@@ -129,13 +151,18 @@ namespace GameMake.EventUI
             StoryContent.sizeDelta=new Vector2(StoryContent.sizeDelta.x,height);
             StoryScroll.verticalNormalizedPosition=position;
         }
-        void PrepareActions(EventPage content)
+        void PrepareActions(RoomPageView content)
         {
             var visible=content.Choices.Select((c,i)=>new { Choice=c,Index=i }).Where(x=>x.Choice.Shown).ToArray();
-            leave=content.CanLeave && Source.EventCanLeave; continueChoice=-1;
-            if(!leave && visible.Length==1 && new[]{"继续","继续前进","离开"}.Contains(visible[0].Choice.Label))
+            leave=content.CanLeave; continueChoice=-1;
+            // The event scripts use a single closing choice where the other rooms use an advance button.
+            if(!leave && Source.Room==RoomView.Event && visible.Length==1
+                && new[]{"继续","继续前进","离开"}.Contains(visible[0].Choice.Label))
                 continueChoice=visible[0].Index;
-            int count=leave || continueChoice>=0?0:visible.Length;
+            // Rooms keep their choices while the advance button is available; an event's closing page has
+            // no choices at all, so it naturally shows only the button. A single "继续" choice folds into
+            // the button instead of taking a slot.
+            int count=continueChoice>=0?0:visible.Length;
             while(Choices.Length<count)
             {
                 var clone=Instantiate(Choices[0],ChoiceColumn); clone.name="Choice "+(Choices.Length+1);
@@ -157,7 +184,7 @@ namespace GameMake.EventUI
             ChoiceHeading.text=count>0?"行动选择":"";
             ChoiceHeading.gameObject.SetActive(false);
             Continue.gameObject.SetActive(false); ContinueFade.alpha=0; ContinueFade.blocksRaycasts=false;
-            ContinueLabel.text=leave?"离开  →":"继续  →";
+            ContinueLabel.text=leave?(content.AdvanceLabel??"离开  →"):"继续  →";
             Continue.interactable=false;
         }
         float SlideDistance()
@@ -197,7 +224,8 @@ namespace GameMake.EventUI
             if(showContinue)
             {
                 AnimateContinue(1); ContinueFade.blocksRaycasts=true;
-                Continue.interactable=leave || EventScripts.Page(Source.ActiveNode,Source.Run,Source.Catalog.MapRules()).Choices[continueChoice].Enabled;
+                Continue.interactable=leave || (continueChoice>=0 && continueChoice<current.Choices.Count
+                    && current.Choices[continueChoice].Enabled);
             }
             ActionsReady=true; reveal=null;
         }

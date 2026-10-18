@@ -11,6 +11,7 @@
 |---|---|---|---|---|
 | BUG-001 | 失衡 buff 没有效果 | 中 | 已定位（规则本身正常，问题在免疫反馈与可观察性） | 战士「猛击」`w_bash`；主场景 HUD |
 | BUG-002 | 群体技能在主场景只能选择无法释放 | 高 | 已定位（未修复） | 战士「追击」、盾卫「壁垒」「全队格挡反击」、奶妈「群体药雾」「驱散疗法」 |
+| BUG-003 | 拖拽攻击伤害有效但拖拽无效 | 中 | 已定位（守护挡刀场景已复现） | 枪手「拖拽射击」`g_grapple`；敌方守护单位 |
 
 ---
 
@@ -165,6 +166,84 @@ public void SelectSkill(int index)
 
 ---
 
+## BUG-003 拖拽攻击伤害有效但拖拽无效
+
+### 现象
+
+枪手使用「拖拽射击」（`g_grapple`）命中后，目标正常掉血，但没有被拖到 1 号位，也没有任何“拖拽失败”的提示。换上不同的敌人组合后，有时能拖动、有时完全不动，看起来像随机失效。
+
+### 复现步骤
+
+1. 进入 `StageOne.unity`，队伍包含枪手，枪手站在 3 或 4 号位（`g_grapple` 的 `ActorRanks = 12`）。
+2. 遇到带有「肉盾怪 / 精英肉盾怪」的编队，并让肉盾成功施放「守护」。
+3. 对肉盾守护的后排敌人使用「拖拽射击」。
+4. 观察：伤害由肉盾承受（日志显示“为……挡下攻击”），但被选中的后排敌人位置不变，也没有拖拽日志。
+
+### 影响范围
+
+- 技能：枪手「拖拽射击」`g_grapple`（`PullToFront = 1`，`PullChance = 0.3`，`TargetRanks = 12`）。
+- 敌人：会施放「守护」的肉盾怪 `tank` / 精英肉盾怪 `elite_tank`（`e_tank_guard` / `e_elite_tank_guard`）。
+- 表现层：主场景战斗日志与 HUD 没有拖拽失败反馈。
+
+### 规则层验证结果
+
+用独立 `Ruin.Core` 行为测试（枪手速度 100 先手、拖拽概率强制为 100%、肉盾在 1 号位守护 3 号位的回血怪）得到：
+
+```
+== 无守护，拖拽必中 ok=True err=
+tankHp=100->100 tankRank=1 healerHp=88 healerRank=0
+  [action] gunner · 拖拽射击 暴击！
+  [damage] healer 受到 12 点伤害。
+  [move] healer 被拖拽到 1 号位。
+
+== 守护挡刀，拖拽必中 ok=True err=
+tankHp=100->88 healerHp=100 healerRank=2
+  [action] gunner · 拖拽射击 暴击！
+  [guard] tank 为 healer 挡下攻击。
+  [damage] tank 受到 12 点伤害。
+```
+
+结论：
+
+- 无守护时，伤害与拖拽都正常，目标从 3 号位被拖到 1 号位。
+- 有守护时，伤害被转移到肉盾身上，**拖拽效果也跟到了肉盾身上**；肉盾本来就在 1 号位，`PullToFront` 直接静默返回，所以玩家看到的就是“伤害有效、拖拽无效”。
+
+### 根因分析
+
+1. **守护挡刀后，命中效果被施加到了 `victim`（挡刀者），而不是玩家选择的主目标**
+   - `ResolveAttack` 用 `GuardedTarget(target)` 把 `victim` 换成守护者（`Assets/StageOne/Core/BattleEngine.cs:371`），随后调用 `ApplyOnHit(actor, victim, skill, target == main)`（`BattleEngine.cs:379`）。
+   - `ApplyOnHit` 里的拖拽只认传入的 `target`：`if (skill.PullToFront && !target.Player && Roll(skill.PullChance)) PullToFront(target);`（`BattleEngine.cs:540`）。
+   - 因此实际被拖拽的是挡刀的肉盾，而不是被选中的后排敌人。若肉盾已经在 1 号位，`PullToFront` 的 `if (from <= 0) return;`（`BattleEngine.cs:685`）会**不打日志直接返回**，拖拽彻底不可见。
+2. **拖拽概率失败时没有反馈**
+   - `PullChance = 0.3`，失败时 `ApplyOnHit` 不写任何日志，玩家无法区分“30% 没触发”和“技能坏了”。
+   - 这是正常的概率设计，但缺少反馈会被感知为 bug。
+3. **部分失败场景只有日志、没有界面提示**
+   - 目标 `Immobile` 时 `PullToFront` 会记录“固定在原地，没有被拖拽”（`BattleEngine.cs:679-683`），但主场景 HUD 不展示战斗日志，玩家仍然看不到。
+   - 目标在伤害结算后死亡时不会执行 `ApplyOnHit`（`BattleEngine.cs:379` 的 `if (!victim.Dead)`），此时不拖拽是合理的，但也没有提示。
+4. **目标本来就在 1 号位时静默返回**
+   - `g_grapple` 的 `TargetRanks = 12` 正常情况下选不到 1 号位目标，所以这条主要影响“守护者被误拖”的情况；但作为通用逻辑，建议补一条日志。
+
+### 修复建议
+
+1. 明确“守护挡刀时拖拽谁”的规则，并在代码里显式表达：
+   - 推荐：**拖拽效果只对玩家选择的主目标生效**。守护挡刀只转移伤害，位置效果仍应作用于 `target`；若主目标已被守护，可选择“拖拽失败并提示”，或“把主目标拖到 1 号位”两种规则之一，但不能默默拖错人。
+   - 实现上可在 `ResolveAttack` 中把“伤害承受者”和“命中效果承受者”拆开：`Damage(victim, ...)` 用 `victim`，位移动/控制类效果用 `target`（或显式只对 `target == main` 施加）。
+2. 给拖拽失败补日志，至少区分：
+   - 概率未触发：“拖拽未生效（30% 概率）”。
+   - 目标固定在原地：“固定在原地，没有被拖拽”。
+   - 目标已在 1 号位：“已经在 1 号位，无需拖拽”。
+3. 主场景 HUD 增加一条短暂的状态提示（或在敌人卡片上显示“被拖拽”动画），避免只依赖日志。
+4. 补一条 EditMode 回归测试：守护挡刀时，伤害落在守护者、拖拽效果落在主目标（或按最终规则断言），并且不会把守护者错误拖走。
+
+### 验收标准
+
+- 对未受守护的合法目标使用拖拽射击：伤害与拖拽都生效，目标移动到 1 号位。
+- 对受守护的目标使用拖拽射击：伤害转移给守护者，拖拽按明确规则执行，并且界面/日志能说明结果。
+- 概率未触发、目标免疫拖拽、目标已在 1 号位三种情况都有可读反馈。
+- 拖拽后不会出现两个单位占用同一站位，也不会把无关单位拖到 1 号位。
+
+---
+
 ## 附录 A：验证方式
 
 - 编译：`dotnet build Ruin.Core.csproj`、`Ruin.Runtime.csproj`、`Ruin.Editor.csproj`、`Ruin.EditModeTests.csproj`、`Ruin.PlayModeTests.csproj`。
@@ -178,7 +257,11 @@ public void SelectSkill(int index)
 | `Assets/StageOne/Core/BattleEngine.cs:182-187` | 行动者被选中时的失衡跳过 |
 | `Assets/StageOne/Core/BattleEngine.cs:223-226` | `NeedsTarget` 只认 `SkillTargeting.Choose` |
 | `Assets/StageOne/Core/BattleEngine.cs:520-527` | `ApplyOnHit` 施加失衡与免疫判定 |
+| `Assets/StageOne/Core/BattleEngine.cs:371-379` | 守护挡刀把伤害与命中效果一起转移到 `victim` |
+| `Assets/StageOne/Core/BattleEngine.cs:540` | 拖拽判定与静默失败 |
+| `Assets/StageOne/Core/BattleEngine.cs:677-692` | `PullToFront` 的移动与提前返回 |
 | `Assets/StageOne/Core/Models.cs:206` | `ImbalanceImmuneRounds` 默认值 |
+| `Assets/StageOne/Resources/StageOne/Skills/g_grapple.asset` | 拖拽射击数值（75% 伤害 / 30% 拖拽） |
 | `Assets/StageOne/Runtime/StageOneApp.cs:586-594` | `SelectSkill` 只记录 `PendingSkill` |
 | `Assets/StageOne/Runtime/StageOneApp.cs:608-617` | `SelectActor` 是唯一的技能提交入口 |
 | `Assets/GothicHUD/Runtime/GothicBattleCard.cs:80-102` | 主场景卡片状态行，未显示失衡 |

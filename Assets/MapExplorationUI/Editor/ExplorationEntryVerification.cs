@@ -73,25 +73,25 @@ namespace GameMake.ExplorationEditor
                 var maps=UnityEngine.Object.FindObjectsOfType<ExplorationMapController>();
                 var hud=UnityEngine.Object.FindObjectOfType<GothicBattleHudController>();
                 Check(apps.Length==1 && maps.Length==1 && hud,"Missing or duplicate UI in "+path);
-                var app=apps[0]; var map=maps[0]; var nodes=hud.GetComponent<GothicNodeHudController>();
-                Check(map.Source==app && hud.BattleSource==app && nodes.Source==app && nodes.ExternalRouteUi,"Mismatched game state in "+path);
+                var app=apps[0]; var map=maps[0];
+                Check(map.Source==app && hud.BattleSource==app,"Mismatched game state in "+path);
                 if(app.Battle==null)
                 {
-                    Check(map.Page.activeInHierarchy && !nodes.PageRoot.activeSelf,"Old map is still visible in "+path);
+                    Check(map.Page.activeInHierarchy,"Map is not visible in "+path);
                     yield return .4f;
                     if(path==ExplorationSceneIntegration.MainScene)
                         ExplorationMapBuilder.Render(map.GetComponent<Canvas>(),Camera.main,"MainScene-NewMap",1920,1080);
                     map.Options[0].Hit.onClick.Invoke();
-                    Check(app.Room==RoomView.Buff && nodes.RoomRoot.activeInHierarchy && !map.Page.activeSelf,"Opening room handover failed");
-                    nodes.Options[0].Hit.onClick.Invoke(); nodes.ContinueButton.onClick.Invoke(); yield return .4f;
-                    Check(app.AwaitingNode && app.Room==RoomView.Map && map.Page.activeInHierarchy && !nodes.RouteRoot.activeInHierarchy,"Room did not return to new map");
+                    Check(app.Room==RoomView.Buff && !map.Page.activeSelf,"Opening room handover failed");
+                    app.ChooseBuff(app.Catalog.MapRules().OpeningBuffs[0]); app.LeaveRoom(); yield return .4f;
+                    Check(app.AwaitingNode && app.Room==RoomView.Map && map.Page.activeInHierarchy,"Room did not return to new map");
                     app.Map.Current.Candidates.Clear();
                     app.Map.Current.Candidates.Add(new NodeState{Floor=app.Map.Current.Floor,Index=app.Map.Current.Index,Type=NodeType.Battle});
                     app.Refresh(); map.Options[0].Hit.onClick.Invoke(); yield return .3f;
                 }
                 Check(app.Battle!=null && !map.Page.activeSelf && hud.ChromeRoots.All(r=>r.activeInHierarchy),"New battle page not active in "+path);
                 app.DebugWinBattle(); app.ContinueBattle(); yield return .4f;
-                Check(app.Battle==null && map.Page.activeInHierarchy && !nodes.PageRoot.activeSelf,"Battle returned to old map in "+path);
+                Check(app.Battle==null && map.Page.activeInHierarchy,"Battle did not return to the map in "+path);
                 Check(hud.ChromeRoots.All(r=>!r.activeSelf),"Battle UI overlaps returned map");
                 app.ToggleHelp(); Check(!map.Page.activeSelf,"Map blocks help");
                 app.ToggleHelp(); Check(map.Page.activeSelf,"Map did not reopen after help");

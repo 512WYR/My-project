@@ -19,7 +19,7 @@
 - `ExplorationMapController.OnCharacterSelected`：角色选中事件。
 - 现有规则最多九个层内位置，完整显示；若以后增加房间数，路线显示以当前位置为中心的九格窗口。
 
-新版地图已接入 `mainScene`、旧 `StageOne` 入口、独立地图场景和战斗预览场景。每个场景共用一个 StageOneApp：新版地图负责探索选择，GothicHUD 负责房间、战斗和结算；旧路线页由 `ExternalRouteUi` 关闭。战斗预览仍直接进入战斗，结束后返回新版地图。地图保持横向路线和“未探索”占位。
+新版地图已接入 `mainScene`、旧 `StageOne` 入口、独立地图场景和战斗预览场景。每个场景共用一个 StageOneApp：新版地图负责路线与房间选择，GothicHUD 负责战斗页，`IndustrialEventPage` 负责所有非战斗房间（增益、补给、事件、电梯、宝箱）与本局结束页。`GothicBattleHUD.prefab` 中的 `Node Pages - 节点页`（旧路线页、房间页与本局结束页）已整体移除，因此不再需要 `ExternalRouteUi`。战斗预览仍直接进入战斗，结束后返回新版地图。地图保持横向路线和“未探索”占位。
 
 `GameMake > Map Exploration > Apply To Game Entry Scenes` 可重新接入这些入口；它保留场景其他对象，补齐地图实例与引用，并将 `mainScene` 设为默认启动场景。地图／战斗场景重建器也会保留新版地图接入。
 

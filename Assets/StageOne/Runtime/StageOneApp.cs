@@ -26,7 +26,7 @@ namespace Ruin.Runtime
         public bool HelpOpen { get; private set; }
         public bool LabOpen { get; private set; }
         // The accessory manager is a modal that both UI systems share: StageOneView draws it above the
-        // external HUD, and GothicNodeHudController simply opens it.
+        // external HUD, and the external HUD only routes clicks into these commands.
         public bool AccessoryEditorOpen { get; private set; }
         public string AccessoryHeroId { get; private set; }
         // The consumable panel follows the same rule: StageOneView draws it above either UI system, and

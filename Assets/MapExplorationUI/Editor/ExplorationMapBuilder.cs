@@ -155,7 +155,6 @@ namespace GameMake.ExplorationEditor
             var legacy=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GothicHUD/Prefabs/GothicBattleHUD.prefab");
             var fallback=(GameObject)PrefabUtility.InstantiatePrefab(legacy); fallback.name="Existing Room and Battle Pages";
             var battle=fallback.GetComponent<GothicBattleHudController>(); if(battle) { battle.BattleSource=app; PrefabUtility.RecordPrefabInstancePropertyModifications(battle); }
-            var nodes=fallback.GetComponent<GothicNodeHudController>(); if(nodes) { nodes.Source=app; PrefabUtility.RecordPrefabInstancePropertyModifications(nodes); }
             var presentation=fallback.GetComponent<ModularHudController>();
             if(presentation) { presentation.BattleSource=app; presentation.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(presentation); }
             foreach(var oldCounter in fallback.GetComponentsInChildren<MechanicalRoundCounter>(true))

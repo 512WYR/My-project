@@ -157,8 +157,8 @@ namespace GameMake.GothicHUD
             foreach (var chrome in ChromeRoots) if (chrome) chrome.SetActive(live);
             bool quickItems = live && battle.Current != null && battle.Current.Player && !app.Busy;
             foreach (var button in QuickItems) if (button) button.interactable = quickItems;
-            // The sheet follows the button rather than the battle: the route and the rooms are drawn by
-            // GothicNodeHudController, so this is the only place 新开演练 stays reachable from there.
+            // The sheet follows the button rather than the battle, so 新开演练 stays reachable from the
+            // route and the rooms as well.
             if (DebugRoot) DebugRoot.SetActive(debugOpen);
             if (debugOpen) SyncDebug(app, battle);
             if (!live) return;

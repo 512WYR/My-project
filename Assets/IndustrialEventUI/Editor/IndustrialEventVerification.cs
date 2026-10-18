@@ -70,11 +70,10 @@ namespace GameMake.EventEditor
         static IEnumerator Tests()
         {
             var view=UnityEngine.Object.FindObjectOfType<IndustrialEventPage>(); var app=view.Source;
-            var old=UnityEngine.Object.FindObjectOfType<GothicNodeHudController>();
             var map=UnityEngine.Object.FindObjectOfType<ExplorationMapController>();
             Check(app && app.Run!=null && map.Page.activeSelf && !view.Page.activeSelf,"Main entry is not connected correctly");
             app.DebugForceEvent("EVT-003");
-            Check(view.Page.activeInHierarchy && !old.RoomRoot.activeInHierarchy && !map.Page.activeSelf,"New event did not replace old page");
+            Check(view.Page.activeInHierarchy && !map.Page.activeSelf,"New event did not replace old page");
             Check(!view.TextComplete && view.Choices.All(c=>!c.Hit.interactable) && !view.Continue.gameObject.activeSelf,"Actions visible before narrative finished");
             var node=app.ActiveNode; view.Choices[0].Hit.onClick.Invoke();
             Check(node.EventStep==0,"Early click changed event");
