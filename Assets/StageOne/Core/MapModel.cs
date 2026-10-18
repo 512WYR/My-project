@@ -70,6 +70,9 @@ namespace Ruin.Core
         public bool Finished;                      // The run ended, either by clearing the boss or by dying.
         public bool Cleared;                       // The boss was beaten.
         public int Supplies;                       // Run-wide supply stock, spent inside the supply room.
+        // Event ids in the order their rooms were entered. Duplicates are allowed once the pool is
+        // exhausted, so this is a history rather than a set. List<string> keeps JsonUtility happy.
+        public List<string> EventHistory = new List<string>();
         public GrowthBuff Buff;                    // Opening team buff, chosen once.
         public bool BuffChosen;
         public bool SupplyHealed;                  // This supply room already healed the team.

@@ -154,6 +154,9 @@ namespace Ruin.Core
             public NodeType Kind;
             public Gate Gate = Gate.Always;
             public int Weight = 1;
+            // Recovery is not offered until the party has fought at least once: a heal room in the
+            // first position of the route would hand out health before any battle could take it away.
+            public bool Healing;
         }
 
         // EVT-008 is the altar: the workshop serves whoever walks in, it does not happen to them.
@@ -163,8 +166,8 @@ namespace Ruin.Core
             new Script { Id = "EVT-002", Title = "失控的机器", Kind = NodeType.Event },
             new Script { Id = "EVT-003", Title = "铁门后的敲击声", Kind = NodeType.Event },
             new Script { Id = "EVT-004", Title = "破损的药剂箱", Kind = NodeType.Event },
-            new Script { Id = "EVT-005", Title = "应急医疗室", Kind = NodeType.Event },
-            new Script { Id = "EVT-006", Title = "安全角落休整", Kind = NodeType.Event },
+            new Script { Id = "EVT-005", Title = "应急医疗室", Kind = NodeType.Event, Healing = true },
+            new Script { Id = "EVT-006", Title = "安全角落休整", Kind = NodeType.Event, Healing = true },
             new Script { Id = "EVT-007", Title = "剧情事件", Kind = NodeType.Event },
             new Script { Id = "EVT-008", Title = "废弃义肢工坊", Kind = NodeType.Altar },
             new Script { Id = "EVT-H001", Title = "隐藏的岔道", Kind = NodeType.Event, Gate = Gate.High },
@@ -186,11 +189,21 @@ namespace Ruin.Core
             return true;
         }
 
+        // A script is eligible when its sanity gate matches and, for the two recovery rooms, the
+        // party has already fought once. Battles is incremented by BattleEngine's constructor, so
+        // this includes event-triggered fights.
+        private static bool Eligible(Script script, RunState run)
+        {
+            if (!Allows(script.Gate, run)) return false;
+            if (script.Healing && (run == null || run.Battles < 1)) return false;
+            return true;
+        }
+
         public static List<string> Pool(NodeType kind, RunState run)
         {
             var ids = new List<string>();
             for (int i = 0; i < Catalog.Length; i++)
-                if (Catalog[i].Kind == kind && Allows(Catalog[i].Gate, run)) ids.Add(Catalog[i].Id);
+                if (Catalog[i].Kind == kind && Eligible(Catalog[i], run)) ids.Add(Catalog[i].Id);
             return ids;
         }
 
@@ -206,6 +219,12 @@ namespace Ruin.Core
         public static void Roll(NodeState node, RunState run, MapRules rules, string forceId)
         {
             if (node == null || run == null) return;
+
+            var forced = Find(forceId);
+            // Re-entering a room that already holds a script must not re-roll it, pay EVT-001's entry
+            // haul twice, or add a second history entry. A valid forceId is still allowed to replace it.
+            if (forced == null && !string.IsNullOrEmpty(node.EventId)) return;
+
             node.OptionChosen = -1;
             node.EventId = null;
             node.EventStep = 0;
@@ -215,13 +234,19 @@ namespace Ruin.Core
             node.EventFlag = 0;
             node.EventJump = false;
 
-            var forced = Find(forceId);
-            if (forced != null) node.EventId = forced.Id;
+            if (forced != null)
+            {
+                // The acceptance tool bypasses both the sanity gate and the first-battle rule, and it
+                // stays out of the history so a forced room cannot make the next normal room skip.
+                node.EventId = forced.Id;
+            }
             else
             {
                 var pool = Pool(node.Type, run);
                 if (pool.Count == 0) return;
-                node.EventId = pool[Pick(pool, run.Random)];
+                node.EventId = Select(pool, run);
+                if (run.Map.EventHistory == null) run.Map.EventHistory = new List<string>();
+                run.Map.EventHistory.Add(node.EventId);
             }
 
             if (node.EventId == "EVT-001")
@@ -690,6 +715,34 @@ namespace Ruin.Core
             if (pool.Count <= 1) return 0;
             int index = (int)(random.NextUnit() * pool.Count);
             return index >= pool.Count ? pool.Count - 1 : index;
+        }
+
+        // Prefers content the run has not shown yet. Once every eligible script has appeared, the one
+        // whose last appearance is furthest back is picked, so repeats are spread as widely as possible.
+        private static string Select(List<string> pool, RunState run)
+        {
+            var history = run.Map.EventHistory;
+            var unseen = new List<string>();
+            for (int i = 0; i < pool.Count; i++)
+                if (LastSeen(history, pool[i]) < 0) unseen.Add(pool[i]);
+            if (unseen.Count > 0) return unseen[Pick(unseen, run.Random)];
+
+            string oldest = pool[0];
+            int oldestAt = LastSeen(history, oldest);
+            for (int i = 1; i < pool.Count; i++)
+            {
+                int at = LastSeen(history, pool[i]);
+                if (at < oldestAt) { oldest = pool[i]; oldestAt = at; }
+            }
+            return oldest;
+        }
+
+        private static int LastSeen(IList<string> history, string id)
+        {
+            if (history == null || string.IsNullOrEmpty(id)) return -1;
+            for (int i = history.Count - 1; i >= 0; i--)
+                if (history[i] == id) return i;
+            return -1;
         }
     }
 }
