@@ -158,16 +158,123 @@ namespace Ruin.Tests
 
         [Test] public void TheSanityGatesKeepTheTwoSpecialEventsInTheirOwnHalf()
         {
-            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, Run(80)).Count, "高理智的事件池含 EVT-H001");
-            Assert.That(EventScripts.Pool(NodeType.Event, Run(80)), Does.Contain("EVT-H001"));
-            Assert.That(EventScripts.Pool(NodeType.Event, Run(80)), Does.Not.Contain("EVT-L001"));
+            var high = Run(80);
+            high.Battles = 1;
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, high).Count, "高理智的事件池含 EVT-H001");
+            Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Contain("EVT-H001"));
+            Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Not.Contain("EVT-L001"));
 
-            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, Run(20)).Count, "低理智的事件池含 EVT-L001");
-            Assert.That(EventScripts.Pool(NodeType.Event, Run(20)), Does.Contain("EVT-L001"));
-            Assert.That(EventScripts.Pool(NodeType.Event, Run(20)), Does.Not.Contain("EVT-H001"));
+            var low = Run(20);
+            low.Battles = 1;
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, low).Count, "低理智的事件池含 EVT-L001");
+            Assert.That(EventScripts.Pool(NodeType.Event, low), Does.Contain("EVT-L001"));
+            Assert.That(EventScripts.Pool(NodeType.Event, low), Does.Not.Contain("EVT-H001"));
 
             Assert.AreEqual(1, EventScripts.Pool(NodeType.Altar, Run(50)).Count);
             Assert.AreEqual(0, EventScripts.Pool(NodeType.Battle, Run(50)).Count, "战斗房间没有内容池");
+        }
+
+        [Test] public void HealingEventsStayOutOfThePoolUntilTheFirstBattle()
+        {
+            var high = Run(80);
+            var low = Run(20);
+            Assert.AreEqual(6, EventScripts.Pool(NodeType.Event, high).Count, "首战前去掉两条回血事件");
+            Assert.AreEqual(6, EventScripts.Pool(NodeType.Event, low).Count);
+            Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Not.Contain("EVT-005"));
+            Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Not.Contain("EVT-006"));
+
+            high.Battles = 1;
+            low.Battles = 1;
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, high).Count, "首战后恢复完整事件池");
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, low).Count);
+            Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Contain("EVT-005"));
+            Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Contain("EVT-006"));
+        }
+
+        [Test] public void NoHealingEventCanBeRolledBeforeTheFirstBattle()
+        {
+            var run = Run(50);
+            for (int i = 0; i < 20; i++)
+            {
+                var node = new NodeState { Type = NodeType.Event };
+                EventScripts.Roll(node, run, Rules());
+                Assert.That(node.EventId, Is.Not.EqualTo("EVT-005"), "第 " + (i + 1) + " 个事件房不应回血");
+                Assert.That(node.EventId, Is.Not.EqualTo("EVT-006"), "第 " + (i + 1) + " 个事件房不应回血");
+            }
+            Assert.AreEqual(20, run.Map.EventHistory.Count, "每次正常抽取都记入历史，重复也继续追加");
+        }
+
+        [Test] public void ForcedEventsBypassTheFirstBattleRuleAndStayOutOfHistory()
+        {
+            var run = Run(50);
+            var node = new NodeState { Type = NodeType.Event };
+            EventScripts.Roll(node, run, Rules(), "EVT-005");
+
+            Assert.AreEqual("EVT-005", node.EventId, "F3 事件验收仍然可以直接进入回血事件");
+            Assert.AreEqual(0, run.Map.EventHistory.Count, "强制事件不写入同局事件历史");
+        }
+
+        [Test] public void TheFirstEightEventRoomsAreAllDifferent()
+        {
+            var run = Run(50);
+            run.Battles = 1;
+            var ids = new List<string>();
+            for (int i = 0; i < 8; i++)
+            {
+                var node = new NodeState { Type = NodeType.Event };
+                EventScripts.Roll(node, run, Rules());
+                ids.Add(node.EventId);
+            }
+
+            Assert.AreEqual(8, ids.Distinct().Count(), "八次抽取应覆盖八条不同内容");
+            Assert.That(ids, Is.EquivalentTo(EventScripts.Pool(NodeType.Event, run)), "覆盖当前可抽取池");
+            Assert.AreEqual(8, run.Map.EventHistory.Count);
+        }
+
+        [Test] public void AnExhaustedPoolRepeatsTheLongestUnseenEventFirst()
+        {
+            var run = Run(50);
+            run.Battles = 1;
+            var order = new List<string>();
+            for (int i = 0; i < 8; i++)
+            {
+                var node = new NodeState { Type = NodeType.Event };
+                EventScripts.Roll(node, run, Rules());
+                order.Add(node.EventId);
+            }
+
+            string ninth = RollEvent(run);
+            string tenth = RollEvent(run);
+            Assert.AreEqual(order[0], ninth, "池耗尽后先重复最久未见的一条");
+            Assert.AreEqual(order[1], tenth, "随后轮到第二条最久未见的");
+            Assert.AreEqual(9, run.Map.EventHistory.Count);
+            Assert.AreEqual(order[0], run.Map.EventHistory[8], "重复项继续追加到历史末尾");
+        }
+
+        [Test] public void RollingTheSameNodeTwiceDoesNotRerollOrPayAgain()
+        {
+            var run = Run(50);
+            var node = new NodeState { Type = NodeType.Event };
+            EventScripts.Roll(node, run, Rules());
+
+            string id = node.EventId;
+            int history = run.Map.EventHistory.Count;
+            uint state = run.Random.State;
+            int supplies = run.Map.Supplies;
+
+            EventScripts.Roll(node, run, Rules());
+
+            Assert.AreEqual(id, node.EventId, "已有内容的节点不重抽");
+            Assert.AreEqual(history, run.Map.EventHistory.Count, "不重复写历史");
+            Assert.AreEqual(state, run.Random.State, "不消耗随机数");
+            Assert.AreEqual(supplies, run.Map.Supplies, "EVT-001 的进房补给不重复发放");
+        }
+
+        private string RollEvent(RunState run)
+        {
+            var node = new NodeState { Type = NodeType.Event };
+            EventScripts.Roll(node, run, Rules());
+            return node.EventId;
         }
 
         [Test] public void RollingPinsTheEventAndTheStepDrawsNothingAfterwards()

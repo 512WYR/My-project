@@ -11,6 +11,7 @@ namespace Ruin.Runtime
     public enum RoomView { Map, Buff, Supply, Event, Elevator, Treasure }
 
     public sealed partial class StageOneApp : MonoBehaviour
+    public sealed partial class StageOneApp : MonoBehaviour
     {
         public GameCatalog Catalog;
         public RunState Run { get; private set; }
@@ -26,7 +27,7 @@ namespace Ruin.Runtime
         public bool HelpOpen { get; private set; }
         public bool LabOpen { get; private set; }
         // The accessory manager is a modal that both UI systems share: StageOneView draws it above the
-        // external HUD, and GothicNodeHudController simply opens it.
+        // external HUD, and the external HUD only routes clicks into these commands.
         public bool AccessoryEditorOpen { get; private set; }
         public string AccessoryHeroId { get; private set; }
         // The consumable panel follows the same rule: StageOneView draws it above either UI system, and
@@ -84,6 +85,13 @@ namespace Ruin.Runtime
 #endif
         }
 
+        // The authored debug console is outside this assembly's UI, so it publishes the two facts the
+        // game loop needs: whether it currently owns the screen, and whether it already consumed Esc in
+        // this frame. Without the second flag the app would also cancel a pending target whenever the
+        // console closes, depending on which Update ran first.
+        public static bool DebugOverlayOpen;
+        public static int DebugOverlayEscapeFrame = -1;
+
         private void Update()
         {
             if (CharacterPanelOpen)
@@ -108,7 +116,7 @@ namespace Ruin.Runtime
             }
         }
 
-        public void NewRun(double? preset = null)
+        public void NewRun(double? preset = null, uint? seed = null)
         {
             CharacterPanelOpen = false; CharacterHeroId = null;
             StopAllCoroutines(); Busy = false; ClearPending(); HelpOpen = false; LabOpen = false;
@@ -118,7 +126,7 @@ namespace Ruin.Runtime
             RunEndNote = null;
             // The limb rules travel with the rest of the combat rules, so the catalog's part ratios and
             // penalties seed every hero's limb table.
-            Run = RunState.Create(Catalog.Heroes.Select(a => a.ToSpec()).ToArray(), DefaultSeed, preset, Catalog.Rules());
+            Run = RunState.Create(Catalog.Heroes.Select(a => a.ToSpec()).ToArray(), seed ?? DefaultSeed, preset, Catalog.Rules());
             // The seed preset only writes each hero's own sanity. The shared player sanity is a different
             // field, and it is what the map odds and every event's high/low gate read, so the debug
             // presets have to move it too — otherwise "sanity 15" still reads 50 and every event quietly
@@ -598,7 +606,16 @@ namespace Ruin.Runtime
             if (Busy || HelpOpen || LabOpen || ConsumableEditorOpen || AwaitingNode || Battle == null) return;
             string reason = Battle.SkillDisabledReason(index);
             if (reason != null) { Hint = reason; Refresh(); return; }
-            PendingSwap = false; PendingSkill = index;
+            PendingSwap = false;
+            // Group and self skills have no target to click. Targets() is empty for them by design, so
+            // leaving them in PendingSkill would strand the skill with no submit path. Cast immediately,
+            // exactly like Battle Lab does with target = null.
+            if (!Battle.Targets(index).Any())
+            {
+                Submit(new ActionRequest(ActionKind.Skill, null, index));
+                return;
+            }
+            PendingSkill = index;
             Hint = "点击高亮目标以执行「" + Battle.SkillFor(Battle.Current, index).Name + "」。Esc取消选择。";
             Refresh();
         }
@@ -653,7 +670,7 @@ namespace Ruin.Runtime
             }
             Busy = false;
             if (Battle.Current != null && Battle.Current.Player) InspectedId = Battle.Current.Id;
-            Hint = "选择技能，再点击高亮目标。F1查看说明，I使用道具，F3打开验收工具。";
+            Hint = "选择技能，再点击高亮目标。Esc 取消目标；右上角「调试台」提供验收命令与后台信息。";
             Refresh();
         }
 
@@ -689,7 +706,10 @@ namespace Ruin.Runtime
         public event Action Changed;
         public void Refresh() { if (View) View.Render(); Changed?.Invoke(); }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // ---- acceptance commands ----
+        // Reached only from the authored debug console (Assets/IndustrialDebugUI). The commands stay
+        // compiled in every build because that console is a scene object rather than generated code;
+        // the console itself hides outside the editor and development builds.
         public void DebugSetSanity(double value)
         {
             if (Battle == null) return;
@@ -702,15 +722,6 @@ namespace Ruin.Runtime
             Battle.ChangeSanity(actor, value - actor.Sanity, "验收工具调整");
             Hint = "已改变实际理智；本回合形态固定，下回合才重新抽取。";
             Refresh();
-        }
-
-        public void DebugMental(MentalState mental)
-        {
-            if (Battle == null) return;
-            var actor = Battle.Find(InspectedId);
-            if (actor == null || !actor.Player || actor.Dead) actor = Run.Heroes.FirstOrDefault(a => !a.Dead);
-            if (actor == null) return;
-            actor.Mental = mental; Refresh();
         }
 
         public void DebugSettle()
@@ -755,7 +766,7 @@ namespace Ruin.Runtime
         {
             if (Battle == null) return;
             foreach (var hero in Run.Heroes.Where(a => !a.Dead)) hero.Hp = hero.Definition.MaxHp;
-            Hint = "验收工具已整备全队生命；部位、个人理智、精神状态和死亡记录沿用。";
+            Hint = "验收工具已整备全队生命；部位、个人理智和死亡记录沿用。";
             Refresh();
         }
 
@@ -926,6 +937,5 @@ namespace Ruin.Runtime
             step.Candidates.Add(new NodeState { Floor = step.Floor, Index = step.Index, Type = type, OptionIndex = 0 });
             SelectNode(0);
         }
-#endif
     }
 }

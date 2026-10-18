@@ -17,6 +17,10 @@ namespace Ruin.Core
         private readonly Dictionary<string, double> startSanity = new Dictionary<string, double>();
         private readonly List<ActorState> roster = new List<ActorState>();
         private readonly Queue<ActorState> turns = new Queue<ActorState>();
+        // Ranks vacated by enemies that died since the last action resolved. The survivors behind each
+        // one step forward when the action is over, so the formation never leaves the dead unit's slot
+        // as a hole and a later summon cannot share a rank with a corpse.
+        private readonly List<int> deathRanks = new List<int>();
 
         public BattleEngine(RunState run, ActorSpec[] enemies, CombatRules rules)
         {
@@ -38,7 +42,7 @@ namespace Ruin.Core
                 });
             }
             Run.Battles++;
-            Log("第 " + Run.Battles + " 场演练开始。队员理智与持续精神状态沿用。", "system");
+            Log("第 " + Run.Battles + " 场演练开始。队员理智沿用。", "system");
             if (roster.Count == 0) { Finish(BattleOutcome.Defeat); return; }
             if (Enemies.Count == 0) { Finish(BattleOutcome.Victory); return; }
             ApplyBattleStartAccessories();
@@ -50,7 +54,7 @@ namespace Ruin.Core
             actor.Form = SkillForm.Basic; actor.Defending = false; actor.ProtectorId = null;
             actor.Interrupted = 0; actor.BleedDamage = 0; actor.BleedTurns = 0;
             actor.BlockCharges = 0; actor.Counter = false; actor.Followup = false; actor.FollowupAttack = 0;
-            actor.Imbalance = 0; actor.ImbalanceImmuneRound = -1;
+            actor.Imbalance = 0; actor.ImbalanceImmuneRound = -1; actor.ImbalanceAutoHitUntilRound = -1;
             actor.DefenseBuff = 0; actor.AccuracyBuff = 0; actor.SelfVulnerable = 0;
             actor.GuardReduction = 0; actor.EnemyActionCount = 0;
             actor.Operations = 0; actor.BlastRound = 0; actor.NextSpawnRound = 0;
@@ -103,7 +107,6 @@ namespace Ruin.Core
 
         public double[] FormProbabilities(ActorState actor)
         {
-            var mental = Rules.Mental(actor.Mental);
             // A hero the medicine chest rewired (EVT-004) never falls back on the plain kit, so the basic
             // row is pinned to zero instead of being offered. Dropping the row would change the shape the
             // inspector and the tests read, and zeroing the weight while keeping the 30/70 gates would make
@@ -113,20 +116,21 @@ namespace Ruin.Core
             if (actor != null && actor.SanitySkillsOnly)
             {
                 var split = SanityProbability.Distribution(actor.Sanity, new[] {
-                    new WeightedOutcome(Rules.TechnicalWeight * mental.TechnicalMultiplier, 1),
-                    new WeightedOutcome(Rules.PrimalWeight * mental.PrimalMultiplier, -1)
+                    new WeightedOutcome(Rules.TechnicalWeight, 1),
+                    new WeightedOutcome(Rules.PrimalWeight, -1)
                 }, Rules.ProbabilityStrength);
                 return new[] { split[0], 0.0, split[1] };
             }
             return SanityProbability.Distribution(actor.Sanity, new[] {
-                new WeightedOutcome(Rules.TechnicalWeight * mental.TechnicalMultiplier, 1, SanityGate.High),
+                new WeightedOutcome(Rules.TechnicalWeight, 1, SanityGate.High),
                 new WeightedOutcome(Rules.BasicWeight, 0),
-                new WeightedOutcome(Rules.PrimalWeight * mental.PrimalMultiplier, -1, SanityGate.Low)
+                new WeightedOutcome(Rules.PrimalWeight, -1, SanityGate.Low)
             }, Rules.ProbabilityStrength);
         }
 
         private void Advance()
         {
+            ResolveEnemyRanksAfterDeaths();
             Current = null;
             while (Outcome == BattleOutcome.Active)
             {
@@ -171,6 +175,9 @@ namespace Ruin.Core
                     Damage(next, next.BleedDamage, null, true);
                     Log(next.Name + " 流血，剩余 " + next.BleedTurns + " 次。", "bleed", null, next.Id);
                     if (CheckEnd()) return;
+                    // Bleed can kill an enemy inside Advance, outside any Execute call. Close that gap
+                    // before the turn queue picks the next actor.
+                    ResolveEnemyRanksAfterDeaths();
                     if (next.Dead) continue;
                 }
                 if (next.Interrupted > 0)
@@ -182,7 +189,7 @@ namespace Ruin.Core
                 if (next.Imbalance > 0)
                 {
                     next.Imbalance--;
-                    Log(next.Name + " 陷入失衡，本回合无法行动。", "control", null, next.Id);
+                    Log(next.Name + " 因失衡跳过行动。", "control", null, next.Id);
                     continue;
                 }
                 Current = next;
@@ -348,8 +355,9 @@ namespace Ruin.Core
             var main = primary ?? set.FirstOrDefault();
             if (main == null) return false;
 
-            // A displaced enemy that is imbalanced this round cannot dodge the displacement.
-            bool autoHit = skill.PullToFront && main.Imbalance > 0 && main.ImbalanceImmuneRound != Round;
+            // A displaced enemy in the imbalance window cannot dodge the displacement. The window is
+            // independent of the skipped action, so it survives the enemy's consumed turn.
+            bool autoHit = skill.PullToFront && main.ImbalanceAutoHitUntilRound >= Round;
             if (!autoHit)
             {
                 if (!Roll(EffectiveAccuracy(actor, skill)))
@@ -377,6 +385,9 @@ namespace Ruin.Core
                 Damage(victim, amount, actor.Id);
                 dealt += amount;
                 if (!victim.Dead) ApplyOnHit(actor, victim, skill, target == main);
+                // A guard only intercepts damage. Position effects still belong to the target the player
+                // selected, otherwise the tank at rank one is "pulled" to rank one and nothing happens.
+                if (target == main && skill.PullToFront && !target.Dead) TryPull(actor, target, skill);
             }
             ApplyRider(actor, primary, skill, dealt);
             TryFollowups(actor, main, false);
@@ -519,11 +530,22 @@ namespace Ruin.Core
 
         private void ApplyOnHit(ActorState actor, ActorState target, SkillSpec skill, bool isMain)
         {
-            if (isMain && skill.Imbalance && target.ImbalanceImmuneRound != Round)
+            if (isMain && skill.Imbalance)
             {
-                target.Imbalance = 1;
-                target.ImbalanceImmuneRound = Round + Rules.ImbalanceImmuneRounds;
-                Log(target.Name + " 失衡，本回合无法行动。", "control", actor.Id, target.Id);
+                if (target.ImbalanceImmuneRound != Round)
+                {
+                    target.Imbalance = 1;
+                    target.ImbalanceImmuneRound = Round + Rules.ImbalanceImmuneRounds;
+                    target.ImbalanceAutoHitUntilRound = Rules.ImbalanceAutoHitRounds > 0
+                        ? Round + Rules.ImbalanceAutoHitRounds - 1 : -1;
+                    Log(target.Name + " 失衡：下一次行动将被跳过；位移必中 " + Rules.ImbalanceAutoHitRounds + " 回合。",
+                        "control", actor.Id, target.Id);
+                }
+                else
+                {
+                    // The immunity is intentional, but silently refusing a second bash reads like a bug.
+                    Log(target.Name + " 处于失衡免疫，本次失衡未生效。", "control", actor.Id, target.Id);
+                }
             }
             if (skill.Bleed > 0 && (skill.BleedChance <= 0 || Roll(skill.BleedChance)))
             {
@@ -537,7 +559,20 @@ namespace Ruin.Core
                 target.Interrupted = Math.Max(1, target.Interrupted);
                 Log(target.Name + " 下一次行动被打断。", "control", actor.Id, target.Id);
             }
-            if (skill.PullToFront && !target.Player && Roll(skill.PullChance)) PullToFront(target);
+        }
+
+        // The pull roll lives outside ApplyOnHit so a guarded hit cannot move the guard instead of the
+        // selected target, and so a failed roll leaves a readable log line.
+        private void TryPull(ActorState actor, ActorState target, SkillSpec skill)
+        {
+            if (target == null || target.Dead || target.Player) return;
+            if (!Roll(skill.PullChance))
+            {
+                Log(actor.Name + " · " + skill.Name + " 的拖拽未生效（"
+                    + Math.Round(skill.PullChance * 100) + "% 概率未触发）。", "move", actor.Id, target.Id);
+                return;
+            }
+            PullToFront(target);
         }
 
         private void ApplySupport(ActorState actor, ActorState target, SkillSpec skill)
@@ -593,7 +628,7 @@ namespace Ruin.Core
             if (rider.Kind == RiderKind.SanityRestore)
             {
                 var chosen = rider.Area == RiderArea.Chosen ? primary : actor;
-                if (chosen != null && !chosen.Dead) { ChangeSanity(chosen, rider.Amount, skill.Name); TryMentalState(chosen); }
+                if (chosen != null && !chosen.Dead) ChangeSanity(chosen, rider.Amount, skill.Name);
                 return;
             }
             var targets = new List<ActorState> { actor };
@@ -682,7 +717,11 @@ namespace Ruin.Core
                 return;
             }
             int from = enemy.Rank;
-            if (from <= 0) return;
+            if (from <= 0)
+            {
+                Log(enemy.Name + " 已经在 1 号位，无需拖拽。", "move", null, enemy.Id);
+                return;
+            }
             // Wide and immobile units do not step aside, so a pull either finds room or fails.
             int shift = enemy.Width;
             foreach (var other in Enemies.Where(e => e != enemy && !e.Dead && e.Rank < from && !e.Definition.Immobile).ToArray())
@@ -698,7 +737,6 @@ namespace Ruin.Core
             if (actor == null || skill == null) return 0;
             double value = SanityProbability.Clamp(actor.Definition.Accuracy * LimbSystem.AccuracyFactor(actor, Rules.Limbs)
                 + (skill.Accuracy - Rules.SkillAccuracyBaseline)
-                + Rules.Mental(actor.Mental).AccuracyModifier
                 + actor.AccuracyBuff, 0, 1);
             // 穿肠弹 raises accuracy to a floor, not to a fixed value.
             return Math.Max(value, AccessorySystem.AccuracyFloor(actor));
@@ -758,6 +796,12 @@ namespace Ruin.Core
         public string Intent(ActorState enemy)
         {
             if (enemy.Dead) return "已被击败";
+            // Imbalance has to be visible on the enemy card; otherwise a skipped turn looks like the
+            // skill did nothing at all. The displacement window can outlive the skipped action, so it is
+            // shown separately as well.
+            if (enemy.Imbalance > 0)
+                return enemy.ImbalanceAutoHitUntilRound >= Round ? "失衡：下次行动跳过 · 位移必中" : "失衡：下次行动跳过";
+            if (enemy.ImbalanceAutoHitUntilRound >= Round) return "失衡余波：位移必中";
             if (enemy.Interrupted > 0) return "下一次行动被打断";
             bool noSkills = enemy.Definition.BasicSkills == null || enemy.Definition.BasicSkills.Length == 0;
             return noSkills && enemy.Definition.Behavior == EnemyBehavior.Simple
@@ -930,7 +974,7 @@ namespace Ruin.Core
                 if (guarded) amount = ReduceForGuard(amount, target);
                 Damage(target, amount, enemy.Id);
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Whisperer)
-                { ChangeSanity(target, -14, "受到低语侵蚀"); TryMentalState(target); }
+                { ChangeSanity(target, -14, "受到低语侵蚀"); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
                 { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id); }
                 if (!target.Dead) TryLimbDamage(enemy, target);
@@ -1165,13 +1209,12 @@ namespace Ruin.Core
             if (pool.Length == 0) { Wait(enemy); return; }
             var target = DrawRandom(pool);
             Log(enemy.Name + " · " + skill.Name + " → " + target.Name, "action", enemy.Id, target.Id);
-            if (skill.SanityDamage > 0) { ChangeSanity(target, -skill.SanityDamage, skill.Name); TryMentalState(target); }
+            if (skill.SanityDamage > 0) ChangeSanity(target, -skill.SanityDamage, skill.Name);
             if (skill.SanityAdjacent > 0)
             {
                 foreach (var neighbour in Run.Heroes.Where(a => !a.Dead && a != target && Math.Abs(a.Rank - target.Rank) == 1).OrderBy(a => a.Rank).ToArray())
                 {
                     ChangeSanity(neighbour, -skill.SanityAdjacent, skill.Name + "波及");
-                    TryMentalState(neighbour);
                 }
             }
             enemy.EnemyActionCount++;
@@ -1407,6 +1450,36 @@ namespace Ruin.Core
             };
         }
 
+        // Survivors behind a fallen enemy take one step toward the front. Processing front-to-back
+        // keeps two survivors from claiming the same destination, and immobile or multi-rank units
+        // keep their ground so the giant boss and the steam machine are not dragged around by adds.
+        // Dead actors are deliberately not consulted for occupancy: they are corpses, not obstacles.
+        private void ResolveEnemyRanksAfterDeaths()
+        {
+            if (deathRanks.Count == 0) return;
+            // Process from the back so a survivor can fill every rank vacated in the same action.
+            // Front-to-back would move it into the first hole and then stop counting it as "behind".
+            foreach (int deathRank in deathRanks.OrderByDescending(r => r))
+            {
+                var behind = Enemies
+                    .Where(e => !e.Dead && e.Rank > deathRank)
+                    .OrderBy(e => e.Rank).ThenBy(e => e.Id, StringComparer.Ordinal)
+                    .ToArray();
+                foreach (var enemy in behind)
+                {
+                    if (enemy.Definition.Immobile || enemy.Width != 1) continue;
+                    int destination = enemy.Rank - 1;
+                    if (destination < 0) continue;
+                    bool blocked = Enemies.Any(e => e != enemy && !e.Dead
+                        && e.Rank < destination + enemy.Width && destination < e.Rank + e.Width);
+                    if (blocked) continue;
+                    enemy.Rank = destination;
+                    Log(enemy.Name + " 向前移动到 " + (destination + 1) + " 号位。", "move", enemy.Id);
+                }
+            }
+            deathRanks.Clear();
+        }
+
         private bool MoveEnemy(ActorState enemy, int delta)
         {
             int destination = enemy.Rank + delta;
@@ -1465,20 +1538,6 @@ namespace Ruin.Core
                 }
                 else Log(actor.Name + " 的理智归零，金丝苹果暂时没有夺走生命。", "sanity", actor.Id);
             }
-        }
-
-        private void TryMentalState(ActorState actor)
-        {
-            // A locked hero's mental state stays where it was, and no draw is spent on a roll that could
-            // not change anything.
-            if (actor == null || actor.SanityLocked) return;
-            int state = SanityProbability.Sample(SanityProbability.Distribution(actor.Sanity, new[] {
-                new WeightedOutcome(0.15, 1, SanityGate.High), new WeightedOutcome(0.7, 0), new WeightedOutcome(0.15, -1, SanityGate.Low)
-            }, Rules.ProbabilityStrength), Run.Random);
-            var mental = state == 0 ? MentalState.Composed : state == 2 ? MentalState.Agitated : actor.Mental;
-            if (mental == actor.Mental) return;
-            actor.Mental = mental;
-            Log(actor.Name + " 获得持续状态「" + Rules.Mental(mental).Name + "」。离开理智区间后仍保留。", "mental", actor.Id);
         }
 
         // A direct loss skips defence and the round-scoped vulnerability, but still goes through the
@@ -1588,6 +1647,10 @@ namespace Ruin.Core
         {
             if (actor == null || actor.Dead) return;
             actor.Dead = true;
+            // The rank is resolved after the current action finishes, not here: an area attack may
+            // still be iterating over its captured target list and moving the survivors mid-swing
+            // would make rank-dependent riders see a different formation.
+            if (!actor.Player) deathRanks.Add(actor.Rank);
             Log(actor.Name + (actor.Player ? " 死亡，本局无法恢复。" : " 被击败。"), "death", null, actor.Id);
             if (!actor.Player)
             {

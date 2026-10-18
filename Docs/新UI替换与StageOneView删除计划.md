@@ -3,6 +3,8 @@
 > 状态：规划文档，尚未实施。  
 > 目标入口场景：`Assets/Scenes/mainScene.unity`。  
 > 目标 UI：`Assets/GothicHUD/Prefabs/GothicBattleHUD.prefab` + 现有 Gothic HUD 控制器。
+>
+> 2026-10-18 更新：`Node Pages - 节点页` 已按需求整体删除，`GothicNodeHudController`、`GothicNodeOption`、`GothicRouteNode` 同步移除，生成器也不再创建它们。因此 A1「补齐节点/房间页」不再执行：增益房、补给站、电梯井、宝箱房与本局结束页统一由 `IndustrialEventPage` 按事件页结构显示，内容由 `Ruin.Runtime.RoomPages` 生成；补给站的部位修复与义肢安装是该页的二级菜单。
 
 ## 1. 背景
 
@@ -180,7 +182,6 @@ Modal Layer - 模态层
 | --- | --- |
 | `Preset15` / `Preset50` / `Preset85` | `app.NewRun(15 / 50 / 85)` |
 | `Set15` / `Set50` / `Set85` | `app.DebugSetSanity(...)` |
-| `SetComposed` / `SetAgitated` / `ClearMental` | `app.DebugMental(MentalState.Composed / Agitated / None)` |
 | `FeedbackExample` | `app.DebugFeedbackExample()` |
 | `DeathDoorExample` | `app.DebugDeathDoor()` |
 | `EndBattleDebug` | `app.DebugSettle()` |

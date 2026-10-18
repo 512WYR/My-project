@@ -15,7 +15,7 @@ MonoBehaviour:
   Spec:
     Id: g_shot
     Name: "\u6307\u5B9A\u5C04\u51FB"
-    Description: "\u653B\u51FB\u654C\u65B92\u30013\u30014\u53F7\u4F4D\uFF083/4\u53F7\u4F4D\u65BD\u653E\uFF09"
+    Description: "\u25CB\u25CB\u25CF\u25CF/\u25CB\u25CF\u25CF\u25CF\n\u9020\u6210\u653B\u51FB\u529B100%\u7684\u4F24\u5BB3\uFF0C\u9884\u8BA110\u70B9"
     Effect: 0
     Target: 0
     Multiplier: 1

@@ -8,8 +8,6 @@ namespace Ruin.Runtime
 {
     public sealed partial class BattleLabApp
     {
-        private static readonly int[] MentalValues = { 0, 1, 2 };
-        private static readonly string[] MentalLabels = { "平稳", "凝神", "躁动" };
         private static readonly int[] LimbValues = { 0, 1, 2 };
         private static readonly string[] LimbLabels = { "完好", "重伤", "断肢" };
         private static readonly int[] EffectValues = { 0, 1, 2, 3, 4 };
@@ -68,7 +66,6 @@ namespace Ruin.Runtime
         {
             DrawGlobalBasics();
             DrawCombatRules();
-            DrawMentalStates();
             DrawLimbRules();
         }
 
@@ -140,6 +137,7 @@ namespace Ruin.Runtime
                 GUILayout.Label("理智步长", GUILayout.Width(70)); rules.MindStep = BattleLabUi.IntField("cfg-rule-mindstep", rules.MindStep, GUILayout.Width(56));
                 GUILayout.Label("技能命中基准", GUILayout.Width(90)); rules.SkillAccuracyBaseline = BattleLabUi.DoubleField("cfg-rule-accbase", rules.SkillAccuracyBaseline, GUILayout.Width(56));
                 GUILayout.Label("失衡免疫回合", GUILayout.Width(90)); rules.ImbalanceImmuneRounds = BattleLabUi.IntField("cfg-rule-immune", rules.ImbalanceImmuneRounds, GUILayout.Width(56));
+                GUILayout.Label("失衡必中回合", GUILayout.Width(90)); rules.ImbalanceAutoHitRounds = BattleLabUi.IntField("cfg-rule-auto-hit", rules.ImbalanceAutoHitRounds, GUILayout.Width(56));
                 GUILayout.EndHorizontal();
 
                 BattleLabUi.SubTitle("追击与反击");
@@ -154,38 +152,6 @@ namespace Ruin.Runtime
                 GUILayout.Label("基础", GUILayout.Width(70)); rules.BasicWeight = BattleLabUi.DoubleField("cfg-rule-bw", rules.BasicWeight, GUILayout.Width(56));
                 GUILayout.Label("原始", GUILayout.Width(70)); rules.PrimalWeight = BattleLabUi.DoubleField("cfg-rule-pw", rules.PrimalWeight, GUILayout.Width(56));
                 GUILayout.EndHorizontal();
-                BattleLabUi.EndIndent();
-            }
-            BattleLabUi.EndCard();
-            GUILayout.Space(6);
-        }
-
-        private void DrawMentalStates()
-        {
-            var rules = Config.Rules;
-            if (rules == null) { Config.Rules = rules = new CombatRules(); }
-            BattleLabUi.BeginCard(BattleLabUi.NeutralTint);
-            BattleLabUi.BoxTitle("精神状态表");
-            BattleLabUi.Small("只读；导入时缺失会自动补回三档。");
-            bool open = Ui.GroupOpen("global-mental", false);
-            bool next = BattleLabUi.Foldout(open, "查看精神状态修正", rules.MentalStates == null ? "无" : rules.MentalStates.Length + " 档");
-            Ui.SetGroupOpen("global-mental", next);
-            if (next)
-            {
-                BattleLabUi.BeginIndent();
-                if (rules.MentalStates == null || rules.MentalStates.Length == 0)
-                    BattleLabUi.Small("没有精神状态数据。");
-                else
-                {
-                    foreach (var mental in rules.MentalStates)
-                    {
-                        if (mental == null) continue;
-                        GUILayout.Label(mental.State + " · " + mental.Name
-                            + "　技术×" + mental.TechnicalMultiplier.ToString("0.##")
-                            + "　原始×" + mental.PrimalMultiplier.ToString("0.##")
-                            + "　命中" + mental.AccuracyModifier.ToString("+0.##;-0.##;0"), BattleLabUi.Body);
-                    }
-                }
                 BattleLabUi.EndIndent();
             }
             BattleLabUi.EndCard();
@@ -299,7 +265,7 @@ namespace Ruin.Runtime
                 GUILayout.EndHorizontal();
 
                 DrawHeroStats(slot, i);
-                DrawHeroMental(slot, i);
+                DrawHeroSanity(slot, i);
                 DrawHeroLimbs(slot, i);
                 DrawHeroEquipment(slot, i);
                 DrawHeroSkills(slot, i);
@@ -330,17 +296,15 @@ namespace Ruin.Runtime
             BattleLabUi.EndIndent();
         }
 
-        private void DrawHeroMental(BattleLabHeroConfig slot, int i)
+        private void DrawHeroSanity(BattleLabHeroConfig slot, int i)
         {
-            bool open = Ui.GroupOpen("hero-mental-" + i, true);
-            bool next = BattleLabUi.Foldout(open, "理智与精神状态");
-            Ui.SetGroupOpen("hero-mental-" + i, next);
+            bool open = Ui.GroupOpen("hero-sanity-" + i, true);
+            bool next = BattleLabUi.Foldout(open, "理智");
+            Ui.SetGroupOpen("hero-sanity-" + i, next);
             if (!next) return;
             BattleLabUi.BeginIndent();
             GUILayout.BeginHorizontal();
             GUILayout.Label("理智", GUILayout.Width(34)); slot.Sanity = BattleLabUi.DoubleField("cfg-h-san-" + i, slot.Sanity, GUILayout.Width(56));
-            GUILayout.Label("精神", GUILayout.Width(34));
-            slot.Mental = (MentalState)BattleLabUi.ValueGrid((int)slot.Mental, MentalValues, MentalLabels, 3);
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
             BattleLabUi.Toggle("只走理智技能列表", ref slot.SanitySkillsOnly);

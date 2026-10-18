@@ -80,24 +80,25 @@ namespace Ruin.Tests
         {
             // 五项权重表的精确数值由复现工程 _ruincheck 生成，文档里的百分比是同一组数。
             var rules = Rules();
-            Assert.That(Share(rules, 15, NodeType.Battle), Is.EqualTo(0.266180).Within(0.0005));
-            Assert.That(Share(rules, 15, NodeType.EliteBattle), Is.EqualTo(0.229723).Within(0.0005));
-            Assert.That(Share(rules, 15, NodeType.Altar), Is.EqualTo(0.306297).Within(0.0005));
-            Assert.That(Share(rules, 15, NodeType.Event), Is.EqualTo(0.113298).Within(0.0005));
-            Assert.That(Share(rules, 15, NodeType.Treasure), Is.EqualTo(0.084502).Within(0.0005));
-            Assert.That(Share(rules, 50, NodeType.Battle), Is.EqualTo(0.315).Within(0.0005), "理智50时回到基础权重");
-            Assert.That(Share(rules, 50, NodeType.EliteBattle), Is.EqualTo(0.135).Within(0.0005));
-            Assert.That(Share(rules, 50, NodeType.Altar), Is.EqualTo(0.180).Within(0.0005));
-            Assert.That(Share(rules, 50, NodeType.Event), Is.EqualTo(0.270).Within(0.0005));
-            Assert.That(Share(rules, 50, NodeType.Treasure), Is.EqualTo(0.100).Within(0.0005));
-            Assert.That(Share(rules, 85, NodeType.Event), Is.EqualTo(0.487575).Within(0.0005));
-            Assert.That(Share(rules, 85, NodeType.EliteBattle), Is.EqualTo(0.060117).Within(0.0005));
-            // 宝箱房不带倾向，只随归一化浮动：理智15 是 8.45%，理智85 是 8.97%。
-            Assert.That(Share(rules, 85, NodeType.Treasure), Is.EqualTo(0.089675).Within(0.0005));
-            // 低理智的危险偏向必须收敛：精英加祭坛约 53.6%，不更高。
-            Assert.That(Share(rules, 15, NodeType.EliteBattle, NodeType.Altar), Is.EqualTo(0.536021).Within(0.002));
-            Assert.That(Share(rules, 50, NodeType.EliteBattle, NodeType.Altar), Is.EqualTo(0.315).Within(0.002));
-            Assert.That(Share(rules, 85, NodeType.EliteBattle, NodeType.Altar), Is.EqualTo(0.140274).Within(0.002));
+            Assert.That(Share(rules, 15, NodeType.Battle), Is.EqualTo(0.362766).Within(0.0005));
+            Assert.That(Share(rules, 15, NodeType.EliteBattle), Is.EqualTo(0.312991).Within(0.0005));
+            Assert.That(Share(rules, 15, NodeType.Altar), Is.EqualTo(0.084913).Within(0.0005));
+            Assert.That(Share(rules, 15, NodeType.Event), Is.EqualTo(0.154417).Within(0.0005));
+            Assert.That(Share(rules, 15, NodeType.Treasure), Is.EqualTo(0.084913).Within(0.0005));
+            Assert.That(Share(rules, 50, NodeType.Battle), Is.EqualTo(0.363138).Within(0.0005), "理智50时回到基础权重");
+            Assert.That(Share(rules, 50, NodeType.EliteBattle), Is.EqualTo(0.155586).Within(0.0005));
+            Assert.That(Share(rules, 50, NodeType.Altar), Is.EqualTo(0.085).Within(0.0005));
+            Assert.That(Share(rules, 50, NodeType.Event), Is.EqualTo(0.311276).Within(0.0005));
+            Assert.That(Share(rules, 50, NodeType.Treasure), Is.EqualTo(0.085).Within(0.0005));
+            Assert.That(Share(rules, 85, NodeType.Event), Is.EqualTo(0.506641).Within(0.0005));
+            Assert.That(Share(rules, 85, NodeType.EliteBattle), Is.EqualTo(0.062447).Within(0.0005));
+            Assert.That(Share(rules, 85, NodeType.Altar), Is.EqualTo(0.068702).Within(0.0005), "祭坛不带理智倾向");
+            // 宝箱房同样不带倾向，与祭坛同权重，只随归一化浮动：理智15 是 8.49%，理智85 是 6.87%。
+            Assert.That(Share(rules, 85, NodeType.Treasure), Is.EqualTo(0.068702).Within(0.0005));
+            // 低理智的危险偏向必须收敛：精英加祭坛约 39.8%，不更高。
+            Assert.That(Share(rules, 15, NodeType.EliteBattle, NodeType.Altar), Is.EqualTo(0.397904).Within(0.002));
+            Assert.That(Share(rules, 50, NodeType.EliteBattle, NodeType.Altar), Is.EqualTo(0.240586).Within(0.002));
+            Assert.That(Share(rules, 85, NodeType.EliteBattle, NodeType.Altar), Is.EqualTo(0.131149).Within(0.002));
         }
 
         [Test] public void OddsDoNotUseTheCharacterActivationGate()

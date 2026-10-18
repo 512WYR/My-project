@@ -56,12 +56,12 @@ namespace Ruin.Tests
             app.NewRun(85); yield return null;
             Assert.IsTrue(app.Run.Heroes.All(h => h.Sanity == 85));
             app.DebugForceRoom(NodeType.Battle); yield return null;
-            app.DebugMental(MentalState.Composed); app.DebugSetSanity(50);
+            app.DebugSetSanity(50);
             var selected = app.Battle.Find(app.InspectedId);
             app.DebugSettle(); yield return null;
             Assert.IsTrue(Object.FindObjectsOfType<Button>().Any(b => b.name == "ContinueBattle"));
             app.ContinueBattle(); yield return null;
-            Assert.AreEqual(50, selected.Sanity); Assert.AreEqual(MentalState.Composed, selected.Mental);
+            Assert.AreEqual(50, selected.Sanity);
             app.DebugFeedbackExample(); yield return null;
             Assert.AreEqual(47.5, app.Run.PlayerSanity);
             Assert.IsTrue(Object.FindObjectsOfType<Text>().Any(t => t.name == "PlayerResult" && t.text.Contains("47.5")));

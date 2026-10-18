@@ -143,10 +143,6 @@ MonoBehaviour:
     - {fileID: 11400000, guid: b06b1c39f4dbef34780a6bb989f047bd, type: 2}
     - {fileID: 0}
     - {fileID: 11400000, guid: 67a604d855b08714e8e528711d4bac02, type: 2}
-  MentalStates:
-  - {fileID: 11400000, guid: 6a8ca0b051aeb94499b44ea7d3a0d96a, type: 2}
-  - {fileID: 11400000, guid: f00c46188323d374784ee70d79d1b896, type: 2}
-  - {fileID: 11400000, guid: 473f3d443c6d1e74587a4c054f168cbf, type: 2}
   ProbabilityStrength: 1.5
   FeedbackFactor: 0.5
   DeathChance: 0.25
@@ -158,19 +154,19 @@ MonoBehaviour:
   MapBranchAffinity: 1.5
   MapNodeOdds:
   - Type: 0
-    Weight: 0.315
+    Weight: 0.363138
     Affinity: 0
   - Type: 1
-    Weight: 0.135
+    Weight: 0.155586
     Affinity: -1
   - Type: 5
-    Weight: 0.18
-    Affinity: -1
+    Weight: 0.085
+    Affinity: 0
   - Type: 2
-    Weight: 0.27
+    Weight: 0.311276
     Affinity: 1
   - Type: 8
-    Weight: 0.1
+    Weight: 0.085
     Affinity: 0
   MapBranchWeights:
   - 0.31

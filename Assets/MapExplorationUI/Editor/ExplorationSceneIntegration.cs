@@ -59,15 +59,12 @@ namespace GameMake.ExplorationEditor
             app.ExternalBattleUi=true; Save(app);
             view.Source=app; Save(view);
             hud.BattleSource=app; Save(hud);
-            var nodes=hud.GetComponent<GothicNodeHudController>();
-            nodes.Source=app; nodes.ExternalRouteUi=true; Save(nodes);
             var eventPrefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/IndustrialEventUI/Prefabs/IndustrialEventPage.prefab");
             if(eventPrefab)
             {
                 var eventView=scene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<GameMake.EventUI.IndustrialEventPage>(true)).SingleOrDefault();
                 if(!eventView) eventView=((GameObject)PrefabUtility.InstantiatePrefab(eventPrefab,scene)).GetComponent<GameMake.EventUI.IndustrialEventPage>();
                 eventView.Source=app; Save(eventView);
-                nodes.ExternalEventUi=true; Save(nodes);
             }
             var presentation=hud.GetComponent<ModularHudController>();
             var characterPrefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/CharacterPanelUI/Prefabs/CharacterPanel.prefab");

@@ -21,7 +21,6 @@ namespace Ruin.Editor
         {
             Directory.CreateDirectory(Data + "/Skills");
             Directory.CreateDirectory(Data + "/Characters");
-            Directory.CreateDirectory(Data + "/MentalStates");
             Directory.CreateDirectory(Data + "/Events");
             Directory.CreateDirectory("Assets/StageOne/Scenes");
             // Every folder above has to exist before this call: CreateAsset cannot write into a directory
@@ -35,14 +34,10 @@ namespace Ruin.Editor
             var whisperer = Enemy("whisperer", "低语者", "侵蚀最清醒者的心智", 24, 2, EnemyPattern.Whisperer);
             var hunter = Enemy("hunter", "追猎者", "追击虚弱者并造成流血", 24, 7, EnemyPattern.Hunter);
             var monsters = BuildMonsters();
-            var none = Asset<MentalDefinition>(Data + "/MentalStates/Neutral.asset", x => x.Spec = new MentalSpec { State = MentalState.None, Name = "平稳" });
-            var composed = Asset<MentalDefinition>(Data + "/MentalStates/Composed.asset", x => x.Spec = new MentalSpec { State = MentalState.Composed, Name = "凝神", TechnicalMultiplier = 1.25 });
-            var agitated = Asset<MentalDefinition>(Data + "/MentalStates/Agitated.asset", x => x.Spec = new MentalSpec { State = MentalState.Agitated, Name = "躁动", PrimalMultiplier = 1.25, AccuracyModifier = -0.05 });
             var catalog = Asset<GameCatalog>(Data + "/GameCatalog.asset", x => {
                 // Rank follows array order: front to back, so the shield stands at position 1.
                 x.Heroes = new[] { shield, warrior, medic, gunner };
                 x.Enemies = new[] { cleaver, whisperer, hunter };
-                x.MentalStates = new[] { none, composed, agitated };
             });
             Migrate(catalog);
             EnsureEnemyContent(catalog, monsters);
@@ -79,17 +74,17 @@ namespace Ruin.Editor
         private static CharacterDefinition Warrior()
         {
             // 战士 · 位置 2 / 3 / 4 都能站，前排技能要求 1/2/3。
-            var cleave = Skill("w_cleave", "斩劈", "向前移动一位并攻击敌方1、2号位", 7, 3, s => { s.Multiplier = 1.0; s.SelfMove = -1; });
-            var bash = Skill("w_bash", "猛击", "较低伤害 · 命中后造成失衡", 3, 7, s => { s.Multiplier = 0.7; s.Imbalance = true; });
-            var sweep = Skill("w_sweep", "扩散斩击", "攻击主目标，并波及左右相邻敌人", 6, 7, s => { s.Multiplier = 0.8; s.Area = SkillArea.Adjacent; s.AreaRatio = 0.5; });
-            var gambit = Skill("w_gambit", "带伤强攻", "忽略肢体减益 · 每场仅1次", 7, 7, s => {
+            var cleave = Skill("w_cleave", "斩劈", "●●●○/●●○○\n前移1位，造成攻击力100%的伤害，预计10点", 7, 3, s => { s.Multiplier = 1.0; s.SelfMove = -1; });
+            var bash = Skill("w_bash", "猛击", "●●○○/●●●○\n造成攻击力70%的伤害，预计7点；命中后失衡：跳过下一次行动，位移必中2回合", 3, 7, s => { s.Multiplier = 0.7; s.Imbalance = true; });
+            var sweep = Skill("w_sweep", "扩散斩击", "○●●○/●●●○\n主目标受到攻击力80%的伤害，预计8点；左右相邻各受攻击力40%，预计4点", 6, 7, s => { s.Multiplier = 0.8; s.Area = SkillArea.Adjacent; s.AreaRatio = 0.5; });
+            var gambit = Skill("w_gambit", "带伤强攻", "●●●○/●●●○\n忽略肢体减益，造成攻击力100%的伤害，预计10点；自身损血与肢体损伤增伤，用后受伤+25%，每场1次", 7, 7, s => {
                 s.Multiplier = 1.0; s.Uses = 1; s.IgnoreLimbPenalty = true;
                 s.HpMissingDamageScale = 0.5; s.LimbBonusPerStack = 2; s.SelfVulnerable = 0.25;
             });
-            var primalSweep = Skill("w_primal_sweep", "扩散斩击·暴戾", "伤害提高，波及一名敌人或误伤队友", 6, 7, s => {
+            var primalSweep = Skill("w_primal_sweep", "扩散斩击·暴戾", "○●●○/●●●○\n主目标受到攻击力100%的伤害，预计10点；1名副目标受攻击力75%，预计8点；无副目标时30%误伤队友", 6, 7, s => {
                 s.Multiplier = 1.0; s.Area = SkillArea.Adjacent; s.AreaMax = 1; s.AreaRatio = 0.75; s.FriendlyFireChance = 0.3;
             });
-            var pursuit = Skill("w_pursuit", "追击", "为全队赋予追击：造成伤害时追加50%攻击", 7, 0, s => {
+            var pursuit = Skill("w_pursuit", "追击", "●●●○/●●●●\n1回合内全队造成伤害后追加攻击力50%，预计5点；追击不能连锁", 7, 0, s => {
                 s.Effect = SkillEffect.Buff; s.Target = TargetSide.Ally; s.Targeting = SkillTargeting.All;
                 s.Area = SkillArea.Party; s.Grant = AllyBuff.Followup; s.FollowupPercent = 50; s.Multiplier = 0;
             });
@@ -99,21 +94,21 @@ namespace Ruin.Editor
 
         private static CharacterDefinition Shield()
         {
-            var strike = Skill("s_strike", "盾击", "攻击敌方1、2号位", 3, 3, s => s.Multiplier = 0.8);
-            var guard = Skill("s_guard", "守护", "守护一名队友，本回合代为承受攻击", 15, 15, s => {
+            var strike = Skill("s_strike", "盾击", "●●○○/●●○○\n造成攻击力80%的伤害，预计8点", 3, 3, s => s.Multiplier = 0.8);
+            var guard = Skill("s_guard", "守护", "●●●●/●●●●\n守护其他1名队友（不能选自己），1回合内代替其承受攻击", 15, 15, s => {
                 s.Effect = SkillEffect.Protect; s.Target = TargetSide.Ally; s.Multiplier = 0;
             });
-            var bulwark = Skill("s_bulwark", "壁垒", "提高全队防御力", 3, 0, s => {
+            var bulwark = Skill("s_bulwark", "壁垒", "●●○○/●●●●\n全队防御+20%（本回合），不叠加", 3, 0, s => {
                 s.Effect = SkillEffect.Buff; s.Target = TargetSide.Ally; s.Targeting = SkillTargeting.All;
                 s.Area = SkillArea.Party; s.Grant = AllyBuff.DefenseUp; s.GrantDefense = 0.2; s.Multiplier = 0;
             });
-            var block = Skill("s_block", "格挡", "为一名己方角色赋予1次格挡（1号位施放）", 1, 15, s => {
+            var block = Skill("s_block", "格挡", "●○○○/●●●●\n赋予1次格挡：完全免除下次攻击的伤害与减益", 1, 15, s => {
                 s.Effect = SkillEffect.Buff; s.Target = TargetSide.Ally; s.Grant = AllyBuff.Block; s.Multiplier = 0;
             });
-            var primalGuard = Skill("s_primal_guard", "守护·血怒", "守护一名队友，自身获得反击", 3, 15, s => {
+            var primalGuard = Skill("s_primal_guard", "守护·血怒", "●●○○/●●●●\n守护其他1名队友（不能选自己）1回合；自身受击或代伤后反击攻击力100%，预计10点", 3, 15, s => {
                 s.Effect = SkillEffect.Protect; s.Target = TargetSide.Ally; s.SelfGrant = AllyBuff.Counter; s.Multiplier = 0;
             });
-            var phalanx = Skill("s_phalanx", "全队格挡反击", "为全队各赋予格挡与反击 · 每场1次", 3, 0, s => {
+            var phalanx = Skill("s_phalanx", "全队格挡反击", "●●○○/●●●●\n全队各1次格挡：免除该次攻击并反击攻击力100%，预计10点；每场1次", 3, 0, s => {
                 s.Effect = SkillEffect.Buff; s.Target = TargetSide.Ally; s.Targeting = SkillTargeting.All;
                 s.Area = SkillArea.Party; s.Grant = AllyBuff.Block | AllyBuff.Counter; s.Uses = 1; s.Multiplier = 0;
             });
@@ -123,24 +118,24 @@ namespace Ruin.Editor
 
         private static CharacterDefinition Gunner()
         {
-            var shot = Skill("g_shot", "指定射击", "攻击敌方2、3、4号位（3/4号位施放）", 12, 14, s => s.Multiplier = 1.0);
-            var blockShot = Skill("g_block_shot", "阻断射击", "攻击并打断目标 · 每场2次", 12, 15, s => {
+            var shot = Skill("g_shot", "指定射击", "○○●●/○●●●\n造成攻击力100%的伤害，预计10点", 12, 14, s => s.Multiplier = 1.0);
+            var blockShot = Skill("g_block_shot", "阻断射击", "○○●●/●●●●\n造成攻击力70%的伤害，预计7点，并打断目标本回合行动；每场2次", 12, 15, s => {
                 s.Multiplier = 0.7; s.Interrupt = true; s.Uses = 2;
             });
-            var resupply = Skill("g_resupply", "军备补充", "全队精准提升 · 为一名角色恢复10理智（4号位施放）", 8, 15, s => {
+            var resupply = Skill("g_resupply", "军备补充", "○○○●/●●●●\n全队命中+20%（本回合）；所选角色恢复10理智", 8, 15, s => {
                 s.Effect = SkillEffect.Buff; s.Target = TargetSide.Ally; s.Grant = AllyBuff.AccuracyUp; s.GrantAccuracy = 0.2;
                 // Still asks for a target (that is who regains sanity), but the accuracy boost lands on the
                 // whole party: the sweep is Party-wide while the rider stays on the chosen teammate.
                 s.Area = SkillArea.Party; s.Multiplier = 0;
                 s.Rider = new SkillRider { Kind = RiderKind.SanityRestore, Area = RiderArea.Chosen, Amount = 10 };
             });
-            var grapple = Skill("g_grapple", "拖拽射击", "75%伤害 · 30%概率把敌人拖到1号位", 12, 12, s => {
-                s.Multiplier = 0.75; s.PullToFront = true; s.PullChance = 0.3;
+            var grapple = Skill("g_grapple", "拖拽射击", "○○●●/○○●●\n造成攻击力75%的伤害，预计8点；命中后40%把目标拖到敌方1号位", 12, 12, s => {
+                s.Multiplier = 0.75; s.PullToFront = true; s.PullChance = 0.4;
             });
-            var primalShot = Skill("g_primal_shot", "指定射击·散乱", "命中降低，主目标受125%伤害并溅射周边", 12, 14, s => {
+            var primalShot = Skill("g_primal_shot", "指定射击·散乱", "○○●●/○●●●\n主目标受攻击力125%的伤害，预计13点；2名溅射各受主目标伤害的50%，预计7点；命中降至75%", 12, 14, s => {
                 s.Multiplier = 1.25; s.Area = SkillArea.Splash; s.AreaMax = 2; s.AreaRatio = 0.5; s.Accuracy = 0.75;
             });
-            var pierce = Skill("g_pierce", "贯穿弹", "贯穿主目标后方最多两名敌人 · 打断 · 每场3次", 8, 15, s => {
+            var pierce = Skill("g_pierce", "贯穿弹", "○○○●/●●●●\n主目标受攻击力100%的伤害，预计10点并被打断；后方2人依次受攻击力75%/50%，预计8/5点；每场3次", 8, 15, s => {
                 s.Multiplier = 1.0; s.Area = SkillArea.Pierce; s.AreaMax = 2; s.AreaDecay = 0.25; s.Interrupt = true; s.Uses = 3;
             });
             return Character("gunner", "枪手", "距离、准星与一次呼吸", "gunner", 30, 7, 0,
@@ -149,26 +144,26 @@ namespace Ruin.Editor
 
         private static CharacterDefinition Medic()
         {
-            var bloodlet = Skill("m_bloodlet", "放血", "造成伤害并施加两次流血", 3, 3, s => {
+            var bloodlet = Skill("m_bloodlet", "放血", "●●○○/●●○○\n造成攻击力60%的伤害，预计6点；施加2次流血（每次2点）", 3, 3, s => {
                 s.Multiplier = 0.6; s.Bleed = 2; s.BleedTurns = 2;
             });
-            var bloodHeal = Skill("m_blood_heal", "流血奶", "治疗一名角色，50%概率施加3层流血", 6, 15, s => {
+            var bloodHeal = Skill("m_blood_heal", "流血奶", "○●●○/●●●●\n恢复攻击力140%的生命，预计14点；50%概率附加流血（每次3点，2次）", 6, 15, s => {
                 s.Effect = SkillEffect.Heal; s.Target = TargetSide.Ally; s.Multiplier = 1.4;
                 s.Bleed = 3; s.BleedTurns = 2; s.BleedChance = 0.5;
             });
-            var mist = Skill("m_mist", "群体药雾", "为己方全体恢复少量生命", 12, 0, s => {
+            var mist = Skill("m_mist", "群体药雾", "○○●●/●●●●\n全队各恢复攻击力50%的生命，预计5点", 12, 0, s => {
                 s.Effect = SkillEffect.Heal; s.Target = TargetSide.Ally; s.Targeting = SkillTargeting.All;
                 s.Area = SkillArea.Party; s.Multiplier = 0.5;
             });
-            var cleanse = Skill("m_cleanse", "驱散疗法", "为己方每名角色移除一处减益（4号位施放）", 8, 0, s => {
+            var cleanse = Skill("m_cleanse", "驱散疗法", "○○○●/●●●●\n清除全队每人的1种减益（当前为流血）", 8, 0, s => {
                 s.Effect = SkillEffect.Buff; s.Target = TargetSide.Ally; s.Targeting = SkillTargeting.All;
                 s.Area = SkillArea.Party; s.Cleanse = true; s.Multiplier = 0;
             });
-            var primalHeal = Skill("m_primal_heal", "流血奶·渴求", "治疗量提高，随机一名角色；流血更重", 6, 15, s => {
+            var primalHeal = Skill("m_primal_heal", "流血奶·渴求", "○●●○/●●●●\n随机恢复攻击力160%的生命，预计16点；50%概率附加流血（每次4点，2次）", 6, 15, s => {
                 s.Effect = SkillEffect.Heal; s.Target = TargetSide.Ally; s.RandomTarget = true; s.Multiplier = 1.6;
                 s.Bleed = 4; s.BleedTurns = 2; s.BleedChance = 0.5;
             });
-            var drain = Skill("m_drain", "吸血扩散", "攻击敌人，治疗自身并扩散给相邻队友 · 每场3次", 14, 7, s => {
+            var drain = Skill("m_drain", "吸血扩散", "○●●●/●●●○\n造成攻击力100%的伤害，预计10点；按实际伤害治疗自身，左右相邻各获治疗量50%；每场3次", 14, 7, s => {
                 s.Multiplier = 1.0; s.Uses = 3;
                 s.Rider = new SkillRider { Kind = RiderKind.HealFromDamage, Area = RiderArea.SelfAdjacent, Ratio = 1.0, SpreadRatio = 0.5 };
             });

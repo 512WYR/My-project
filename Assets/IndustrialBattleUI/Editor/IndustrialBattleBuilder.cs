@@ -63,7 +63,6 @@ namespace GameMake.IndustrialBattleEditor
             app.Catalog=AssetDatabase.LoadAssetAtPath<GameCatalog>("Assets/StageOne/Resources/StageOne/GameCatalog.asset"); app.ExternalBattleUi=true;
             var hud=(GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(Prefab));
             var chrome=hud.GetComponent<GothicBattleHudController>(); chrome.BattleSource=app; PrefabUtility.RecordPrefabInstancePropertyModifications(chrome);
-            var nodes=hud.GetComponent<GothicNodeHudController>(); nodes.Source=app; PrefabUtility.RecordPrefabInstancePropertyModifications(nodes);
             var presentation=hud.GetComponent<ModularHudController>(); presentation.BattleSource=app; presentation.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(presentation);
             var counter=hud.GetComponentInChildren<MechanicalRoundCounter>(true); counter.BattleSource=app; counter.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(counter);
             var preview=new GameObject("Battle Preview Entry").AddComponent<BattlePreviewStart>(); preview.Source=app;

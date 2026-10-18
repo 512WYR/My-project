@@ -8,7 +8,6 @@ namespace Ruin.Core
     // Id/Name/Silhouette plus three skill lists. The three forms survive from the sanity system, they
     // simply changed what they switch: the whole skill list, not a single slot.
     public enum SkillForm { Technical, Basic, Primal }
-    public enum MentalState { None, Composed, Agitated }
     // Sanity sits next to Attack/Heal as its own effect: 理智怪 has no hit roll and deals no HP damage.
     public enum SkillEffect { Attack, Heal, Protect, Buff, Sanity }
     public enum TargetSide { Enemy, Ally }
@@ -179,16 +178,6 @@ namespace Ruin.Core
     }
 
     [Serializable]
-    public sealed class MentalSpec
-    {
-        public MentalState State;
-        public string Name;
-        public double TechnicalMultiplier = 1;
-        public double PrimalMultiplier = 1;
-        public double AccuracyModifier;
-    }
-
-    [Serializable]
     public sealed class CombatRules
     {
         public double ProbabilityStrength = 1.5;
@@ -204,13 +193,10 @@ namespace Ruin.Core
         public double FollowupRatio = 0.5;
         public double CounterRatio = 1.0;
         public int ImbalanceImmuneRounds = 1;
-        public MentalSpec[] MentalStates = {
-            new MentalSpec { State = MentalState.None, Name = "平稳" },
-            new MentalSpec { State = MentalState.Composed, Name = "凝神", TechnicalMultiplier = 1.25 },
-            new MentalSpec { State = MentalState.Agitated, Name = "躁动", PrimalMultiplier = 1.25, AccuracyModifier = -0.05 }
-        };
+        // Displacement skills auto-hit for this many rounds after imbalance lands. The skipped action is
+        // still a separate, one-shot effect controlled by ActorState.Imbalance.
+        public int ImbalanceAutoHitRounds = 2;
         public LimbRules Limbs = new LimbRules();
-        public MentalSpec Mental(MentalState state) { return MentalStates.First(x => x.State == state); }
     }
 
     [Serializable]
@@ -226,7 +212,6 @@ namespace Ruin.Core
         public int Hp;
         public bool Dead;
         public double Sanity;
-        public MentalState Mental;
         public SkillForm Form = SkillForm.Basic;
         public int BleedDamage;
         public int BleedTurns;
@@ -253,6 +238,9 @@ namespace Ruin.Core
         public int FollowupAttack;    // The warrior's base attack when the buff was handed out.
         public int Imbalance;         // > 0 skips the actor's next turn.
         public int ImbalanceImmuneRound = -1; // The round on which imbalance is refused.
+        // Last round on which a displacement skill auto-hits this actor. Independent of Imbalance, so the
+        // guaranteed hit survives the skipped turn and lasts the full configured window.
+        public int ImbalanceAutoHitUntilRound = -1;
         public double DefenseBuff;    // Temporary team defence bump.
         public double AccuracyBuff;   // Temporary team accuracy bump.
         public double SelfVulnerable; // Damage taken is raised by this share for the round.

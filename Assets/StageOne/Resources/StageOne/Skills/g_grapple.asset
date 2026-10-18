@@ -15,7 +15,7 @@ MonoBehaviour:
   Spec:
     Id: g_grapple
     Name: "\u62D6\u62FD\u5C04\u51FB"
-    Description: "75%\u4F24\u5BB3 \xB7 30%\u6982\u7387\u628A\u654C\u4EBA\u62D6\u52301\u53F7\u4F4D"
+    Description: "\u25CB\u25CB\u25CF\u25CF/\u25CB\u25CB\u25CF\u25CF\n\u9020\u6210\u653B\u51FB\u529B75%\u7684\u4F24\u5BB3\uFF0C\u9884\u8BA18\u70B9\uFF1B\u547D\u4E2D\u540E40%\u628A\u76EE\u6807\u62D6\u5230\u654C\u65B91\u53F7\u4F4D"
     Effect: 0
     Target: 0
     Multiplier: 0.75
@@ -33,7 +33,7 @@ MonoBehaviour:
     AreaDecay: 0
     SelfMove: 0
     PullToFront: 1
-    PullChance: 0.3
+    PullChance: 0.4
     Imbalance: 0
     BleedTurns: 2
     BleedChance: 0

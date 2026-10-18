@@ -86,7 +86,7 @@ namespace Ruin.Runtime
                 Actions(root);
                 Journal(root);
             }
-            Label(root, "Footer", "第一阶段  /  战斗与探索     ·     F1 操作说明     ·     I 道具     ·     F3 验收工具     ·     Esc 取消目标", 34, 868, 1320, 22, 13, Muted);
+            Label(root, "Footer", "第一阶段  /  战斗与探索     ·     操作说明、道具、验收工具见上方按钮     ·     Esc 取消目标", 34, 868, 1320, 22, 13, Muted);
             Label(root, "Version", "STAGE 01   /   0.3", 1370, 868, 195, 22, 13, Muted, TextAnchor.MiddleRight);
             if (!nodePage && app.Battle != null && app.Battle.Outcome != BattleOutcome.Active) Settlement(root);
             if (app.HelpOpen) Help(root);
@@ -101,10 +101,10 @@ namespace Ruin.Runtime
         {
             Label(root, "Title", "界限之间", 34, 22, 420, 43, 31, Ink);
             Label(root, "Subtitle", app.AwaitingNode ? "探索路线  /  玩家理智同时决定候选数量与房间类型" : "战斗演练  /  理智与队伍的第一场试炼", 35, 66, 700, 26, 15, Muted);
-            Button(root, "Consumables", "道具", "I", 996, 27, 130, 53, app.ToggleConsumableEditor, app.ConsumableEditorOpen, !app.Busy, 15);
-            Button(root, "Help", "操作说明", "F1", 1138, 27, 130, 53, app.ToggleHelp, false, true, 15);
+            Button(root, "Consumables", "道具", "点击", 996, 27, 130, 53, app.ToggleConsumableEditor, app.ConsumableEditorOpen, !app.Busy, 15);
+            Button(root, "Help", "操作说明", "点击", 1138, 27, 130, 53, app.ToggleHelp, false, true, 15);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Button(root, "Laboratory", "验收工具", "F3", 1280, 27, 130, 53, app.ToggleLab, false, !app.Busy, 15);
+            Button(root, "Laboratory", "验收工具", "点击", 1280, 27, 130, 53, app.ToggleLab, false, !app.Busy, 15);
 #endif
             Button(root, "NewRun", "新开演练", "重置本局", 1422, 27, 143, 53, () => app.NewRun(), false, !app.Busy, 15);
             var strip = Box(root, "StatusStrip", 34, 108, 1532, 63, Panel);
@@ -141,7 +141,12 @@ namespace Ruin.Runtime
                 ActorCard(field, actor, x, 56, 112, 252);
             }
             foreach (var actor in app.Battle.Enemies)
+            {
+                // Corpses keep their old rank so the log can still name it, but drawing them would put
+                // a second card on top of the living unit that has since stepped into that slot.
+                if (actor.Dead) continue;
                 ActorCard(field, actor, 682 + actor.Rank * 122, 56, 112 + (actor.Width - 1) * 122, 252);
+            }
             Label(field, "Rear", "后排", 26, 324, 100, 21, 12, Muted);
             Label(field, "Front", "前排  →", 395, 324, 115, 21, 12, Muted, TextAnchor.MiddleRight);
             Label(field, "EnemyFront", "←  前排", 684, 324, 130, 21, 12, Muted);
@@ -171,7 +176,7 @@ namespace Ruin.Runtime
             Label(rect, "ActorName", actor.Name, 4, 149, 104, 29, 19, actor.Dead ? Muted : Ink, TextAnchor.MiddleCenter);
             Meter(rect, "HealthMeter", 9, 184, 94, 6, (float)actor.Hp / actor.Definition.MaxHp, actor.DeathDoor ? Rust : accent);
             Label(rect, "Health", actor.Dead ? "已死亡" : actor.DeathDoor ? "濒死 · 需要治疗" : actor.Hp + " / " + actor.Definition.MaxHp, 3, 194, 106, 21, 12, actor.DeathDoor ? Rust : Ink, TextAnchor.MiddleCenter);
-            string status = actor.Player ? "理智 " + actor.Sanity.ToString("0.#") + " · " + app.Battle.Rules.Mental(actor.Mental).Name : "速度 " + actor.Speed;
+            string status = actor.Player ? "理智 " + actor.Sanity.ToString("0.#") : "速度 " + actor.Speed;
             Label(rect, "Status", status, 3, 220, 106, 21, 11, actor.Player ? Cyan : Muted, TextAnchor.MiddleCenter);
             if (actor.Dead) Label(rect, "DeadCross", "×", 31, 63, 52, 65, 54, Rust, TextAnchor.MiddleCenter);
             if (actor.Player)
@@ -204,8 +209,7 @@ namespace Ruin.Runtime
                 double[] p = app.Battle.FormProbabilities(actor);
                 Label(box, "FormRow", "高理智 " + (p[0] * 100).ToString("0.0") + "%   常态 " + (p[1] * 100).ToString("0.0")
                     + "%   低理智 " + (p[2] * 100).ToString("0.0") + "%", 20, 174, 300, 20, 12, Muted);
-                Label(box, "StateInfo", "持续状态：" + app.Battle.Rules.Mental(actor.Mental).Name + "  ·  区间外仍保留", 20, 198, 300, 18, 11, Muted);
-                Label(box, "Attributes", AttributeText(actor), 20, 218, 300, 30, 11, Muted);
+                Label(box, "Attributes", AttributeText(actor), 20, 198, 300, 30, 11, Muted);
                 Label(box, "Accessories", "饰品  " + AccessorySystem.Summary(actor), 20, 252, 300, 20, 11, Gold);
                 Label(box, "LimbHeading", "部位损伤  ·  重伤→断肢→义肢", 20, 276, 300, 20, 13, Gold);
                 LimbRow(box, actor, LimbPart.Head, 300);
@@ -419,7 +423,7 @@ namespace Ruin.Runtime
         private static readonly LimbPart[] PartOrder = { LimbPart.Head, LimbPart.Torso, LimbPart.Arm, LimbPart.Leg };
 
         // ---------------- the room pages ----------------
-        // All four are inline, for the same reason NodeSelect is: F1 and F3 have to keep working here.
+        // All four are inline, for the same reason NodeSelect is: the header buttons have to keep working here.
 
         private void BuffRoom(RectTransform root)
         {
@@ -561,7 +565,7 @@ namespace Ruin.Runtime
         private void ElevatorRoom(RectTransform root)
         {
             Label(root, "ElevatorHeading", "电梯井", 34, 190, 900, 38, 29, Ink);
-            Label(root, "ElevatorNote", "第 " + app.Map.Floor + " 层到此为止。下行之后不会自动整备生命，个人理智与精神状态保留。",
+            Label(root, "ElevatorNote", "第 " + app.Map.Floor + " 层到此为止。下行之后不会自动整备生命，个人理智保留。",
                 36, 230, 1240, 24, 15, Muted);
             var panel = Box(root, "ElevatorPanel", 34, 268, 1532, 330, Panel);
             Label(panel, "ElevatorRoute", "本层路线   " + FloorSummary(app.Map.Floor), 22, 20, 1488, 30, 17, Gold);
@@ -606,7 +610,7 @@ namespace Ruin.Runtime
             string accessories = "持有饰品 " + app.Run.AccessoryStock.Count + " 件";
             string consumables = "持有道具 " + app.Run.Consumables.Count + " 件";
             if (app.Run.Prosthetics.Count == 0)
-                return "持有义肢：无（精英战斗掉落，本次可用 F3 验收工具发放）   ·   " + accessories + "   ·   " + consumables;
+                return "持有义肢：无（精英战斗掉落，也可用验收工具发放）   ·   " + accessories + "   ·   " + consumables;
             var groups = app.Run.Prosthetics.GroupBy(p => p.Id).Select(g => g.First().Name + (g.Count() > 1 ? " ×" + g.Count() : ""));
             return "持有义肢：" + string.Join("   ·   ", groups) + "   ·   " + accessories + "   ·   " + consumables;
         }
@@ -678,7 +682,9 @@ namespace Ruin.Runtime
             string count = skill.Uses > 0 ? " · 剩" + actor.UsesLeft(skill) + "次" : "";
             string value = skill.Effect == SkillEffect.Attack ? "伤害 " + app.Battle.SkillValue(actor, skill) + " · "
                 : skill.Effect == SkillEffect.Heal ? "恢复 " + app.Battle.SkillValue(actor, skill) + " · " : "";
-            return value + skill.Description + count;
+            // This detail line is a single row; strip the newline that separates the position symbols
+            // from the effect text so the button still shows the effect instead of only the dots.
+            return value + skill.Description.Replace("\n", "，") + count;
         }
 
         private void Journal(RectTransform root)
@@ -740,8 +746,10 @@ namespace Ruin.Runtime
             Label(p, "HelpTitle", "行动指南", 34, 25, 900, 45, 29, Ink);
             string text = "01  选择技能，再点击高亮目标。点击任意角色可查看详情。\n\n" +
                 "02  我方前排靠近敌人。位置不符时，可以消耗行动与相邻队友换位。\n\n" +
-                "03  每回合只能使用该角色当前的技能，或与相邻队员换位。\n      部分技能每场限次；用尽或站位不符时按钮上会写明原因。\n\n" +
-                "04  理智低于30技能会发生变化，高于70会解锁特殊技能。\n      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n      敌方低语可能带来凝神或躁动；持续状态跨战斗保留。\n\n" +
+                "03  每回合只能使用该角色当前的技能，或与相邻队员换位。\n      部分技能每场限次；用尽或站位不符时按钮上会写明原因。\n" +
+                "      技能说明第一行以 ●/○ 表示可选/不可选位置：斜杠前为己方站位，斜杠后为目标位置，\n" +
+                "      均按1→4号位排列；目标阵营与限制见下一行效果说明。\n\n" +
+                "04  理智低于30技能会发生变化，高于70会解锁特殊技能。\n      30至70保持常态；形态在本回合内固定，切换的是整套技能。\n\n" +
                 "05  敌人卡片下方显示下一次攻击。用格挡、反击、守护、打断或换位应对。\n      奶妈可以治疗濒死队员；濒死时再次受伤会检定死亡。\n\n" +
                 "06  战斗结束（胜利或全队阵亡）都会反馈玩家理智：队员平均净变化 × 0.5。\n      全队阵亡本局立即结束；结算后继续前进，理智决定候选数量与房间类型。\n\n" +
                 "07  命中、暴击与闪避由角色属性直接决定，不随理智变化。\n      技能伤害 = 基础攻击力 × 技能倍率；受伤按目标防御比例减少。\n\n" +
@@ -755,7 +763,7 @@ namespace Ruin.Runtime
                 "      低理智更容易遇到精英与祭坛，高理智更容易遇到事件房间。\n" +
                 "      补给站治疗、修复并管理饰品；精英战斗掉落义肢；宝箱房发放饰品。";
             Label(p, "HelpBody", text, 38, 92, 904, 640, 18, Ink);
-            Button(p, "CloseHelp", "返回", "Esc / F1", 38, 752, 904, 52, app.ToggleHelp, true, true, 18);
+            Button(p, "CloseHelp", "返回", "Esc 关闭", 38, 752, 904, 52, app.ToggleHelp, true, true, 18);
         }
 
         // The accessory manager. It is a modal rather than an inline page because both UI systems need it:
@@ -858,7 +866,7 @@ namespace Ruin.Runtime
             Label(p, "ConsumableStockHeading", "道具仓库 · " + app.Run.Consumables.Count + " 件",
                 30, 166, 1140, 24, 15, Gold);
             if (app.Run.Consumables.Count == 0)
-                Label(p, "ConsumableEmpty", "仓库是空的。验收工具（F3）的「发放全部道具」可以发放。",
+                Label(p, "ConsumableEmpty", "仓库是空的。可在验收工具的「发放全部道具」中领取。",
                     30, 202, 1140, 24, 13, Muted);
 
             int shown = Math.Min(6, app.Run.Consumables.Count);
@@ -903,9 +911,6 @@ namespace Ruin.Runtime
             Button(p, "Set15", "设为15", "实际理智变化", 36, 304, 151, 54, () => app.DebugSetSanity(15), false, true, 16);
             Button(p, "Set50", "设为50", "实际理智变化", 200, 304, 151, 54, () => app.DebugSetSanity(50), false, true, 16);
             Button(p, "Set85", "设为85", "实际理智变化", 364, 304, 151, 54, () => app.DebugSetSanity(85), false, true, 16);
-            Button(p, "SetComposed", "给予凝神", "持续精神状态", 528, 304, 151, 54, () => app.DebugMental(MentalState.Composed), false, true, 16);
-            Button(p, "SetAgitated", "给予躁动", "持续精神状态", 692, 304, 151, 54, () => app.DebugMental(MentalState.Agitated), false, true, 16);
-            Button(p, "ClearMental", "治疗状态", "清除持续状态", 856, 304, 148, 54, () => app.DebugMental(MentalState.None), false, true, 16);
             Label(p, "ScenariosHeading", "结算与濒死样例", 36, 389, 920, 26, 17, Gold);
             Button(p, "FeedbackExample", "反馈 −2.5", "变化 −20 / −10 / 0 / +10", 36, 432, 310, 67, app.DebugFeedbackExample, false, true, 18);
             Button(p, "DeathDoorExample", "濒死演练", "盾卫0生命 · 尝试救治", 365, 432, 310, 67, app.DebugDeathDoor, false, true, 18);
@@ -933,7 +938,7 @@ namespace Ruin.Runtime
             Button(p, "SeverLeg", "断肢·腿部", "两次击伤的效果", 283, 764, 227, 54, () => app.DebugSeverLimb(LimbPart.Leg), false, true, 16);
             Button(p, "GrantAllProsthetics", "发放全部义肢", "进入补给站前先领好", 530, 764, 227, 54, app.DebugGrantAllProsthetics, false, true, 16);
             Button(p, "GrantAllAccessories", "发放全部饰品", "八件各一份", 777, 764, 227, 54, app.DebugGrantAllAccessories, false, true, 16);
-            Button(p, "CloseLab", "返回", "F3 / Esc", 36, 830, 968, 52, app.ToggleLab, true, true, 18);
+            Button(p, "CloseLab", "返回", "Esc 关闭", 36, 830, 968, 52, app.ToggleLab, true, true, 18);
         }
 
         // The per-event page of the acceptance tool. Every script gets a button, because four of the ten
@@ -967,7 +972,7 @@ namespace Ruin.Runtime
                 "钉住的事件只替换当前位置的候选，之后仍然按正常流程离开并前进。"
                 + "撤退只记录结果，不发奖励：EVT-001／003／006／H001／L001 的奖励都在胜利之后发放。",
                 36, 630, 968, 46, 14, Muted);
-            Button(p, "CloseEventLab", "返回验收工具", "F3 / Esc 关闭", 36, 800, 968, 52, app.ToggleLabEvents, true, true, 18);
+            Button(p, "CloseEventLab", "返回验收工具", "Esc 关闭", 36, 800, 968, 52, app.ToggleLabEvents, true, true, 18);
         }
 
         // DebugForceEvent closes the tool on its way in, so the room page is what the owner lands on.

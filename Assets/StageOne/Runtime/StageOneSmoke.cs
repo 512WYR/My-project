@@ -60,7 +60,7 @@ namespace Ruin.Runtime
             Require(app.Map.Current.Fixed && app.Map.Current.Candidates.Count == 1 && app.Map.Current.Candidates[0].Type == NodeType.Opening,
                 "The opening position is a fixed buff room");
             // 事件文案里出现的新词也一并探一遍：字体是动态 OS 字体，缺字要在这里就暴露出来。
-            app.View.InterfaceFont.RequestCharactersInTexture("界限之间战士盾卫枪手奶妈理智凝神躁动濒死祭坛事件补给站电梯井首领增益坚韧锋锐清明部位义肢断修复重创"
+            app.View.InterfaceFont.RequestCharactersInTexture("界限之间战士盾卫枪手奶妈理智濒死祭坛事件补给站电梯井首领增益坚韧锋锐清明部位义肢断修复重创"
                 + "矿道挖穿矿脉次数用尽齿轮咬袖子撬外壳弹零件划伤紧闭铁门敲击靠近对话远离药剂箱蓝红全部喝下队员医疗室药柜稳定剂休整守夜角落打乱站位失控机器工坊安装议价适配搏动组织岔道无视探索通道第五个人查清状况"
                 + "验收钉住候选预设同时推进条撤退奖励关闭直接打赢步骤"
                 + "一三上不与专东丝两严中为么也了予于些亡交亮什仅仍从仓代以任份伍会低体何作你使例供侧便保倍值假做先入八六共具养内再冒写决净减出分切列则初判利到制削前剧剩劈力功加勋化区十单南占卡即卸历原去及友反发取受变叠另只可右号各合名后否告命和品唯四回因固图在地场均型基境墟声处备多大头套好始威存它完宝实害家容寐察将少尝就局层属峙已带常干平并库应废度延建开弃式引弱强归当录形往待得御循心必态急性恢情意成我或截房所才扣执技把护抽拦择持指按挡损换据掉排掩提操擎支改攻放效敌救文斗斧新方旧易是显普暂暴更替最有未末本杀束来果标样格案档检概槛止正此殉殊段每比没治沿活流消源演点炼然片版物特独猎献率玩环现生由留瘾登的目相看着知破础确示种程空立章端符等筒算管类精累纯线练终经结继续缺网置群者耗肠胁胜能脏腿臂自至致色节英苹获藏血行被西要观解计记试该详语说请读调象败账走起跃跟跨路跳身躯达过返还这追送速遇避邻都里量金针钮链锁锈闪防阵阶际除险随隐集需静面页项额饰馈高法其满", 24, FontStyle.Normal);
@@ -136,13 +136,13 @@ namespace Ruin.Runtime
             Require(app.Run.Heroes.All(h => h.Sanity == 85), "Sanity 85 preset available through UI");
             yield return Capture("high-sanity-1080.png", 1920, 1080);
             string selected = app.InspectedId;
-            Click("Laboratory"); yield return null; Click("SetComposed"); yield return null; Click("Set50"); yield return null;
-            Require(app.Battle.Find(selected).Mental == MentalState.Composed && app.Battle.Find(selected).Sanity == 50, "Persistent mental state survives leaving high-sanity range");
-            Require(app.Battle.FormProbabilities(app.Battle.Find(selected))[0] == 0, "Persistent mental state cannot bypass activation gate");
+            Click("Laboratory"); yield return null; Click("Set50"); yield return null;
+            Require(app.Battle.Find(selected).Sanity == 50, "Sanity edit through the laboratory applies");
+            Require(app.Battle.FormProbabilities(app.Battle.Find(selected))[0] == 0, "Sanity 50 does not unlock high-sanity skills");
             Click("EndBattleDebug"); yield return null; Click("ContinueBattle"); yield return null;
             Require(app.AwaitingNode, "Settlement continue returns to the node page");
             yield return EnterBattle();
-            Require(app.Battle.Find(selected).Mental == MentalState.Composed && app.Battle.Find(selected).Sanity == 50, "Next battle preserves personal sanity and mental state");
+            Require(app.Battle.Find(selected).Sanity == 50, "Next battle preserves personal sanity");
 
             Click("Laboratory"); yield return null; Click("FeedbackExample"); yield return null;
             Require(Math.Abs(app.Run.PlayerSanity - 47.5) < 0.000001, "Feedback example produces player sanity 47.5");

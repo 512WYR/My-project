@@ -65,11 +65,6 @@ namespace GameMake.GothicHUDEditor
             if (chrome) chrome.BattleSource = app;
             else Debug.LogError("The HUD prefab has no GothicBattleHudController, so nothing will feed the " +
                 "battle into it. Run GameMake/Gothic HUD/Rebuild Modular HUD first, then build this scene again.");
-            var node = hud.GetComponent<GothicNodeHudController>();
-            if (node) node.Source = app;
-            else Debug.LogError("The HUD prefab has no GothicNodeHudController, so the route and the six rooms " +
-                "would have no page at all. Run GameMake/Gothic HUD/Rebuild Modular HUD first, then build " +
-                "this scene again.");
 
             if (!AssetDatabase.IsValidFolder("Assets/Scenes")) AssetDatabase.CreateFolder("Assets", "Scenes");
             Directory.CreateDirectory("Assets/Scenes");

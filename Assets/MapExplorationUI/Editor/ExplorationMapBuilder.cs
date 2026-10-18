@@ -148,14 +148,14 @@ namespace GameMake.ExplorationEditor
             GameMake.SharedUI.Editor.RetroScreenStyling.ApplyMap(go);
             PrefabUtility.SaveAsPrefabAssetAndConnect(go,PrefabPath,InteractionMode.AutomatedAction);
 
-            // Keep existing rooms, combat, settlement and F1/F3 tools playable in this new scene.
+            // Keep existing rooms, combat and settlement playable in this new scene. The debug console is
+            // a separate prefab installed into mainScene by IndustrialDebugConsoleInstaller.
             var app=new GameObject("Exploration Game State").AddComponent<StageOneApp>(); app.Catalog=catalog; app.ExternalBattleUi=true;
             view.Source=app;
             PrefabUtility.RecordPrefabInstancePropertyModifications(view);
             var legacy=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GothicHUD/Prefabs/GothicBattleHUD.prefab");
             var fallback=(GameObject)PrefabUtility.InstantiatePrefab(legacy); fallback.name="Existing Room and Battle Pages";
             var battle=fallback.GetComponent<GothicBattleHudController>(); if(battle) { battle.BattleSource=app; PrefabUtility.RecordPrefabInstancePropertyModifications(battle); }
-            var nodes=fallback.GetComponent<GothicNodeHudController>(); if(nodes) { nodes.Source=app; PrefabUtility.RecordPrefabInstancePropertyModifications(nodes); }
             var presentation=fallback.GetComponent<ModularHudController>();
             if(presentation) { presentation.BattleSource=app; presentation.FollowStageOneBattle=false; PrefabUtility.RecordPrefabInstancePropertyModifications(presentation); }
             foreach(var oldCounter in fallback.GetComponentsInChildren<MechanicalRoundCounter>(true))
