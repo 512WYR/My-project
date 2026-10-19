@@ -61,7 +61,7 @@ namespace Ruin.Core
             new AccessorySpec
             {
                 Id = "acc_heart", Name = "跃动心脏", Kind = AccessoryKind.Heart,
-                Description = "入场标记一名敌人：每回合额外行动1次、攻击+50%。前2回合击杀标记目标则持续整场；否则攻击-70%。"
+                Description = "入场随机标记一名存活敌人（名字后显示⊕）。标记存在时自己攻击+50%，且每回合在自己行动后立即追加1次行动。若该敌人在第2回合结束前死亡（任何来源均可），增益持续整场；否则从第3回合起攻击降为30%并失去追加行动。"
             },
             new AccessorySpec
             {

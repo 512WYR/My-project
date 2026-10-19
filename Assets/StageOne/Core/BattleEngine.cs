@@ -813,6 +813,17 @@ namespace Ruin.Core
             return Run.Random.NextUnit() < chance;
         }
 
+        // The heart marks one enemy for as long as its contract is open. Cards read this to keep the
+        // target visible; success and the round-three failure both resolve the state, so the marker
+        // disappears on its own. This is a pure query: it draws no randomness.
+        public bool IsHeartTarget(ActorState enemy)
+        {
+            if (enemy == null || enemy.Dead) return false;
+            return Run.Heroes.Any(h => h != null && h.AccessoryBattle != null
+                && h.AccessoryBattle.HeartActive && !h.AccessoryBattle.HeartResolved
+                && h.AccessoryBattle.HeartTargetId == enemy.Id);
+        }
+
         public string Intent(ActorState enemy)
         {
             if (enemy.Dead) return "已被击败";

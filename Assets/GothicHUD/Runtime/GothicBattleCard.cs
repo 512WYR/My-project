@@ -44,7 +44,7 @@ namespace GameMake.GothicHUD
         // Filled by the controller so a click can be routed back without the card knowing about the battle.
         [HideInInspector] public string ActorId;
 
-        public void Render(ActorState actor, bool active, bool possible, bool inspected, string intent)
+        public void Render(ActorState actor, bool active, bool possible, bool inspected, string intent, bool heartTarget = false)
         {
             if (actor == null) { gameObject.SetActive(false); return; }
             gameObject.SetActive(true);
@@ -85,7 +85,9 @@ namespace GameMake.GothicHUD
                 Art.SetVerticesDirty();
             }
 
-            if (Name) Name.text = actor.Name;
+            // The heart's target is marked on the name line: the status slot is reserved for the enemy's
+            // intent, and a suffix after the name cannot push the name itself out of the card.
+            if (Name) Name.text = heartTarget ? actor.Name + " <color=#D05A5A>⊕</color>" : actor.Name;
 
             if (HealthFill) HealthFill.fillAmount = Mathf.Clamp01((float)actor.Hp / Mathf.Max(1, actor.Definition.MaxHp));
             if (HealthValue)

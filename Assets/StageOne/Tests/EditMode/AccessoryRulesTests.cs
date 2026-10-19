@@ -252,6 +252,7 @@ namespace Ruin.Tests
 
             Assert.IsTrue(hero.AccessoryBattle.HeartActive);
             Assert.AreEqual(battle.Enemies[0].Id, hero.AccessoryBattle.HeartTargetId);
+            Assert.IsTrue(battle.IsHeartTarget(battle.Enemies[0]), "标记目标要在战斗卡片上可见");
             Assert.That(AccessorySystem.AttackMultiplier(hero), Is.EqualTo(1.5).Within(1e-9));
             Assert.AreEqual(1, AccessorySystem.ExtraActions(hero));
             Assert.AreSame(hero, battle.Current);
@@ -261,6 +262,7 @@ namespace Ruin.Tests
             battle.Damage(battle.Enemies[0], 100000, hero.Id);
             Assert.IsTrue(hero.AccessoryBattle.HeartResolved);
             Assert.IsTrue(hero.AccessoryBattle.HeartSuccess);
+            Assert.IsFalse(battle.IsHeartTarget(battle.Enemies[0]), "成功后标记应消失");
             Assert.That(AccessorySystem.AttackMultiplier(hero), Is.EqualTo(1.5).Within(1e-9));
             Assert.AreEqual(1, AccessorySystem.ExtraActions(hero));
         }
@@ -288,6 +290,7 @@ namespace Ruin.Tests
             Assert.GreaterOrEqual(battle.Round, 3);
             Assert.IsTrue(hero.AccessoryBattle.HeartResolved);
             Assert.IsFalse(hero.AccessoryBattle.HeartSuccess);
+            Assert.IsFalse(battle.IsHeartTarget(battle.Enemies[0]), "失败结算后标记应消失");
             Assert.That(AccessorySystem.AttackMultiplier(hero), Is.EqualTo(0.3).Within(1e-9));
             Assert.AreEqual(0, AccessorySystem.ExtraActions(hero));
         }

@@ -355,7 +355,7 @@ namespace GameMake.GothicHUD
                     continue;
                 }
                 card.Render(enemy, battle.Current == enemy, possible.Contains(enemy.Id),
-                    app.InspectedId == enemy.Id, battle.Intent(enemy));
+                    app.InspectedId == enemy.Id, battle.Intent(enemy), battle.IsHeartTarget(enemy));
                 card.SetSpan(Mathf.Clamp(enemy.Width, 1, Enemies.Length), step);
                 if (card.Background) cardImages[enemy.Id] = card.Background;
             }
