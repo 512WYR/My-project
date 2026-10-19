@@ -81,6 +81,7 @@ namespace Ruin.Runtime
             Catalog = Catalog ? Catalog : Resources.Load<GameCatalog>("StageOne/GameCatalog");
             if (!Catalog) { Debug.LogError("StageOne catalog missing. Run GameMake/Prepare Stage One from the editor."); return; }
             NewRun();
+            PrepareStartMenu();
         }
 
         // The authored debug console is outside this assembly's UI, so it publishes the two facts the
@@ -92,21 +93,46 @@ namespace Ruin.Runtime
 
         private void Update()
         {
+            var escape = Input.GetKeyDown(KeyCode.Escape);
+
+            // The console publishes both facts; reading the frame marker here keeps one Esc press from
+            // closing the console and opening the pause box in the same frame.
+            if (DebugOverlayEscapeFrame == Time.frameCount) return;
+            if (DebugOverlayOpen) return;
+
+            // The title screen is modal: Esc must not reveal the route or a pause box behind it.
+            if (menu && menu.StartMenuOpen) return;
+            if (menu && menu.PauseOpen)
+            {
+                if (escape) ClosePauseMenu();
+                return;
+            }
+
+            // These pages are closed first, so Esc never opens a pause box on top of them.
             if (SupplyShopOpen)
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) CloseSupplyShop();
+                if (escape) CloseSupplyShop();
                 return;
             }
             if (CharacterPanelOpen)
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) CloseCharacterPanel();
+                if (escape) CloseCharacterPanel();
                 return;
             }
-            if (Input.GetKeyDown(KeyCode.Escape)) { ClearPending(); Refresh(); }
+
+            if (!escape) return;
+            // A pending target spends Esc on cancelling, as it did before the pause box existed.
+            if (Choosing) { ClearPending(); Refresh(); return; }
+            // Tests drive the app without a menu; keep their Esc behaviour unchanged.
+            if (AutomationMode) { ClearPending(); Refresh(); return; }
+            OpenPauseMenu();
         }
 
         public void NewRun(double? preset = null, uint? seed = null)
         {
+            // A new run always starts with the game in view: dismiss the title or pause overlay and
+            // restore the clock before any of the state below begins animating.
+            if (menu) menu.HideAllForGameplay();
             SupplyShopOpen = false; SupplyShopNote = null;
             CharacterPanelOpen = false; CharacterHeroId = null;
             StopAllCoroutines(); Busy = false; ClearPending();

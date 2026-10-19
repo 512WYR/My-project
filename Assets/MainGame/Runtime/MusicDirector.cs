@@ -17,6 +17,28 @@ namespace Ruin.Runtime
         private const float BattleVolume = .4f;
         private const float FadeSeconds = 1.2f;
 
+        // Player-facing music level. Kept separate from the per-track base volumes so the settings page
+        // can move a single 0..1 value and both stems scale together. Persisted, unlike the track levels.
+        private const string VolumeKey = "ruin.music.volume";
+        private static float masterVolume = -1f;
+
+        public static float MasterVolume
+        {
+            get
+            {
+                if (masterVolume < 0f) masterVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(VolumeKey, 1f));
+                return masterVolume;
+            }
+        }
+
+        public static void SetMasterVolume(float value)
+        {
+            masterVolume = Mathf.Clamp01(value);
+            PlayerPrefs.SetFloat(VolumeKey, masterVolume);
+        }
+
+        public static void SaveMasterVolume() { PlayerPrefs.Save(); }
+
         private sealed class Track
         {
             public AudioSource Source;
@@ -113,7 +135,7 @@ namespace Ruin.Runtime
             }
 
             track.Level = Mathf.MoveTowards(track.Level, target, step);
-            track.Source.volume = track.BaseVolume * track.Level;
+            track.Source.volume = track.BaseVolume * track.Level * MasterVolume;
 
             // Pause at true silence rather than stop: Unity keeps the playback position, so the next
             // exploration stretch continues instead of restarting the loop from the top.
