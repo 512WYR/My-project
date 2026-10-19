@@ -133,8 +133,16 @@ namespace GameMake.IndustrialDebugUI
         public Text LogBody;
         public Button ClearLog;
 
+#if RUIN_DEBUG_OFF
+        // Tool switch: GameMake/Debug Console/暂时关闭调试功能 adds this define. The full console stays
+        // compiled so the prefab builder and the scene's serialized fields keep working; only the
+        // runtime entrance is closed.
+        private static readonly bool Disabled = true;
+#else
+        private static readonly bool Disabled = false;
+#endif
         public static IndustrialDebugConsole Instance { get; private set; }
-        public static void ToggleFromHud() { if (Instance) Instance.Toggle(); }
+        public static void ToggleFromHud() { if (!Disabled && Instance) Instance.Toggle(); }
 
         private StageOneApp bound;
         private bool opened;
@@ -166,7 +174,7 @@ namespace GameMake.IndustrialDebugUI
             SkillForm.Basic, SkillForm.Technical, SkillForm.Primal
         };
 
-        private void Awake() { Instance = this; }
+        private void Awake() { Instance = this; if (Disabled) gameObject.SetActive(false); }
         private void OnDestroy()
         {
             if (opened) StageOneApp.DebugOverlayOpen = false;
@@ -1376,8 +1384,8 @@ namespace GameMake.IndustrialDebugUI
     }
 #else
     /// <summary>
-    /// Release-build shell. The prefab still carries this component so the scene keeps its shape, but
-    /// the console is switched off and the launcher is never shown.
+    /// Release-build or debug-disabled shell. The prefab still carries this component so the scene
+    /// keeps its shape, but the console is switched off and the launcher is never shown.
     /// </summary>
     public sealed class IndustrialDebugConsole : MonoBehaviour
     {

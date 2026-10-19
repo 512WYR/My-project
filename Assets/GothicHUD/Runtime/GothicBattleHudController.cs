@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !RUIN_DEBUG_OFF
 using GameMake.IndustrialDebugUI;
 #endif
 using Ruin.Core;
@@ -95,7 +95,7 @@ namespace GameMake.GothicHUD
             // only as serialized history; the authored console owns every readout and command now.
             if (DebugButton)
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !RUIN_DEBUG_OFF
                 DebugButton.onClick.AddListener(IndustrialDebugConsole.ToggleFromHud);
 #else
                 DebugButton.gameObject.SetActive(false);

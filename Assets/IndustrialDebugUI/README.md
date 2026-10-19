@@ -47,9 +47,22 @@
 
 修改布局或序列化字段后，请把 `IndustrialDebugConsoleBuilder.Version` 加一，这样其他机器打开工程时也会自动重建。
 
+## 临时关闭调试功能
+
+菜单 `GameMake / Debug Console / 暂时关闭调试功能` 为当前选中的构建平台写入脚本宏 `RUIN_DEBUG_OFF`，编辑器随后重编译。关闭期间：
+
+- 调试台在 `Awake` 中自禁用，顶部「调试台 · DEBUG」与 HUD 右上角「调试台」都不会出现；
+- 战斗提示不再提到调试台；
+- 事件预览场景不再强制进入 `EVT-003`。
+
+菜单 `GameMake / Debug Console / 恢复调试功能` 删除该宏，全部入口恢复；`查看调试功能状态` 会在 Console 打印当前状态。宏按构建平台保存在 ProjectSettings 中，重启编辑器后仍然有效，直到手动恢复；切换构建平台后需要在那个平台下再执行一次。写入宏会触发域重载，所以请先退出播放模式。
+
+这个开关只关闭入口；`StageOneApp.Debug*` 命令仍编译在 `Ruin.Runtime` 里，自动化验证和测试可以继续调用。
+
 ## 运行时约定
 
 - `Source` 为空时会在场景里查找 `StageOneApp`；两者必须在同一场景。
 - 所有命令通过 `StageOneApp.Debug*` 方法执行，最终都会 `Refresh()`，因此调试台、Gothic HUD 和旧 UI 读到的是同一份状态。
 - 控制台打开时会把 `StageOneApp.DebugOverlayOpen` 设为 true，并消费当帧的 `Esc`，避免同时清掉战斗中的待选目标。
 - 只在 `UNITY_EDITOR || DEVELOPMENT_BUILD` 下编译完整实现；正式包中的占位实现会在 `Awake` 关闭对象，prefab 可以继续留在场景里。
+- 编辑器/开发包中定义了 `RUIN_DEBUG_OFF` 时，完整实现仍参与编译（prefab 构建器依赖它的序列化字段），但运行时入口会在 `Awake` 关闭对象。

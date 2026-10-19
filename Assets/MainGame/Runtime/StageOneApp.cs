@@ -794,7 +794,10 @@ namespace Ruin.Runtime
                 // An exception in a presentation hook must not leave the turn locked out forever.
                 Busy = false;
                 if (Battle != null && Battle.Current != null && Battle.Current.Player) InspectedId = Battle.Current.Id;
-                Hint = "选择技能，再点击高亮目标。Esc 取消目标；右上角「调试台」提供验收命令与后台信息。";
+                Hint = "选择技能，再点击高亮目标。Esc 取消目标。";
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !RUIN_DEBUG_OFF
+                Hint += "右上角「调试台」提供验收命令与后台信息。";
+#endif
                 Refresh();
             }
         }

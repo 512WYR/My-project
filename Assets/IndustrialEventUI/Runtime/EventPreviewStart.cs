@@ -10,7 +10,7 @@ namespace GameMake.EventUI
         IEnumerator Start()
         {
             while(Source && Source.Run==null) yield return null;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !RUIN_DEBUG_OFF
             if(Source) Source.DebugForceEvent("EVT-003");
 #endif
         }
