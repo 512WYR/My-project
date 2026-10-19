@@ -45,24 +45,16 @@ namespace Ruin.Core
         { Id = id; Name = name; Part = part; Description = description; }
     }
 
-    // Which part an enemy action mauls, and how often. Only the enemies that physically strike carry one.
-    [Serializable]
-    public sealed class LimbAttackSpec
-    {
-        public LimbPart Part = LimbPart.Arm;
-        public double Chance = 0.5;
-        public bool HeavyRoundsOnly; // The cleaver mauls only on its heavy swing, which lands on even rounds.
-        public LimbAttackSpec() { }
-        public LimbAttackSpec(LimbPart part, double chance, bool heavyRoundsOnly)
-        { Part = part; Chance = chance; HeavyRoundsOnly = heavyRoundsOnly; }
-    }
-
     [Serializable]
     public sealed class LimbRules
     {
         // One limb hit removes ceil(part max * HitRatio). At the default 0.5 that reads as: one hit is an
-        // injury, two hits sever the part.
+        // injury, two hits sever the part. Used by the debug tools and by accessories that spend a limb.
         public double HitRatio = 0.5;
+        // Every landed enemy attack also removes ceil(actual HP damage * DamageRatio) from one random
+        // intact part. At the default 0.5 a 14-damage elite takes 7 off a part, while a 3-damage minion
+        // only chips it. Zero or invalid falls back to the default.
+        public double DamageRatio = 0.5;
         public LimbPartRule[] Parts;          // Null falls back to LimbSystem.DefaultParts.
         public ProstheticSpec[] Prosthetics;  // Null falls back to LimbSystem.DefaultProsthetics.
     }

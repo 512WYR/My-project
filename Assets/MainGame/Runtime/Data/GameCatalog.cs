@@ -66,6 +66,9 @@ namespace Ruin.Runtime
         // One crippling blow always lands exactly half of a part's maximum, so a part is injured on the
         // first hit and severed on the second, for every hero and every part.
         [Range(0.05f, 1)] public float LimbHitRatio = 0.5f;
+        // Share of a landed attack's actual HP damage that is also taken from one random intact part.
+        // This is the single knob for how fast normal fights wear the party down.
+        [Range(0, 2)] public float LimbDamageRatio = 0.5f;
         [Range(0.05f, 1)] public float LimbHeadRatio = 0.3f;
         [Range(0.05f, 1)] public float LimbTorsoRatio = 0.45f;
         [Range(0.05f, 1)] public float LimbArmRatio = 0.35f;
@@ -118,7 +121,7 @@ namespace Ruin.Runtime
         // fields, so keeping content here would silently produce empty references.
         public LimbRules LimbRules()
         {
-            return new LimbRules { HitRatio = LimbHitRatio, Parts = new[]
+            return new LimbRules { HitRatio = LimbHitRatio, DamageRatio = LimbDamageRatio, Parts = new[]
             {
                 new LimbPartRule(LimbPart.Head, LimbHeadRatio, LimbHeadInjured, LimbHeadSevered),
                 new LimbPartRule(LimbPart.Torso, LimbTorsoRatio, LimbTorsoInjured, LimbTorsoSevered),

@@ -821,11 +821,9 @@ namespace Ruin.Core
                 case EnemyPattern.Hunter: text = "追猎 → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 流血2×2"; break;
                 default: text = (Round % 2 == 0 ? "重劈" : "斩击") + " → " + target.Name + "\n伤害" + EnemyDamage(enemy) + " · 前排"; break;
             }
-            // A crippling attack has to be announced. This stays pure so re-rendering costs no draws.
-            var spec = LimbSystem.ForPattern(enemy.Definition.Pattern);
-            if (spec != null && (!spec.HeavyRoundsOnly || Round % 2 == 0))
-                text += "\n可能重创" + LimbSystem.PartName(spec.Part);
-            return text;
+            // Every physical hit wears a random part, so the card can say so without a pattern lookup.
+            // This stays pure so re-rendering costs no draws.
+            return text + "\n命中磨损随机部位";
         }
 
         // Pure preview: it reads the round and the action counter but never draws from the random sequence,
@@ -885,7 +883,7 @@ namespace Ruin.Core
             string text = skill.Name + " → " + target + "\n伤害 " + SkillValue(enemy, skill);
             if (skill.Bleed > 0) text += " · 流血 " + skill.Bleed + "×" + skill.BleedTurns;
             if (skill.Accuracy < 0.9) text += " · 命中 " + (AccuracyPercent(enemy, skill)).ToString("0") + "%";
-            return text;
+            return text + " · 磨损部位";
         }
 
         private double AccuracyPercent(ActorState enemy, SkillSpec skill) { return EffectiveAccuracy(enemy, skill) * 100; }
@@ -973,12 +971,12 @@ namespace Ruin.Core
                 Log(enemy.Name + " 发动" + (enemy.Definition.Pattern == EnemyPattern.Whisperer ? "低语。" : "攻击。"), "action", enemy.Id, target.Id);
                 int amount = EnemyDamage(enemy);
                 if (guarded) amount = ReduceForGuard(amount, target);
-                Damage(target, amount, enemy.Id);
+                int dealt = Damage(target, amount, enemy.Id);
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Whisperer)
                 { ChangeSanity(target, -14, "受到低语侵蚀"); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
                 { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id); }
-                if (!target.Dead) TryLimbDamage(enemy, target);
+                if (!target.Dead) WearLimb(target, dealt, enemy.Id);
                 TryCounter(target, enemy);
             }
         }
@@ -1249,12 +1247,15 @@ namespace Ruin.Core
                 }
                 int amount = Math.Max(0, SkillValue(enemy, skill));
                 if (guarded) amount = ReduceForGuard(amount, target);
-                Damage(target, amount, enemy.Id);
-                if (!target.Dead) ApplyOnHit(enemy, target, skill, true);
-                // Designed monsters use the same limb track as the legacy pattern enemies. Without this
-                // call only the three scripted dummies could ever cripple a hero, so every normal fight
-                // left all four parts at full health. Misses, dodges and blocks above never reach here.
-                if (!target.Dead) TryLimbDamage(enemy, target);
+                int dealt = Damage(target, amount, enemy.Id);
+                if (!target.Dead)
+                {
+                    ApplyOnHit(enemy, target, skill, true);
+                    // Both the legacy dummies and every designed monster wear the same limb track. The
+                    // loss is read from the actual post-mitigation damage, so a miss, dodge or block
+                    // above never reaches here and spends no draw.
+                    WearLimb(target, dealt, enemy.Id);
+                }
                 TryCounter(target, enemy);
             }
         }
@@ -1500,23 +1501,24 @@ namespace Ruin.Core
             return true;
         }
 
-        // Limb damage is a second track next to HP, so it only rolls once the attack has actually landed.
-        // A miss, a non-crippling pattern, an off-turn heavy swing and an already severed part all spend
-        // no draw at all.
-        private void TryLimbDamage(ActorState enemy, ActorState target)
+        // Limb damage is a second track next to HP. Every attack that actually lands removes a share of
+        // the real HP damage from one random intact part: light minions chip away, elites and bosses can
+        // sever a part in a couple of hits. All guards below sit before the draw, so a miss, a block, a
+        // locked limb track or a fully severed body never consumes a random number.
+        private void WearLimb(ActorState target, int dealt, string sourceId)
         {
-            if (!target.Player) return;
-            // 金丝苹果 locks the limb track too. Returning here also keeps the chance draw untouched.
+            if (!target.Player || target.Dead || dealt <= 0) return;
+            // 金丝苹果 locks the limb track too. Returning here also keeps the part draw untouched.
             if (AccessorySystem.LimbLock(target)) return;
-            var spec = LimbSystem.ForPattern(enemy.Definition.Pattern);
-            if (spec == null) return;
-            if (spec.HeavyRoundsOnly && Round % 2 != 0) return;
-            if (LimbSystem.ConditionOf(target, spec.Part) == LimbCondition.Severed) return;
-            if (!Roll(spec.Chance)) return;
-            int amount = LimbSystem.HitAmount(target, spec.Part, Rules.Limbs);
-            bool severed = LimbSystem.Damage(target, spec.Part, amount);
-            Log(target.Name + " 的" + LimbSystem.PartName(spec.Part) + "受到 " + amount + " 点部位伤害，"
-                + (severed ? "已经断肢！" : "陷入重伤。"), "limb", enemy.Id, target.Id, amount);
+            if (target.Limbs == null || !target.Limbs.Any(l => l != null && l.Hp > 0)) return;
+            var part = AccessorySystem.RandomPart(Run.Random, target, true);
+            var limb = LimbSystem.Get(target, part);
+            if (limb == null || limb.Hp <= 0) return;
+            int loss = Math.Max(1,
+                (int)Math.Ceiling(dealt * LimbSystem.EffectiveDamageRatio(Rules.Limbs) - 1e-9));
+            bool severed = LimbSystem.Damage(target, part, loss);
+            Log(target.Name + " 的" + LimbSystem.PartName(part) + "受到 " + loss + " 点部位伤害，"
+                + (severed ? "已经断肢！" : "陷入重伤。"), "limb", sourceId, target.Id, loss);
         }
 
         public void ChangeSanity(ActorState actor, double amount, string reason)
@@ -1548,10 +1550,12 @@ namespace Ruin.Core
         // A direct loss skips defence and the round-scoped vulnerability, but still goes through the
         // accessories that care about HP reaching zero. selfInflicted only excludes the rust medal's own
         // entry cost from its damage accumulation.
-        public void Damage(ActorState actor, int amount, string sourceId = null, bool bleeding = false,
+        // Returns the HP damage actually applied after defence, guard and vulnerability. Callers that
+        // layer a second effect on the same hit (limb wear) use this number instead of the raw amount.
+        public int Damage(ActorState actor, int amount, string sourceId = null, bool bleeding = false,
             bool direct = false, bool selfInflicted = false)
         {
-            if (actor == null || actor.Dead || amount <= 0) return;
+            if (actor == null || actor.Dead || amount <= 0) return 0;
             int actual = amount;
             if (!bleeding && !direct)
             {
@@ -1581,7 +1585,9 @@ namespace Ruin.Core
                         + (severed ? "已经断肢！" : "陷入重伤。"), "limb", null, actor.Id, hit);
                 }
                 ChangeSanity(actor, -AccessorySystem.SleepSanityDrain, "假寐药剂的代价");
-                return;
+                // The potion already spent a limb on its own; returning zero keeps the attack site from
+                // wearing a second part for the same hit.
+                return 0;
             }
 
             // 殉道锁链: at zero HP, spend one intact limb instead of entering the death check.
@@ -1593,7 +1599,7 @@ namespace Ruin.Core
                 {
                     Log(actor.Name + " 的四肢已经全部断去，殉道锁链再也付不出代价。", "death", null, actor.Id);
                     Kill(actor, sourceId);
-                    return;
+                    return 0;
                 }
                 var part = AccessorySystem.RandomPart(Run.Random, actor, true);
                 var limb = LimbSystem.Get(actor, part);
@@ -1602,7 +1608,8 @@ namespace Ruin.Core
                 Log(actor.Name + " 的殉道锁链消耗" + LimbSystem.PartName(part) + "，恢复 " + actor.Hp + " 点生命。",
                     "heal", null, actor.Id, actor.Hp);
                 ChangeSanity(actor, -AccessorySystem.MartyrSanityLoss, "殉道锁链");
-                return;
+                // The chain already consumed a limb instead of the HP loss.
+                return 0;
             }
 
             // 金丝苹果: the HP track is locked at one, so a hit can never take the last point.
@@ -1616,7 +1623,7 @@ namespace Ruin.Core
             if (!bleeding && !direct && actor.Player && AccessorySystem.Has(actor, AccessoryKind.GoldenApple))
             {
                 ChangeSanity(actor, -AccessorySystem.AppleSanityPerHit, "金丝苹果");
-                if (actor.Dead) return;
+                if (actor.Dead) return actual;
             }
 
             if (!actor.Player && actor.Hp == 0) Kill(actor, sourceId);
@@ -1629,6 +1636,7 @@ namespace Ruin.Core
 
             if (actor.Player && !actor.Dead && !direct && !selfInflicted)
                 AccumulateRustDamage(actor, actual);
+            return actual;
         }
 
         // 锈血勋章 counts real incoming damage. Every full threshold buys one more 「带伤强攻」 use for this

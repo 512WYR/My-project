@@ -55,7 +55,7 @@ hud.SetVitals(characterIndex, health, maxHealth, sanity);
 
 SetLimbHealth 在数值为 0 时换为破损图，大于 0 时恢复正常图。SetLimbBroken(false) 将耗尽的部位恢复至最大值。切换角色会保留各自损伤状态，不会互相影响。
 
-现有 StageOne 战斗模型没有肢体伤害字段，因此本次实现独立的肢体状态层及 UI 绑定。在后续肢体伤害结算处调用上述接口即可；普通生命伤害不会自行导致某一部位损坏。
+StageOne 战斗模型现在会在敌方攻击命中后结算部位伤害；本 UI 仍只读取 `LimbSystem` 的部位状态并绑定显示，不自行计算伤害。战斗刷新时同步四个部位的血量与断肢标记。
 
 ## 回合数字和位移
 
@@ -121,7 +121,7 @@ mainScene 中的 HUD 实例把 Follow Stage One Battle 关掉，由 `GothicBattl
 - 各角色独立肢体状态、血条比例与数值边界。
 - 角色选择、技能选择、位移按钮事件。
 
-测试覆盖本 UI 的状态、显示和按钮事件；未模拟完整 StageOne 战斗中自动结算的肢体伤害，因为现有战斗系统尚无该机制。
+测试覆盖本 UI 的状态、显示和按钮事件；自动部位伤害由 `BattleEngine.WearLimb` 在规则层结算，UI 只负责刷新。
 
 当前渲染图和检查报告：D:/GameMake/交付/哥特HUD/新版/
 旧版完整备份：D:/GameMake/交付/哥特HUD/备份-20261011/GothicHUD-before-modular.zip

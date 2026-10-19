@@ -11,6 +11,7 @@ namespace Ruin.Core
     public static class LimbSystem
     {
         public const double DefaultHitRatio = 0.5;
+        public const double DefaultDamageRatio = 0.5;
 
         public static readonly LimbPartRule[] DefaultParts =
         {
@@ -38,10 +39,19 @@ namespace Ruin.Core
             return new LimbRules
             {
                 HitRatio = Finite(source.HitRatio) && source.HitRatio > 0 ? source.HitRatio : DefaultHitRatio,
+                DamageRatio = EffectiveDamageRatio(source),
                 Parts = UsableParts(source.Parts) ? CloneParts(source.Parts) : CloneParts(DefaultParts),
                 Prosthetics = UsableProsthetics(source.Prosthetics)
                     ? CloneProsthetics(source.Prosthetics) : CloneProsthetics(DefaultProsthetics)
             };
+        }
+
+        // Read on every landed hit. Keeping this separate from Resolve avoids cloning the part and
+        // prosthetic tables just to fetch one scalar.
+        public static double EffectiveDamageRatio(LimbRules rules)
+        {
+            double ratio = rules == null ? 0 : rules.DamageRatio;
+            return Finite(ratio) && ratio > 0 ? ratio : DefaultDamageRatio;
         }
 
         public static List<LimbState> CreateLimbs(int maxHp, LimbRules rules)
@@ -163,18 +173,6 @@ namespace Ruin.Core
             if (limb.Hp <= 0) return 1 - rule.SeveredPenalty;
             if (limb.Hp * 2 <= limb.MaxHp) return 1 - rule.InjuredPenalty;
             return 1;
-        }
-
-        // Which enemy actions maul a hero. The whisperer applies sanity pressure instead of physical
-        // damage, so it never carries one.
-        public static LimbAttackSpec ForPattern(EnemyPattern pattern)
-        {
-            switch (pattern)
-            {
-                case EnemyPattern.Cleaver: return new LimbAttackSpec(LimbPart.Arm, 0.5, true);
-                case EnemyPattern.Hunter: return new LimbAttackSpec(LimbPart.Leg, 0.35, false);
-                default: return null;
-            }
         }
 
         public static string PartName(LimbPart part)

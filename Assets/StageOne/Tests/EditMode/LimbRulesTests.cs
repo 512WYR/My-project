@@ -30,12 +30,21 @@ namespace Ruin.Tests
                 BasicSkills = new[] { hit }, PrimalSkills = new[] { hit }, TechnicalSkills = new[] { hit } };
         }
 
-        // 速度 100 保证敌人先手，命中 1 且目标闪避 0 保证不掷命中骰，这样抽取次数只剩部位概率。
+        // 速度 100 保证敌人先手。技能命中拉到 1、目标闪避 0，命中骰不抽取；命中后只剩一次选部位。
         private static ActorSpec Foe(EnemyPattern pattern, int maxHp)
         {
             var spec = Fighter("foe", maxHp, 100);
             spec.Pattern = pattern; spec.Accuracy = 1;
+            foreach (var skill in spec.BasicSkills) skill.Accuracy = 1;
             return spec;
+        }
+
+        // 无技能 + Simple 走 legacy 路径，用来验证旧敌人也遵守同一套磨损规则。
+        private static ActorSpec LegacyFoe(EnemyPattern pattern)
+        {
+            return new ActorSpec { Id = "legacy", Name = "legacy", MaxHp = 200, Speed = 100, Attack = 10,
+                Accuracy = 1, Pattern = pattern, Behavior = EnemyBehavior.Simple,
+                BasicSkills = ActorSpec.EmptySkills };
         }
 
         private LimbPartRule Rule(LimbPart part) { return Rules().Parts.First(x => x.Part == part); }
@@ -201,94 +210,137 @@ namespace Ruin.Tests
             Assert.AreEqual("没有相邻的存活队员", battle.SwapDisabledReason(), "孤身一人时无处换位");
         }
 
-        [Test] public void OnlyCleaverAndHunterCarryALimbAttack()
-        {
-            Assert.IsNull(LimbSystem.ForPattern(EnemyPattern.Whisperer), "低语者用理智施压，不做部位攻击");
-            var cleaver = LimbSystem.ForPattern(EnemyPattern.Cleaver);
-            Assert.AreEqual(LimbPart.Arm, cleaver.Part);
-            Assert.IsTrue(cleaver.HeavyRoundsOnly, "执斧者只在重劈的偶数回合重创手臂");
-            var hunter = LimbSystem.ForPattern(EnemyPattern.Hunter);
-            Assert.AreEqual(LimbPart.Leg, hunter.Part);
-            Assert.IsFalse(hunter.HeavyRoundsOnly, "追猎者每次命中都可能重创腿部");
-        }
-
-        [Test] public void HeavySwingRollsOnlyOnEvenRounds()
+        [Test] public void AttackIntentWarnsAboutLimbWearWithoutConsumingADraw()
         {
             var run = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
             var battle = new BattleEngine(run, new[] { Foe(EnemyPattern.Cleaver, 200) }, catalog.Rules());
-            Assert.AreEqual(1, battle.Round);
-            Assert.IsFalse(battle.Current.Player);
-
-            // 奇数回合只有斩击：除了 Advance 抽下一次行动的形态，不消耗任何随机数。
             uint before = run.Random.State;
-            battle.ExecuteEnemy();
-            Assert.IsFalse(battle.Events.Any(e => e.Kind == "limb"), "斩击回合不该造成部位伤害");
-            Assert.AreEqual(Drained(before, 1), run.Random.State, "斩击回合不掷部位概率");
-
-            Assert.IsTrue(battle.Current.Player);
-            string error;
-            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, battle.Enemies[0].Id, 0), out error), error);
-            Assert.AreEqual(2, battle.Round);
-            Assert.IsFalse(battle.Current.Player);
-
-            // 偶数回合是重劈：多出来的那一次抽取就是部位概率，命中与否都会先掷。
-            uint before2 = run.Random.State;
-            battle.ExecuteEnemy();
-            Assert.AreEqual(Drained(before2, 2), run.Random.State, "重劈命中后正好多掷一次部位概率");
-        }
-
-        [Test] public void IntentWarnsAboutTheThreatWithoutConsumingADraw()
-        {
-            var run = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
-            var battle = new BattleEngine(run, new[] { Foe(EnemyPattern.Cleaver, 200) }, catalog.Rules());
-            var foe = battle.Enemies[0];
-            uint before = run.Random.State;
-            Assert.IsFalse(battle.Intent(foe).Contains("可能重创"), "斩击回合不该预告部位威胁");
+            Assert.IsTrue(battle.Intent(battle.Enemies[0]).Contains("磨损"), "攻击意图应预告部位磨损");
             Assert.AreEqual(before, run.Random.State, "行动预告不消耗随机序列");
 
-            string error;
-            Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, battle.Enemies[0].Id, 0), out error), error);
-            Assert.IsTrue(battle.Intent(foe).Contains("可能重创手臂"), "重劈回合必须预告部位威胁");
-
-            var hunterRun = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
-            var hunterBattle = new BattleEngine(hunterRun, new[] { Foe(EnemyPattern.Hunter, 200) }, catalog.Rules());
-            Assert.IsTrue(hunterBattle.Intent(hunterBattle.Enemies[0]).Contains("可能重创腿部"));
-
-            var whisperRun = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
-            var whisperBattle = new BattleEngine(whisperRun, new[] { Foe(EnemyPattern.Whisperer, 200) }, catalog.Rules());
-            Assert.IsFalse(whisperBattle.Intent(whisperBattle.Enemies[0]).Contains("可能重创"));
+            var legacyRun = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
+            var legacyBattle = new BattleEngine(legacyRun, new[] { LegacyFoe(EnemyPattern.Cleaver) }, catalog.Rules());
+            uint legacyBefore = legacyRun.Random.State;
+            Assert.IsTrue(legacyBattle.Intent(legacyBattle.Enemies[0]).Contains("磨损"));
+            Assert.AreEqual(legacyBefore, legacyRun.Random.State, "legacy 预告同样不消耗随机序列");
         }
 
-        [Test] public void WhispererBattleNeverDamagesLimbs()
+        [Test] public void WhispererPhysicalHitsStillWearLimbs()
         {
-            var run = Run(50);
-            var specs = catalog.Enemies.Select(x => x.ToSpec()).ToArray();
-            foreach (var spec in specs) spec.Pattern = EnemyPattern.Whisperer;
-            var battle = new BattleEngine(run, specs, catalog.Rules());
-            int actions = 0;
-            while (battle.Outcome == BattleOutcome.Active && actions++ < 240)
+            // Legacy 低语者仍造成 HP 伤害，所以会磨损；只带理智技能的 designed 版本不会。
+            var run = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
+            var battle = new BattleEngine(run, new[] { LegacyFoe(EnemyPattern.Whisperer) }, catalog.Rules());
+            battle.ExecuteEnemy();
+            Assert.IsTrue(battle.Events.Any(e => e.Kind == "limb"), "低语者的物理命中同样磨损部位");
+            Assert.IsTrue(LimbSystem.AnyLimbDamaged(run.Heroes[0]));
+
+            var whisper = Fighter("whisperer", 300, 100);
+            whisper.Behavior = EnemyBehavior.Sanity;
+            whisper.BasicSkills = new[]
             {
-                if (!battle.Current.Player) { battle.ExecuteEnemy(); continue; }
-                PlaySomething(battle);
-            }
-            Assert.IsFalse(battle.Events.Any(e => e.Kind == "limb"));
-            Assert.IsFalse(run.Heroes.Any(LimbSystem.AnyLimbDamaged), "低语者不该伤到任何部位");
+                new SkillSpec { Id = "whisper", Name = "低语", Effect = SkillEffect.Sanity, Target = TargetSide.Enemy,
+                    TargetRanks = 15, SanityDamage = 10, Accuracy = 1 }
+            };
+            var sanityRun = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
+            var sanityBattle = new BattleEngine(sanityRun, new[] { whisper }, catalog.Rules());
+            sanityBattle.ExecuteEnemy();
+            Assert.IsFalse(sanityBattle.Events.Any(e => e.Kind == "limb"), "纯理智技能不造成 HP 伤害，也不磨损部位");
+            Assert.IsFalse(LimbSystem.AnyLimbDamaged(sanityRun.Heroes[0]));
         }
 
-        [Test] public void CleaverBattleEventuallyDamagesAnArm()
+        [Test] public void LandedHitsWearRandomUnseveredLimbsProportionally()
         {
             var run = RunState.Create(new[] { Fighter("guard", 500, 1) }, 44972, 50, catalog.Rules());
             var battle = new BattleEngine(run, new[] { Foe(EnemyPattern.Cleaver, 300) }, catalog.Rules());
             int actions = 0;
-            while (battle.Outcome == BattleOutcome.Active && actions++ < 400)
+            while (battle.Outcome == BattleOutcome.Active && actions++ < 200
+                && battle.Events.Count(e => e.Kind == "limb") < 6)
             {
-                if (!battle.Current.Player) { battle.ExecuteEnemy(); continue; }
-                string error;
-                Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, battle.Enemies[0].Id, 0), out error), error);
+                if (battle.Current.Player) { battle.SkipCurrentTurn(out _); continue; }
+                battle.ExecuteEnemy();
             }
-            Assert.That(battle.Events.Select(e => e.Kind), Does.Contain("limb"), "执斧者的重劈最终应重创手臂");
-            Assert.IsTrue(LimbSystem.AnyLimbDamaged(run.Heroes[0]));
-            Assert.AreEqual(LimbCondition.Severed, LimbSystem.ConditionOf(run.Heroes[0], LimbPart.Arm), "足够多的重劈应当打断手臂");
+
+            var limbs = battle.Events.Where(e => e.Kind == "limb").ToList();
+            Assert.That(limbs, Is.Not.Empty, "命中的攻击必须磨损部位");
+            // 英雄防御 0，Foe 技能伤害 10，默认比例 0.5，所以每击正好 5 点。
+            Assert.IsTrue(limbs.All(e => e.Amount == 5), "部位损伤应为实际伤害的一半");
+            var hero = run.Heroes[0];
+            int lost = EveryPart.Sum(p => LimbSystem.Get(hero, p).MaxHp - LimbSystem.Get(hero, p).Hp);
+            Assert.AreEqual(5 * limbs.Count, lost, "每次命中只磨损一个部位");
+            Assert.IsTrue(LimbSystem.AnyLimbDamaged(hero));
+        }
+
+        [Test] public void LimbWearUsesPostMitigationDamage()
+        {
+            var plain = RunState.Create(new[] { Fighter("plain", 200, 1) }, 1, 50, catalog.Rules());
+            var guarded = RunState.Create(new[] { Fighter("guarded", 200, 1) }, 1, 50, catalog.Rules());
+            guarded.Heroes[0].Definition.Defense = 0.5;
+            var a = new BattleEngine(plain, new[] { Foe(EnemyPattern.Cleaver, 300) }, catalog.Rules());
+            var b = new BattleEngine(guarded, new[] { Foe(EnemyPattern.Cleaver, 300) }, catalog.Rules());
+            a.ExecuteEnemy();
+            b.ExecuteEnemy();
+
+            Assert.AreEqual(5, a.Events.Where(e => e.Kind == "limb").Sum(e => e.Amount));
+            Assert.AreEqual(3, b.Events.Where(e => e.Kind == "limb").Sum(e => e.Amount),
+                "防御把 10 点伤害降到 5 点，部位损伤随实际伤害降到 3");
+        }
+
+        [Test] public void LimbWearNeverTouchesASeveredPart()
+        {
+            var run = RunState.Create(new[] { Fighter("guard", 500, 1) }, 1, 50, catalog.Rules());
+            var hero = run.Heroes[0];
+            foreach (var part in new[] { LimbPart.Head, LimbPart.Torso, LimbPart.Arm })
+                LimbSystem.Damage(hero, part, 9999);
+            int legBefore = LimbSystem.Get(hero, LimbPart.Leg).Hp;
+
+            var battle = new BattleEngine(run, new[] { Foe(EnemyPattern.Cleaver, 300) }, catalog.Rules());
+            int hits = 0;
+            while (battle.Outcome == BattleOutcome.Active && hits < 5)
+            {
+                if (battle.Current.Player) { battle.SkipCurrentTurn(out _); continue; }
+                battle.ExecuteEnemy();
+                hits++;
+            }
+
+            var events = battle.Events.Where(e => e.Kind == "limb").ToList();
+            Assert.AreEqual(5, events.Count);
+            Assert.AreEqual(legBefore - events.Sum(e => e.Amount), LimbSystem.Get(hero, LimbPart.Leg).Hp,
+                "只剩腿部时，所有磨损都应落在腿部");
+            foreach (var part in new[] { LimbPart.Head, LimbPart.Torso, LimbPart.Arm })
+                Assert.AreEqual(LimbCondition.Severed, LimbSystem.ConditionOf(hero, part), "已断部位不再承受伤害");
+        }
+
+        [Test] public void GoldenAppleLocksLimbWearWithoutConsumingADraw()
+        {
+            var run = RunState.Create(new[] { Fighter("guard", 200, 1) }, 1, 50, catalog.Rules());
+            var hero = run.Heroes[0];
+            AccessorySystem.Attach(hero, AccessorySystem.Find("acc_apple"));
+            var battle = new BattleEngine(run, new[] { Foe(EnemyPattern.Cleaver, 300) }, catalog.Rules());
+            uint before = run.Random.State;
+            battle.ExecuteEnemy();
+
+            Assert.IsFalse(battle.Events.Any(e => e.Kind == "limb"), "金丝苹果锁定部位轨道");
+            Assert.IsFalse(LimbSystem.AnyLimbDamaged(hero));
+            // Advance 切到玩家时会抽取一次技能形态；除此之外没有部位抽取。
+            Assert.AreEqual(Drained(before, 1), run.Random.State, "锁定在部位抽取之前返回，随机序列只前进到形态抽取");
+        }
+
+        [Test] public void MultiTargetAttackWearsEachVictimOnce()
+        {
+            var skill = new SkillSpec { Id = "sweep", Name = "横扫", Effect = SkillEffect.Attack,
+                Target = TargetSide.Enemy, Multiplier = 1, ActorRanks = 15, TargetRanks = 15,
+                Accuracy = 1, TargetCount = 2 };
+            var foe = Fighter("foe", 300, 100);
+            foe.Attack = 10; foe.Accuracy = 1;
+            foe.BasicSkills = new[] { skill };
+            var run = RunState.Create(new[] { Fighter("a", 100, 1), Fighter("b", 100, 2) }, 1, 50, catalog.Rules());
+            var battle = new BattleEngine(run, new[] { foe }, catalog.Rules());
+            battle.ExecuteEnemy();
+
+            var events = battle.Events.Where(e => e.Kind == "limb").ToList();
+            Assert.AreEqual(2, events.Count, "多目标技能每个命中英雄各磨损一个部位");
+            Assert.IsTrue(events.All(e => e.Amount == 5));
+            Assert.IsTrue(run.Heroes.All(LimbSystem.AnyLimbDamaged));
         }
 
         [Test] public void MissingLimbRulesFallBackToTheDefaults()
@@ -297,6 +349,8 @@ namespace Ruin.Tests
             Assert.AreEqual(4, broken.Parts.Length, "旧资产缺字段时回落到默认部位表");
             Assert.AreEqual(4, broken.Prosthetics.Length, "义肢表回落到四件默认义肢");
             Assert.That(broken.HitRatio, Is.EqualTo(LimbSystem.DefaultHitRatio).Within(1e-12));
+            Assert.That(broken.DamageRatio, Is.EqualTo(LimbSystem.DefaultDamageRatio).Within(1e-12),
+                "旧资产缺字段时回落默认磨损比例");
             Assert.AreEqual(4, LimbSystem.Resolve(null).Parts.Length);
 
             var hero = Run().Heroes[0];
