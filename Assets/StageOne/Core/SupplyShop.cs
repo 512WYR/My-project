@@ -18,13 +18,18 @@ namespace Ruin.Core
     public static class SupplyShop
     {
         // Initial balance, in the run-wide ore currency (Map.Supplies, displayed as 矿石).
-        public const int ProstheticPrice=4, AccessoryPrice=6, HealthPrice=2, SanityPrice=3, SurgeryPrice=3;
+        public const int ProstheticPrice=4, AccessoryPrice=6, HealthPrice=3, SanityPrice=3, SurgeryPrice=3;
+        // Supply-station services. Installing a prosthetic always costs one ore. The first severe-limb
+        // repair at each station is free and every later repair costs one ore. Healing the party and
+        // calming are free on the second floor and cost two ore on later floors.
+        public const int InstallPrice=1, RepairPrice=1;
+        public const int StationHealPrice=2, StationCalmPrice=2, FreeStationFloor=2;
 
         public static List<ShopProduct> Products(LimbRules rules)
         {
             var products=new List<ShopProduct>();
             foreach(var item in LimbSystem.Resolve(rules).Prosthetics)
-                products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+" 仅断肢可安装。",Category=ShopCategory.Prosthetic,Price=ProstheticPrice,Prosthetic=item});
+                products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+" 仅断肢可安装；在补给站安装另需 "+InstallPrice+" 矿石。",Category=ShopCategory.Prosthetic,Price=ProstheticPrice,Prosthetic=item});
             foreach(var item in AccessorySystem.Defaults)
                 products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+Restriction(item),Category=ShopCategory.Accessory,Price=AccessoryPrice,Accessory=item});
             foreach(var item in ConsumableSystem.Defaults)

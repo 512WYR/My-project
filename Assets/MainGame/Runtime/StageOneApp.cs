@@ -284,7 +284,7 @@ namespace Ruin.Runtime
         {
             StopAllCoroutines(); Busy = false; ClearPending(); Battle = null;
             Room = RoomView.Supply; AwaitingNode = true; RoomNote = null;
-            Run.Map.SupplyHealed = false; Run.Map.SupplyCalmed = false;
+            Run.Map.SupplyHealed = false; Run.Map.SupplyCalmed = false; Run.Map.SupplyRepairFreeUsed = false;
             Hint = "补给站：治疗全队、修复重伤部位、为断肢安装义肢、静养恢复理智。离开后继续前进。";
             Refresh();
         }
@@ -293,9 +293,18 @@ namespace Ruin.Runtime
         {
             if (SupplyShopOpen) return;
             if (Run == null || Room != RoomView.Supply || Run.Map.SupplyHealed) return;
+            if (!Run.Heroes.Any(h => h != null && !h.Dead && h.Hp < h.Definition.MaxHp))
+            {
+                Hint = "全队生命已满，不需要治疗。";
+                Refresh(); return;
+            }
+            int price = StationPrice(SupplyShop.StationHealPrice);
+            if (price > 0 && Run.Map.Supplies < price) { Hint = "矿石不足，治疗需要 " + price + " 矿石。"; Refresh(); return; }
             int healed = Exploration.SupplyHealParty(Rules(), Run);
+            Run.Map.Supplies -= price;
             Run.Map.SupplyHealed = true;
-            Hint = "补给站为全队恢复 " + healed + " 点生命。阵亡成员不会复活。";
+            Hint = "补给站为全队恢复 " + healed + " 点生命。阵亡成员不会复活。"
+                + (price > 0 ? "消耗 " + price + " 矿石。" : "本层免费。");
             Refresh();
         }
 
@@ -303,10 +312,21 @@ namespace Ruin.Runtime
         {
             if (SupplyShopOpen) return;
             if (Run == null || Room != RoomView.Supply || Run.Map.SupplyCalmed) return;
+            if (Run.PlayerSanity >= 100) { Hint = "玩家理智已满，不需要静养。"; Refresh(); return; }
+            int price = StationPrice(SupplyShop.StationCalmPrice);
+            if (price > 0 && Run.Map.Supplies < price) { Hint = "矿石不足，静养需要 " + price + " 矿石。"; Refresh(); return; }
             double gained = Exploration.SupplyCalm(Run);
+            Run.Map.Supplies -= price;
             Run.Map.SupplyCalmed = true;
-            Hint = "全队静养，玩家理智 +" + gained.ToString("0.0") + "。";
+            Hint = "全队静养，玩家理智 +" + gained.ToString("0.0") + "。"
+                + (price > 0 ? "消耗 " + price + " 矿石。" : "本层免费。");
             Refresh();
+        }
+
+        // The second floor's station is free; every later station charges the listed price.
+        private int StationPrice(int laterFloorPrice)
+        {
+            return Run.Map.Floor <= SupplyShop.FreeStationFloor ? 0 : laterFloorPrice;
         }
 
         public void RepairLimb(string heroId, LimbPart part)
@@ -314,8 +334,15 @@ namespace Ruin.Runtime
             if (Run == null || Room != RoomView.Supply) return;
             var hero = Run.Heroes.FirstOrDefault(a => a.Id == heroId);
             if (hero == null) return;
+            if (!LimbSystem.CanRepair(hero, part)) { Hint = "只有重伤部位能在这里修复；断肢需要安装义肢。"; Refresh(); return; }
+            bool free = !Run.Map.SupplyRepairFreeUsed;
+            int price = free ? 0 : SupplyShop.RepairPrice;
+            if (price > 0 && Run.Map.Supplies < price) { Hint = "矿石不足，修复需要 " + price + " 矿石。"; Refresh(); return; }
             if (!LimbSystem.Repair(hero, part)) { Hint = "只有重伤部位能在这里修复；断肢需要安装义肢。"; Refresh(); return; }
-            Hint = hero.Name + " 的" + LimbSystem.PartName(part) + "已经修复。";
+            Run.Map.Supplies -= price;
+            Run.Map.SupplyRepairFreeUsed = true;
+            Hint = hero.Name + " 的" + LimbSystem.PartName(part) + "已经修复。"
+                + (price > 0 ? "消耗 " + price + " 矿石。" : "这是本座补给站的第一次免费修复。");
             Refresh();
         }
 
@@ -325,9 +352,17 @@ namespace Ruin.Runtime
             var hero = Run.Heroes.FirstOrDefault(a => a.Id == heroId);
             var item = Run.Prosthetics.FirstOrDefault(p => p != null && p.Id == itemId);
             if (hero == null || item == null) return;
+            if (!LimbSystem.CanInstall(hero, item)) { Hint = "只有断肢才能安装义肢。"; Refresh(); return; }
+            if (Run.Map.Supplies < SupplyShop.InstallPrice)
+            {
+                Hint = "矿石不足，安装义肢需要 " + SupplyShop.InstallPrice + " 矿石。";
+                Refresh(); return;
+            }
             if (!LimbSystem.Install(hero, item)) { Hint = "只有断肢才能安装义肢。"; Refresh(); return; }
             Run.Prosthetics.Remove(item);
-            Hint = hero.Name + " 装上了" + item.Name + "，" + LimbSystem.PartName(item.Part) + "恢复基础功能。";
+            Run.Map.Supplies -= SupplyShop.InstallPrice;
+            Hint = hero.Name + " 装上了" + item.Name + "，" + LimbSystem.PartName(item.Part) + "恢复基础功能。"
+                + "消耗 " + SupplyShop.InstallPrice + " 矿石。";
             Refresh();
         }
 

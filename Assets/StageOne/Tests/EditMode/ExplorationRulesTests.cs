@@ -550,6 +550,8 @@ namespace Ruin.Tests
             Assert.AreEqual(state, run.Random.State, "渲染祭坛页不消耗随机数");
         }
 
+        // 祭坛的理智结算给玩家或全队：队员侧每人都按报价变化一次，资源只付或只收一份。
+        // 生命增减始终作用于全队。
         [Test] public void TheAltarTradesResourcesForSanityInProportion()
         {
             var run = Run(50);
@@ -560,27 +562,36 @@ namespace Ruin.Tests
             var offer = node.AltarResourceForSanity;
             Assert.IsTrue(offer.Valid);
 
-            double sanityBefore = offer.PlayerSanity ? run.PlayerSanity
-                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
+            var heroes = run.Heroes.Where(h => !h.Dead).ToList();
+            double playerBefore = run.PlayerSanity;
+            var sanityBefore = heroes.ToDictionary(h => h.Id, h => h.Sanity);
+            var hpBefore = heroes.ToDictionary(h => h.Id, h => h.Hp);
             int suppliesBefore = run.Map.Supplies;
             int prostheticsBefore = run.Prosthetics.Count;
-            var wounded = offer.ResourceHeroId == null ? null : run.Heroes.First(h => h.Id == offer.ResourceHeroId);
-            int hpBefore = wounded == null ? 0 : wounded.Hp;
 
             EventSession session;
             Assert.IsTrue(Pick(node, 0, run, out session), "献上资源");
 
-            double sanityAfter = offer.PlayerSanity ? run.PlayerSanity
-                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
-            Assert.AreEqual(offer.SanityAmount, sanityAfter - sanityBefore, "理智增益与报价一致");
+            if (offer.PlayerSanity)
+            {
+                Assert.AreEqual(offer.SanityAmount, run.PlayerSanity - playerBefore, "玩家理智增益与报价一致");
+            }
+            else
+            {
+                foreach (var hero in heroes)
+                    Assert.AreEqual(offer.SanityAmount, hero.Sanity - sanityBefore[hero.Id],
+                        hero.Name + " 的理智增益与报价一致");
+            }
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
-                    Assert.AreEqual(suppliesBefore - offer.ResourceAmount, run.Map.Supplies, "按件扣矿石");
+                    Assert.AreEqual(suppliesBefore - offer.ResourceAmount, run.Map.Supplies, "矿石只按一份扣除");
                     Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply, offer.SanityAmount);
                     break;
                 case AltarResource.Health:
-                    Assert.AreEqual(hpBefore - offer.ResourceAmount, wounded.Hp, "按点扣生命");
+                    foreach (var hero in heroes)
+                        Assert.AreEqual(hpBefore[hero.Id] - offer.ResourceAmount, hero.Hp,
+                            hero.Name + " 按同一点数扣生命");
                     Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerHealth, offer.SanityAmount);
                     break;
                 default:
@@ -601,27 +612,37 @@ namespace Ruin.Tests
             var offer = node.AltarSanityForResource;
             Assert.IsTrue(offer.Valid);
 
-            double sanityBefore = offer.PlayerSanity ? run.PlayerSanity
-                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
+            var heroes = run.Heroes.Where(h => !h.Dead).ToList();
+            double playerBefore = run.PlayerSanity;
+            var sanityBefore = heroes.ToDictionary(h => h.Id, h => h.Sanity);
+            var hpBefore = heroes.ToDictionary(h => h.Id, h => h.Hp);
             int suppliesBefore = run.Map.Supplies;
             int prostheticsBefore = run.Prosthetics.Count;
-            var target = offer.ResourceHeroId == null ? null : run.Heroes.First(h => h.Id == offer.ResourceHeroId);
-            int hpBefore = target == null ? 0 : target.Hp;
 
             EventSession session;
             Assert.IsTrue(Pick(node, 1, run, out session), "献上理智");
 
-            double sanityAfter = offer.PlayerSanity ? run.PlayerSanity
-                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
-            Assert.AreEqual(sanityBefore - offer.SanityAmount, sanityAfter, "按报价扣理智");
+            if (offer.PlayerSanity)
+            {
+                Assert.AreEqual(playerBefore - offer.SanityAmount, run.PlayerSanity, "按报价扣玩家理智");
+            }
+            else
+            {
+                foreach (var hero in heroes)
+                    Assert.AreEqual(sanityBefore[hero.Id] - offer.SanityAmount, hero.Sanity,
+                        hero.Name + " 按报价扣理智");
+            }
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
-                    Assert.AreEqual(suppliesBefore + offer.ResourceAmount, run.Map.Supplies, "按件发矿石");
+                    Assert.AreEqual(suppliesBefore + offer.ResourceAmount, run.Map.Supplies, "矿石只发一份");
                     Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply, offer.SanityAmount);
                     break;
                 case AltarResource.Health:
-                    Assert.AreEqual(hpBefore + offer.ResourceAmount, target.Hp, "按点恢复生命");
+                    foreach (var hero in heroes)
+                        Assert.AreEqual(
+                            Math.Min(hero.Definition.MaxHp, hpBefore[hero.Id] + offer.ResourceAmount), hero.Hp,
+                            hero.Name + " 按同一点数恢复生命，且不超过上限");
                     Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerHealth, offer.SanityAmount);
                     break;
                 default:

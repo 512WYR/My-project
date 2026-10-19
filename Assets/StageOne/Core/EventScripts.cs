@@ -610,7 +610,8 @@ namespace Ruin.Core
             page.Body = "工坊里堆着拆下来的义肢，墙中央却立着一座不该出现在这里的黑色祭坛。"
                 + "投料口亮着暗红色的灯，像一只不肯闭上的眼睛。台面上刻着一行小字：「拿来，或者从这里拿走。」";
             page.Hint = "祭坛只做等价交换：1 矿石 = 4 理智，1 生命 = 1 理智，1 件义体 = 16 理智。"
-                + "每次只能选择其中一项交易。";
+                + "理智结算给玩家或全队：若结算给队员，则每名存活队员各按报价变化一次；"
+                + "生命增减始终作用于全队，资源只收或只给一份。每次只能选择其中一项交易。";
 
             var payResource = node.AltarResourceForSanity;
             var paySanity = node.AltarSanityForResource;
@@ -630,31 +631,23 @@ namespace Ruin.Core
             node.AltarSanityForResource = RollSanityForResource(run);
         }
 
-        // Resources -> sanity. The recipient is chosen first: the altar only buys as much sanity as the
-        // target can still hold, which keeps the quoted resource cost exactly proportional to the gain.
+        // Resources -> sanity. The sanity side is the player alone or the whole party. A party-wide quote
+        // must fit every living hero, because each of them gains the same amount; the resource side is
+        // still paid once. Health on either side is always a party-wide effect.
         private static AltarOffer RollResourceForSanity(RunState run)
         {
             var heroes = LivingHeroes(run);
-            // A full point of headroom is required, so the quoted gain can always be paid in full.
-            var roomy = heroes.Where(h => 100 - h.Sanity >= 1).ToList();
             bool playerRoomy = 100 - run.PlayerSanity >= 1;
-            if (!playerRoomy && roomy.Count == 0)
+            // The quote must fit the smallest pool, since every living hero receives it in full.
+            double teamRoom = 100;
+            for (int i = 0; i < heroes.Count; i++) teamRoom = Math.Min(teamRoom, 100 - heroes[i].Sanity);
+            bool teamRoomy = heroes.Count > 0 && teamRoom >= 1;
+            if (!playerRoomy && !teamRoomy)
                 return new AltarOffer { Valid = false, Refusal = "所有人的理智都已满，祭坛不收这笔交易。" };
 
             var offer = new AltarOffer();
-            int headroom;
-            if (playerRoomy && (roomy.Count == 0 || run.Random.NextUnit() < 0.5))
-            {
-                offer.PlayerSanity = true;
-                headroom = (int)Math.Floor(100 - run.PlayerSanity);
-            }
-            else
-            {
-                var hero = roomy[PickIndex(roomy, run.Random)];
-                offer.PlayerSanity = false;
-                offer.HeroId = hero.Id;
-                headroom = (int)Math.Floor(100 - hero.Sanity);
-            }
+            offer.PlayerSanity = playerRoomy && (!teamRoomy || run.Random.NextUnit() < 0.5);
+            int headroom = (int)Math.Floor(offer.PlayerSanity ? 100 - run.PlayerSanity : teamRoom);
 
             var stock = run.Prosthetics == null ? new List<ProstheticSpec>()
                 : run.Prosthetics.Where(p => p != null).ToList();
@@ -663,7 +656,8 @@ namespace Ruin.Core
                 kinds.Add(AltarResource.Supplies);
             if (stock.Count > 0 && headroom >= AltarSanityPerProsthetic)
                 kinds.Add(AltarResource.Prosthetic);
-            if (headroom >= AltarSanityPerHealth && heroes.Any(h => h.Hp > 1))
+            // The whole party pays the same bite, so every living hero must be above the death door.
+            if (headroom >= AltarSanityPerHealth && heroes.Count > 0 && heroes.All(h => h.Hp > 1))
                 kinds.Add(AltarResource.Health);
             if (kinds.Count == 0)
                 return new AltarOffer { Valid = false, Refusal = "祭坛嫌这笔交易太小，什么也没收。" };
@@ -681,12 +675,17 @@ namespace Ruin.Core
                 }
                 case AltarResource.Health:
                 {
-                    // 10..25% of max HP, but never below the death door at 1 HP or past the sanity cap.
-                    var victims = heroes.Where(h => h.Hp > 1).ToList();
-                    var victim = victims[PickIndex(victims, run.Random)];
-                    int wanted = (int)Math.Ceiling(victim.Definition.MaxHp * Range(run.Random, 10, 25) / 100.0 - 1e-9);
-                    offer.ResourceHeroId = victim.Id;
-                    offer.ResourceAmount = Math.Max(1, Math.Min(wanted, Math.Min(victim.Hp - 1, headroom)));
+                    // 10..25% of the average max HP, but never past the death door of any hero and never
+                    // more sanity than the smallest pool can take.
+                    int maxHpSum = 0;
+                    int floor = int.MaxValue;
+                    for (int i = 0; i < heroes.Count; i++)
+                    {
+                        maxHpSum += heroes[i].Definition.MaxHp;
+                        floor = Math.Min(floor, heroes[i].Hp - 1);
+                    }
+                    int wanted = (int)Math.Ceiling(maxHpSum / (double)heroes.Count * Range(run.Random, 10, 25) / 100.0 - 1e-9);
+                    offer.ResourceAmount = Math.Max(1, Math.Min(wanted, Math.Min(floor, headroom)));
                     offer.SanityAmount = offer.ResourceAmount * AltarSanityPerHealth;
                     break;
                 }
@@ -702,13 +701,15 @@ namespace Ruin.Core
             return offer;
         }
 
-        // Sanity -> resources. Candidates that the richest sanity pool cannot afford are dropped before
-        // the draw, so the quoted price is always payable.
+        // Sanity -> resources. A party-wide quote must be payable by every living hero, because each of
+        // them pays it; the resource side is handed over once. Health is always healed party-wide.
         private static AltarOffer RollSanityForResource(RunState run)
         {
             var heroes = LivingHeroes(run);
-            double maxSanity = run.PlayerSanity;
-            for (int i = 0; i < heroes.Count; i++) maxSanity = Math.Max(maxSanity, heroes[i].Sanity);
+            // The team side is limited by its poorest pool; the player side by the player's own sanity.
+            double teamSanity = heroes.Count == 0 ? 0 : double.MaxValue;
+            for (int i = 0; i < heroes.Count; i++) teamSanity = Math.Min(teamSanity, heroes[i].Sanity);
+            double maxSanity = Math.Max(run.PlayerSanity, teamSanity);
 
             var kinds = new List<AltarResource>();
             if (maxSanity >= AltarSanityPerSupply * 2) kinds.Add(AltarResource.Supplies);
@@ -730,11 +731,17 @@ namespace Ruin.Core
                 }
                 case AltarResource.Health:
                 {
-                    var target = wounded[PickIndex(wounded, run.Random)];
-                    int wanted = (int)Math.Ceiling(target.Definition.MaxHp * Range(run.Random, 10, 25) / 100.0 - 1e-9);
-                    int amount = Math.Min(Math.Max(1, wanted), target.Definition.MaxHp - target.Hp);
+                    int maxHpSum = 0;
+                    int floor = int.MaxValue;
+                    for (int i = 0; i < wounded.Count; i++)
+                    {
+                        maxHpSum += wounded[i].Definition.MaxHp;
+                        floor = Math.Min(floor, wounded[i].Definition.MaxHp - wounded[i].Hp);
+                    }
+                    int wanted = (int)Math.Ceiling(maxHpSum / (double)wounded.Count * Range(run.Random, 10, 25) / 100.0 - 1e-9);
+                    // Every wounded hero is healed by the same amount, so the smallest gap caps the quote.
+                    int amount = Math.Max(1, Math.Min(wanted, floor));
                     if (amount > maxSanity) amount = Math.Max(1, (int)Math.Floor(maxSanity));
-                    offer.ResourceHeroId = target.Id;
                     offer.ResourceAmount = amount;
                     offer.SanityAmount = amount * AltarSanityPerHealth;
                     break;
@@ -754,20 +761,18 @@ namespace Ruin.Core
         private static void ChooseSanityPayer(AltarOffer offer, RunState run, List<ActorState> heroes)
         {
             bool playerCan = run.PlayerSanity >= offer.SanityAmount;
-            var able = heroes.Where(h => h.Sanity >= offer.SanityAmount).ToList();
-            if (playerCan && (able.Count == 0 || run.Random.NextUnit() < 0.5))
+            bool teamCan = heroes.Count > 0 && heroes.All(h => h.Sanity >= offer.SanityAmount);
+            if (playerCan && (!teamCan || run.Random.NextUnit() < 0.5))
             {
                 offer.PlayerSanity = true;
-                offer.HeroId = null;
                 return;
             }
-            if (able.Count > 0)
+            if (teamCan)
             {
                 offer.PlayerSanity = false;
-                offer.HeroId = able[PickIndex(able, run.Random)].Id;
                 return;
             }
-            // Defensive only: RollSanityForResource filtered by the highest pool, so one side can pay.
+            // Defensive only: RollSanityForResource filtered by the richest side, so one side can pay.
             offer.Valid = false;
             offer.Refusal = "理智不足，祭坛收回了它的报价。";
         }
@@ -776,14 +781,13 @@ namespace Ruin.Core
         {
             if (offer == null) return "祭坛没有回应。";
             if (!offer.Valid) return offer.Refusal;
-            string gainer = offer.PlayerSanity ? "玩家理智" : HeroName(run, offer.HeroId) + "的理智";
+            string gainer = offer.PlayerSanity ? "玩家理智" : "全队理智各";
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
                     return "支付 " + offer.ResourceAmount + " 矿石 · " + gainer + " +" + offer.SanityAmount;
                 case AltarResource.Health:
-                    return "支付 " + offer.ResourceAmount + " 生命（" + HeroName(run, offer.ResourceHeroId)
-                        + "） · " + gainer + " +" + offer.SanityAmount;
+                    return "全队各支付 " + offer.ResourceAmount + " 生命 · " + gainer + " +" + offer.SanityAmount;
                 default:
                     return "交付「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name)
                         + "」 · " + gainer + " +" + offer.SanityAmount;
@@ -794,14 +798,13 @@ namespace Ruin.Core
         {
             if (offer == null) return "祭坛没有回应。";
             if (!offer.Valid) return offer.Refusal;
-            string payer = offer.PlayerSanity ? "玩家理智" : HeroName(run, offer.HeroId) + "的理智";
+            string payer = offer.PlayerSanity ? "玩家理智" : "全队理智各";
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
                     return payer + " -" + offer.SanityAmount + " · 获得 " + offer.ResourceAmount + " 矿石";
                 case AltarResource.Health:
-                    return payer + " -" + offer.SanityAmount + " · " + HeroName(run, offer.ResourceHeroId)
-                        + " 恢复 " + offer.ResourceAmount + " 生命";
+                    return payer + " -" + offer.SanityAmount + " · 全队各恢复 " + offer.ResourceAmount + " 生命";
                 default:
                     return payer + " -" + offer.SanityAmount + " · 获得「"
                         + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
@@ -811,75 +814,89 @@ namespace Ruin.Core
         private static void TradeResourceForSanity(EventSession s, AltarOffer offer)
         {
             if (s == null || offer == null || !offer.Valid) { if (s != null) s.End(offer == null ? "祭坛没有回应。" : offer.Refusal); return; }
+            var run = s.Run;
+            var heroes = LivingHeroes(run);
             string paid;
-            int sanity;
+            int sanityPerHero;
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
                 {
-                    int amount = Math.Min(offer.ResourceAmount, s.Run.Map.Supplies);
-                    s.Run.Map.Supplies -= amount;
+                    int amount = Math.Min(offer.ResourceAmount, run.Map.Supplies);
+                    run.Map.Supplies -= amount;
                     paid = amount + " 点矿石";
-                    sanity = amount * AltarSanityPerSupply;
+                    sanityPerHero = amount * AltarSanityPerSupply;
                     break;
                 }
                 case AltarResource.Health:
                 {
-                    var hero = FindHero(s.Run, offer.ResourceHeroId);
-                    int amount = hero == null ? 0 : Math.Max(0, Math.Min(offer.ResourceAmount, hero.Hp - 1));
-                    if (hero != null) hero.Hp -= amount;
-                    paid = hero == null ? "生命" : hero.Name + " 的 " + amount + " 点生命";
-                    sanity = amount * AltarSanityPerHealth;
+                    // The same bite is taken from every living hero; nobody is pushed through the death door.
+                    int amount = heroes.Count == 0 ? 0 : offer.ResourceAmount;
+                    for (int i = 0; i < heroes.Count; i++)
+                        amount = Math.Min(amount, heroes[i].Hp - 1);
+                    amount = Math.Max(0, amount);
+                    for (int i = 0; i < heroes.Count; i++) heroes[i].Hp -= amount;
+                    paid = "全队各 " + amount + " 点生命";
+                    sanityPerHero = amount * AltarSanityPerHealth;
                     break;
                 }
                 default:
                 {
-                    int index = FindProsthetic(s.Run, offer.Prosthetic);
-                    if (index >= 0) s.Run.Prosthetics.RemoveAt(index);
+                    int index = FindProsthetic(run, offer.Prosthetic);
+                    if (index >= 0) run.Prosthetics.RemoveAt(index);
                     paid = "「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
-                    sanity = index >= 0 ? AltarSanityPerProsthetic : 0;
+                    sanityPerHero = index >= 0 ? AltarSanityPerProsthetic : 0;
                     break;
                 }
             }
-            if (sanity <= 0) { s.End("祭坛没有收下任何东西。"); return; }
+            if (sanityPerHero <= 0) { s.End("祭坛没有收下任何东西。"); return; }
 
-            string gainer;
             if (offer.PlayerSanity)
             {
-                double before = s.Run.PlayerSanity;
-                s.Run.PlayerSanity = SanityProbability.Clamp(before + sanity, 0, 100);
-                sanity = (int)Math.Round(s.Run.PlayerSanity - before);
-                gainer = "玩家理智";
+                double before = run.PlayerSanity;
+                run.PlayerSanity = SanityProbability.Clamp(before + sanityPerHero, 0, 100);
+                sanityPerHero = (int)Math.Round(run.PlayerSanity - before);
+                if (sanityPerHero <= 0) { s.End("祭坛收下了" + paid + "，但什么也没有回给你。"); return; }
+                s.End("你把" + paid + "放上祭坛。投料口合拢了一次，玩家理智 +" + sanityPerHero + "。祭坛没有道谢。");
+                return;
             }
-            else
+
+            // The quote was fitted to the smallest pool, so every living hero normally gains it in full.
+            int least = int.MaxValue;
+            for (int i = 0; i < heroes.Count; i++)
             {
-                var hero = FindHero(s.Run, offer.HeroId);
-                double before = hero == null ? 0 : hero.Sanity;
-                if (hero != null) hero.Sanity = SanityProbability.Clamp(before + sanity, 0, 100);
-                sanity = hero == null ? 0 : (int)Math.Round(hero.Sanity - before);
-                gainer = (hero == null ? "队员" : hero.Name) + "的理智";
+                double before = heroes[i].Sanity;
+                heroes[i].Sanity = SanityProbability.Clamp(before + sanityPerHero, 0, 100);
+                least = Math.Min(least, (int)Math.Round(heroes[i].Sanity - before));
             }
-            if (sanity <= 0) { s.End("祭坛收下了" + paid + "，但什么也没有回给你。"); return; }
-            s.End("你把" + paid + "放上祭坛。投料口合拢了一次，" + gainer + " +" + sanity + "。祭坛没有道谢。");
+            if (heroes.Count == 0 || least <= 0) { s.End("祭坛收下了" + paid + "，但什么也没有回给你。"); return; }
+            s.End("你把" + paid + "放上祭坛。投料口合拢了一次，全队理智各 +" + least + "。祭坛没有道谢。");
         }
 
         private static void TradeSanityForResource(EventSession s, AltarOffer offer)
         {
             if (s == null || offer == null || !offer.Valid) { if (s != null) s.End(offer == null ? "祭坛没有回应。" : offer.Refusal); return; }
+            var run = s.Run;
+            var heroes = LivingHeroes(run);
             int spend;
             string payer;
             if (offer.PlayerSanity)
             {
-                spend = Math.Min(offer.SanityAmount, (int)Math.Floor(s.Run.PlayerSanity));
-                s.Run.PlayerSanity = SanityProbability.Clamp(s.Run.PlayerSanity - spend, 0, 100);
+                spend = Math.Min(offer.SanityAmount, (int)Math.Floor(run.PlayerSanity));
+                run.PlayerSanity = SanityProbability.Clamp(run.PlayerSanity - spend, 0, 100);
                 payer = "玩家理智";
             }
             else
             {
-                var hero = FindHero(s.Run, offer.HeroId);
-                spend = hero == null ? 0 : Math.Min(offer.SanityAmount, (int)Math.Floor(hero.Sanity));
-                if (hero != null) hero.Sanity = SanityProbability.Clamp(hero.Sanity - spend, 0, 100);
-                payer = (hero == null ? "队员" : hero.Name) + "的理智";
+                // The whole party pays the same quote. The roll only offered team payment when every
+                // living hero could cover it; the minimum below is a defensive clamp.
+                spend = offer.SanityAmount;
+                for (int i = 0; i < heroes.Count; i++)
+                    spend = Math.Min(spend, (int)Math.Floor(heroes[i].Sanity));
+                spend = Math.Max(0, spend);
+                for (int i = 0; i < heroes.Count; i++)
+                    heroes[i].Sanity = SanityProbability.Clamp(heroes[i].Sanity - spend, 0, 100);
+                payer = "全队理智各";
             }
             if (spend <= 0) { s.End("祭坛什么也没有取走。"); return; }
 
@@ -889,27 +906,28 @@ namespace Ruin.Core
                 case AltarResource.Supplies:
                 {
                     int amount = Math.Max(1, spend / AltarSanityPerSupply);
-                    s.Run.Map.Supplies += amount;
+                    run.Map.Supplies += amount;
                     bought = " " + amount + " 矿石";
                     break;
                 }
                 case AltarResource.Health:
                 {
-                    var hero = FindHero(s.Run, offer.ResourceHeroId);
+                    // One payment heals every living hero by the same amount.
                     int amount = Math.Max(1, spend);
                     int healed = 0;
-                    if (hero != null)
+                    for (int i = 0; i < heroes.Count; i++)
                     {
-                        healed = Math.Min(amount, hero.Definition.MaxHp - hero.Hp);
-                        hero.Hp += healed;
+                        int gain = Math.Min(amount, heroes[i].Definition.MaxHp - heroes[i].Hp);
+                        heroes[i].Hp += gain;
+                        healed += gain;
                     }
-                    bought = (hero == null ? "队员" : hero.Name) + "的生命 +" + healed;
+                    bought = "全队共 " + healed + " 点生命";
                     break;
                 }
                 default:
                 {
                     if (offer.Prosthetic != null)
-                        s.Run.Prosthetics.Add(new ProstheticSpec(offer.Prosthetic.Id, offer.Prosthetic.Name,
+                        run.Prosthetics.Add(new ProstheticSpec(offer.Prosthetic.Id, offer.Prosthetic.Name,
                             offer.Prosthetic.Part, offer.Prosthetic.Description));
                     bought = "「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
                     break;
@@ -1033,20 +1051,6 @@ namespace Ruin.Core
             for (int i = 0; i < run.Heroes.Count; i++)
                 if (run.Heroes[i] != null && !run.Heroes[i].Dead) list.Add(run.Heroes[i]);
             return list;
-        }
-
-        private static ActorState FindHero(RunState run, string id)
-        {
-            if (run == null || run.Heroes == null || string.IsNullOrEmpty(id)) return null;
-            for (int i = 0; i < run.Heroes.Count; i++)
-                if (run.Heroes[i] != null && run.Heroes[i].Id == id) return run.Heroes[i];
-            return null;
-        }
-
-        private static string HeroName(RunState run, string id)
-        {
-            var hero = FindHero(run, id);
-            return hero == null ? "队员" : hero.Name;
         }
 
         private static int FindProsthetic(RunState run, ProstheticSpec item)

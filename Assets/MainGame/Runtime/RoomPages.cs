@@ -56,6 +56,18 @@ namespace Ruin.Runtime
     {
         static readonly LimbPart[] PartOrder = { LimbPart.Head, LimbPart.Torso, LimbPart.Arm, LimbPart.Leg };
 
+        // The second floor's supply station is free; later floors charge the listed price.
+        static int StationPrice(StageOneApp app, int laterFloorPrice)
+        {
+            return app.Map.Floor <= SupplyShop.FreeStationFloor ? 0 : laterFloorPrice;
+        }
+
+        static string CostLabel(int price, bool affordable)
+        {
+            if (price <= 0) return "免费";
+            return affordable ? price + " 矿石" : price + " 矿石（矿石不足）";
+        }
+
         // The map page owns the route; every other node, plus the finished run, is drawn as an event page.
         public static bool Visible(StageOneApp app)
         {
@@ -128,21 +140,33 @@ namespace Ruin.Runtime
         {
             var view = Base(app, "补给终端", "补给站", "SUPPLY / 补给站");
             string ratio = (app.Catalog.MapRules().SupplyHealRatio * 100).ToString("0");
+            int healPrice = StationPrice(app, SupplyShop.StationHealPrice);
+            int calmPrice = StationPrice(app, SupplyShop.StationCalmPrice);
             view.Body = "治疗为每名队员恢复 " + ratio + "% 生命，阵亡成员不会复活。\n"
                 + "静养为玩家理智 +" + Exploration.CalmSanity.ToString("0.#") + "。\n"
-                + "重伤部位可以修复，断肢需要安装对应部位的义肢。";
+                + "重伤部位可以修复，断肢需要安装对应部位的义肢。\n"
+                + (healPrice == 0 && calmPrice == 0
+                    ? "本层补给站的治疗与静养免费。"
+                    : "本层治疗与静养各需 " + healPrice + " 矿石。");
             view.Hint = "治疗 " + (app.Map.SupplyHealed ? "已使用" : "可用")
                 + "   ·   静养 " + (app.Map.SupplyCalmed ? "已使用" : "可用")
                 + "\n" + StockText(app);
 
+            bool anyWounded = app.Run.Heroes.Any(h => h != null && !h.Dead && h.Hp < h.Definition.MaxHp);
+            bool canHeal = !app.Map.SupplyHealed && anyWounded && app.Map.Supplies >= healPrice;
+            bool canCalm = !app.Map.SupplyCalmed && app.Run.PlayerSanity < 100 && app.Map.Supplies >= calmPrice;
             view.Choices.Add(new RoomPageChoice(
                 app.Map.SupplyHealed ? "治疗已使用" : "治疗全队",
-                "每名队员恢复 " + ratio + "% 生命",
-                !app.Map.SupplyHealed));
+                anyWounded
+                    ? "每名队员恢复 " + ratio + "% 生命 · " + CostLabel(healPrice, app.Map.Supplies >= healPrice)
+                    : "全队生命已满，不需要治疗",
+                canHeal));
             view.Choices.Add(new RoomPageChoice(
                 app.Map.SupplyCalmed ? "静养已使用" : "静养",
-                "玩家理智 +" + Exploration.CalmSanity.ToString("0.#"),
-                !app.Map.SupplyCalmed));
+                app.Run.PlayerSanity < 100
+                    ? "玩家理智 +" + Exploration.CalmSanity.ToString("0.#") + " · " + CostLabel(calmPrice, app.Map.Supplies >= calmPrice)
+                    : "玩家理智已满，不需要静养",
+                canCalm));
             view.Choices.Add(new RoomPageChoice(
                 "部位与义肢",
                 "查看每名队员的四个部位，修复重伤或安装义肢"));
@@ -202,9 +226,17 @@ namespace Ruin.Runtime
             var hero = app.Run.Heroes[heroIndex];
 
             var view = Base(app, "补给终端", hero.Name + " · 部位", "SUPPLY / 部位与义肢");
-            view.Body = "重伤部位可以修复；断肢需要对应部位的义肢。\n"
+            bool freeRepair = !app.Map.SupplyRepairFreeUsed;
+            int repairPrice = freeRepair ? 0 : SupplyShop.RepairPrice;
+            bool canRepair = app.Map.Supplies >= repairPrice;
+            bool canInstall = app.Map.Supplies >= SupplyShop.InstallPrice;
+            view.Body = "重伤部位可以修复（本座补给站第一次免费，之后 " + SupplyShop.RepairPrice + " 矿石）；"
+                + "断肢安装义肢需要 " + SupplyShop.InstallPrice + " 矿石。\n"
                 + "修复与安装都会立刻生效，返回后可以继续处理其他队员。";
-            view.Hint = "生命 " + hero.Hp + " / " + hero.Definition.MaxHp + "\n" + StockText(app);
+            view.Hint = "生命 " + hero.Hp + " / " + hero.Definition.MaxHp
+                + "   ·   修复 " + CostLabel(repairPrice, canRepair)
+                + "   ·   安装 " + CostLabel(SupplyShop.InstallPrice, canInstall)
+                + "\n" + StockText(app);
 
             for (int i = 0; i < PartOrder.Length; i++)
             {
@@ -227,7 +259,10 @@ namespace Ruin.Runtime
                 if (condition == LimbCondition.Injured)
                 {
                     view.Choices.Add(new RoomPageChoice(
-                        name + " · 修复", "重伤 " + limb.Hp + "/" + limb.MaxHp + "，恢复到 " + limb.MaxHp));
+                        name + " · 修复",
+                        "重伤 " + limb.Hp + "/" + limb.MaxHp + "，恢复到 " + limb.MaxHp
+                            + " · " + CostLabel(repairPrice, canRepair),
+                        canRepair));
                     continue;
                 }
                 if (condition == LimbCondition.Severed)
@@ -235,7 +270,8 @@ namespace Ruin.Runtime
                     var item = app.Run.Prosthetics.FirstOrDefault(p => p != null && p.Part == part);
                     view.Choices.Add(item == null
                         ? new RoomPageChoice(name + " · 断肢", "缺少该部位的义肢", false)
-                        : new RoomPageChoice(name + " · 安装 " + item.Name, item.Description));
+                        : new RoomPageChoice(name + " · 安装 " + item.Name,
+                            item.Description + " · " + CostLabel(SupplyShop.InstallPrice, canInstall), canInstall));
                     continue;
                 }
                 view.Choices.Add(new RoomPageChoice(name + " · 完好", limb.Hp + "/" + limb.MaxHp, false));

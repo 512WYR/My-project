@@ -213,11 +213,49 @@ namespace Ruin.Tests
 
             app.DebugGrantProsthetic(LimbPart.Arm); yield return null;
             string itemId = app.Run.Prosthetics.First(p => p != null && p.Part == LimbPart.Arm).Id;
+            app.Map.Supplies = 5;
+            int money = app.Map.Supplies;
             app.InstallProsthetic(hero.Id, itemId); yield return null;
             Assert.AreEqual(LimbCondition.Intact, LimbSystem.ConditionOf(hero, LimbPart.Arm));
             Assert.IsTrue(LimbSystem.HasProsthetic(hero, LimbPart.Arm));
             Assert.IsFalse(app.Run.Prosthetics.Any(p => p.Part == LimbPart.Arm), "安装后从仓库扣除");
             Assert.IsTrue(app.Run.Prosthetics.Any(p => p.Part == LimbPart.Leg), "没用到的义肢留在仓库");
+            Assert.AreEqual(money - SupplyShop.InstallPrice, app.Map.Supplies, "安装义肢扣一份矿石");
+        }
+
+        [UnityTest] public IEnumerator TheSupplyRoomChargesForLaterFloorsAndLaterRepairs()
+        {
+            app.DebugForceRoom(NodeType.Supply); yield return null;
+            var hero = app.Run.Heroes[0];
+
+            // 每座补给站的第一次修复免费，第二次开始收 1 矿石。
+            app.DebugInjureLimb(LimbPart.Arm); app.DebugInjureLimb(LimbPart.Leg); yield return null;
+            app.Map.Supplies = 1;
+            app.RepairLimb(hero.Id, LimbPart.Arm); yield return null;
+            Assert.AreEqual(1, app.Map.Supplies, "第一次修复免费");
+            app.RepairLimb(hero.Id, LimbPart.Leg); yield return null;
+            Assert.AreEqual(0, app.Map.Supplies, "第二次修复收 1 矿石");
+
+            // 第三层起治疗收 2 矿石；矿石不足时既不治疗，也不消耗本次机会。
+            app.Map.Floor = 3;
+            hero.Hp = 1;
+            app.Map.Supplies = 1; app.Map.SupplyHealed = false;
+            int before = hero.Hp;
+            app.SupplyHeal(); yield return null;
+            Assert.AreEqual(before, hero.Hp, "矿石不足时不治疗");
+            Assert.IsFalse(app.Map.SupplyHealed, "矿石不足时不消耗本次机会");
+            app.Map.Supplies = 2;
+            app.SupplyHeal(); yield return null;
+            Assert.Greater(hero.Hp, before, "付得起时正常治疗");
+            Assert.IsTrue(app.Map.SupplyHealed);
+            Assert.AreEqual(0, app.Map.Supplies, "第三层治疗收 2 矿石");
+
+            // 静养同样按层收费。
+            app.Run.PlayerSanity = 20;
+            app.Map.Supplies = 2; app.Map.SupplyCalmed = false;
+            app.SupplyCalm(); yield return null;
+            Assert.AreEqual(30, app.Run.PlayerSanity, "静养恢复玩家理智");
+            Assert.AreEqual(0, app.Map.Supplies, "第三层静养收 2 矿石");
         }
 
         [UnityTest] public IEnumerator AnEventRoomWalksItsSubStepsAndStaysShutUntilTheScriptEnds()

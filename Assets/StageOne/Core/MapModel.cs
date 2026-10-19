@@ -20,9 +20,9 @@ namespace Ruin.Core
         public NodeOddsSpec(NodeType type, double weight, double affinity) { Type = type; Weight = weight; Affinity = affinity; }
     }
 
-    // EVT-008 trades one kind of resource against sanity. The side that is not sanity is named here;
-    // the two hero ids split the HP side (ResourceHeroId) from the sanity side (HeroId), because a single
-    // trade can bleed one hero and steady another.
+    // EVT-008 trades one kind of resource against sanity. The side that is not sanity is named here.
+    // Sanity is settled either on the player alone or on the whole party; health always touches the
+    // whole party. The resource side is one batch, paid or handed over once.
     public enum AltarResource { Supplies, Health, Prosthetic }
 
     // Both altar trades are rolled once on entry and stored on the node, so re-rendering the room can
@@ -35,10 +35,8 @@ namespace Ruin.Core
         public string Refusal;
         public AltarResource Resource;
         public int ResourceAmount;       // supplies / HP points / prosthetic count (always 1)
-        public int SanityAmount;
-        public bool PlayerSanity = true; // sanity side is Run.PlayerSanity
-        public string HeroId;            // sanity-side hero when PlayerSanity is false
-        public string ResourceHeroId;    // HP-side hero
+        public int SanityAmount;         // per recipient: the player alone, or each living hero
+        public bool PlayerSanity = true; // sanity side is Run.PlayerSanity; false means the whole party
         public ProstheticSpec Prosthetic; // the exact part paid or handed over
     }
 
@@ -102,6 +100,7 @@ namespace Ruin.Core
         public bool BuffChosen;
         public bool SupplyHealed;                  // This supply room already healed the team.
         public bool SupplyCalmed;                  // This supply room already steadied the team.
+        public bool SupplyRepairFreeUsed;          // This supply room already used its free limb repair.
         // Placeholders raised by EVT-L001. The document asks for +1 action in the next fight and a higher
         // battle-node rate afterwards; neither rule exists in the engine yet, so the event only records the
         // request and the notes say so. Nothing reads these two fields today.

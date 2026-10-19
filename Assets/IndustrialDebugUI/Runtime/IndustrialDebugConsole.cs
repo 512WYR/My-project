@@ -627,7 +627,8 @@ namespace GameMake.IndustrialDebugUI
                     return "增益房 · " + (app.Run.Map.BuffChosen ? "已选择" : "等待选择");
                 case RoomView.Supply:
                     return "补给站 · 治疗 " + Yes(app.Run.Map.SupplyHealed)
-                        + " · 静养 " + Yes(app.Run.Map.SupplyCalmed);
+                        + " · 静养 " + Yes(app.Run.Map.SupplyCalmed)
+                        + " · 免费修复 " + Yes(!app.Run.Map.SupplyRepairFreeUsed);
                 case RoomView.Event:
                     if (app.ActiveNode == null) return "事件";
                     return (app.ActiveNode.Type == NodeType.Altar ? "祭坛" : "事件")
