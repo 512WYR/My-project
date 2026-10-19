@@ -65,6 +65,9 @@ namespace GameMake.IndustrialBattleEditor
             Check(hud.ChromeRoots.All(r=>r.activeInHierarchy),"Battle page is hidden");
             Check(hud.Allies.Count(c=>c.gameObject.activeSelf)==4 && hud.Enemies.Count(c=>c.gameObject.activeSelf)==3,"Missing actor cards");
             Check(details.SkillNames.Any(t=>t.text!="—"),"No actual skill names");
+            Check(hud.Panel.SkillButtons[0].colors.disabledColor.maxColorComponent<.5f
+                && hud.Panel.SkillButtons[0].colors.highlightedColor.maxColorComponent>hud.Panel.SkillButtons[0].colors.normalColor.maxColorComponent,
+                "Skill buttons do not separate normal, highlighted and disabled states");
             Check(details.Wheel.rect.width>=228 && hud.Counter.FitDigitsToContainer,"Enlarged counter layout missing");
             Check(Mathf.Abs(hud.Counter.DigitSlots[0].rectTransform.rect.height-94)<.01f,"Digits do not fill the inner frame height");
             Capture(hud,"Battle-1920x1080"); Capture(hud,"Battle-2560x1080",2560,1080);

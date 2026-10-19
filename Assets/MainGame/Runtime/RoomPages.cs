@@ -25,6 +25,17 @@ namespace Ruin.Runtime
         { Label = label; Detail = detail; Enabled = enabled; }
     }
 
+    // One line of the node's resource report. Supplies carry the run's only currency, so "金币" does not
+    // exist as a separate resource: the amount is always what the map added to Run.Map.Supplies.
+    public enum ResourceKind { Supplies, Accessory, Consumable, Prosthetic }
+
+    public sealed class ResourceGain
+    {
+        public ResourceKind Kind;
+        public string Name;
+        public int Amount = 1;
+    }
+
     // What the event terminal draws for the current room. Choose and Advance are the only two ways back
     // into the game state, so the page itself never has to know which room it is showing.
     public sealed class RoomPageView
@@ -33,6 +44,9 @@ namespace Ruin.Runtime
         public bool CanLeave;
         // Settlement is a result screen rather than a record to read, so it skips the typewriter.
         public bool Instant;
+        // Everything the party gained while standing on this node, in a fixed order: supplies, then
+        // accessories, consumables and prosthetics. The page draws this as its own highlighted block.
+        public readonly List<ResourceGain> Rewards = new List<ResourceGain>();
         public readonly List<RoomPageChoice> Choices = new List<RoomPageChoice>();
         public Action<int> Choose;
         public Action Advance;
@@ -307,6 +321,9 @@ namespace Ruin.Runtime
 
         static RoomPageView Settlement(StageOneApp app)
         {
+            // Pay the fight's reward before the page is assembled so the result can list it. The call is
+            // idempotent and ContinueBattle makes the same one, so the payout still happens exactly once.
+            app.EnsureBattleRewards();
             var battle = app.Battle;
             var result = battle.Settlement;
             string heading = result.Outcome == BattleOutcome.Victory ? "战斗胜利"
@@ -376,7 +393,7 @@ namespace Ruin.Runtime
         static RoomPageView Base(StageOneApp app, string header, string title, string code)
         {
             var node = app.ActiveNode;
-            return new RoomPageView
+            var view = new RoomPageView
             {
                 Header = header,
                 Title = title,
@@ -387,6 +404,8 @@ namespace Ruin.Runtime
                 CanLeave = true,
                 Advance = () => app.LeaveRoom(),
             };
+            view.Rewards.AddRange(app.NodeGains());
+            return view;
         }
 
         static string StockText(StageOneApp app)

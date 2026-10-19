@@ -34,8 +34,11 @@ namespace GameMake.EventUI
         bool shownFinished;
         RoomPageView current;
         readonly RoomPageContext context = new RoomPageContext();
-        string signature, fullText;
+        string signature, fullText, rewardText;
         int[] characterStarts;
+        // Gold used by the stage for emphasis. Names and amounts both wear it so a glance finds every
+        // resource without reading the sentence again.
+        const string GainColor = "#D6B677";
         int revealed, continueChoice=-1;
         bool leave, hooked;
         Coroutine reveal;
@@ -55,6 +58,9 @@ namespace GameMake.EventUI
         void Bind()
         {
             if(!Page || !Continue) return;
+            // The reward block is rich text even though the builder leaves the body plain. Setting it
+            // here keeps existing prefabs working without a rebuild.
+            if(Body) Body.supportRichText=true;
             if(!Source) Source=FindObjectOfType<StageOneApp>();
             if(bound!=Source)
             {
@@ -131,8 +137,12 @@ namespace GameMake.EventUI
             string story=(content.Body??"");
             if(!string.IsNullOrEmpty(Source.RoomNote)) story+="\n\n"+Source.RoomNote;
             if(!string.IsNullOrEmpty(content.Hint)) story+="\n\n"+content.Hint;
+            // The resource report is its own block rather than a sentence inside the story, so the
+            // typewriter reveals the narrative while the report is already legible.
+            string rewards=RewardBlock(content.Rewards);
             var key=new StringBuilder(content.Header).Append('|').Append(content.Title).Append('|')
                 .Append(content.Code).Append('|').Append(content.Location).Append('|')
+                .Append(rewards).Append('|')
                 .Append(story).Append('|').Append(content.CanLeave).Append('|').Append(content.AdvanceLabel);
             foreach(var c in content.Choices) key.Append('|').Append(c.Label).Append(c.Detail).Append(c.Shown).Append(c.Enabled);
             string next=key.ToString();
@@ -150,12 +160,12 @@ namespace GameMake.EventUI
             EventIllustration.enabled=EventIllustration.sprite;
             if(changed)
             {
-                shownNode=node; signature=next; fullText=story;
+                shownNode=node; signature=next; fullText=story; rewardText=rewards;
                 characterStarts=StringInfo.ParseCombiningCharacters(fullText);
                 // Settlement is a result screen, so it appears in full instead of typing itself out;
                 // Reveal still runs for the 0.32s action fade.
                 revealed=content.Instant?characterStarts.Length:0;
-                Body.text=fullText; Canvas.ForceUpdateCanvases();
+                Body.text=WithRewards(fullText); Canvas.ForceUpdateCanvases();
                 measuredScale=-1; ResizeStory();
                 Body.text=""; StoryScroll.StopMovement(); StoryScroll.verticalNormalizedPosition=1;
             }
@@ -170,7 +180,7 @@ namespace GameMake.EventUI
             if(Mathf.Approximately(scale,measuredScale) && Mathf.Approximately(width,measuredWidth)) return;
             measuredScale=scale; measuredWidth=width;
             float position=StoryScroll.verticalNormalizedPosition;
-            string current=Body.text; Body.text=fullText;
+            string current=Body.text; Body.text=WithRewards(fullText);
             float height=Mathf.Max(StoryScroll.viewport.rect.height,Body.preferredHeight+24);
             Body.text=current;
             StoryContent.sizeDelta=new Vector2(StoryContent.sizeDelta.x,height);
@@ -231,10 +241,10 @@ namespace GameMake.EventUI
                 progress+=Time.unscaledDeltaTime*Mathf.Max(1,CharactersPerSecond);
                 revealed=Mathf.Min(characterStarts.Length,(int)progress);
                 int end=revealed==characterStarts.Length?fullText.Length:characterStarts[revealed];
-                Body.text=fullText.Substring(0,end);
+                Body.text=WithRewards(fullText.Substring(0,end));
                 yield return null;
             }
-            TextComplete=true; Body.text=fullText;
+            TextComplete=true; Body.text=WithRewards(fullText);
             ReadingStatus.text=StoryContent.rect.height>StoryScroll.viewport.rect.height+2?"滚动阅读事件记录":"记录读取完毕";
             var shown=Choices.Where(c=>c.gameObject.activeSelf).ToArray();
             ChoiceHeading.gameObject.SetActive(shown.Length>0);
@@ -272,6 +282,26 @@ namespace GameMake.EventUI
                 supplyPresented=true; supplyNode=Source.ActiveNode; supplyRun=Source.Run;
                 SupplyView.SetProgress(1);
             }
+        }
+        // The report sits above the narrative, separated by a blank line. It is deliberately outside
+        // fullText: the typewriter counts only the story's characters, so a rich-text tag can never be
+        // split in half and shown as literal markup.
+        string WithRewards(string story)
+        {
+            return string.IsNullOrEmpty(rewardText)?story:rewardText+"\n\n"+story;
+        }
+        static string RewardBlock(IReadOnlyList<ResourceGain> gains)
+        {
+            if(gains==null || gains.Count==0) return "";
+            var text=new StringBuilder();
+            text.Append("<color=#8A9A8C>本节点获得</color>");
+            foreach(var gain in gains)
+            {
+                if(gain==null) continue;
+                text.Append("\n获得 <color=").Append(GainColor).Append('>').Append(gain.Name)
+                    .Append("</color> ×<color=").Append(GainColor).Append('>').Append(gain.Amount).Append("</color>");
+            }
+            return text.ToString();
         }
         void AnimateChoice(EventChoiceView choice,float progress)
         {

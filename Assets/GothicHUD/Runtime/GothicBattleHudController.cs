@@ -214,7 +214,12 @@ namespace GameMake.GothicHUD
                 bool has = i < skills.Length;
                 string reason = has ? battle.SkillDisabledReason(i) : null;
                 var button = Panel.SkillButtons[i];
-                if (button) button.interactable = has && reason == null && !app.Busy;
+                bool available = has && reason == null && !app.Busy;
+                if (button) button.interactable = available;
+                // The frame dims through the button tint. The icon is a separate graphic, so dim it too
+                // once real artwork is assigned; a null sprite would otherwise draw a solid quad.
+                if (Panel.SkillIcons != null && i < Panel.SkillIcons.Length && Panel.SkillIcons[i] && Panel.SkillIcons[i].sprite)
+                    Panel.SkillIcons[i].color = available ? Color.white : new Color(.45f, .45f, .45f, .55f);
                 if (Panel.SkillSelections != null && i < Panel.SkillSelections.Length && Panel.SkillSelections[i])
                     Panel.SkillSelections[i].SetActive(app.PendingSkill == i);
             }

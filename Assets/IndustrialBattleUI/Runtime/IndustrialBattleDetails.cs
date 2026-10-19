@@ -16,6 +16,8 @@ namespace GameMake.IndustrialBattleUI
         public SilhouetteGraphic MainFigure;
         public RectTransform Wheel;
         public Text TurnLabel;
+        static readonly Color SkillReady=new Color32(224,207,176,255);
+        static readonly Color SkillBlocked=new Color32(118,114,102,255);
         StageOneApp bound;
         int lastRound;
         BattleEngine lastBattle;
@@ -42,7 +44,14 @@ namespace GameMake.IndustrialBattleUI
             if(!bound || bound.Run==null || bound.Battle==null) return;
             var battle=bound.Battle;
             var skills=battle.Current!=null && battle.Current.Player ? battle.SkillsFor(battle.Current) : Array.Empty<SkillSpec>();
-            for(int i=0;i<SkillNames.Length;i++) SkillNames[i].text=i<skills.Length?skills[i].Name:"—";
+            for(int i=0;i<SkillNames.Length;i++)
+            {
+                bool usable=i<skills.Length && battle.SkillDisabledReason(i)==null && !bound.Busy;
+                SkillNames[i].text=i<skills.Length?skills[i].Name:"—";
+                // The frame dims through the button's ColorTint, but the name sits outside that target,
+                // so it has to follow the same state or an unavailable skill still reads as available.
+                SkillNames[i].color=usable?SkillReady:SkillBlocked;
+            }
             for(int i=0;i<PartyNames.Length && i<bound.Run.Heroes.Count;i++)
             {
                 var hero=bound.Run.Heroes[i]; PartyNames[i].text=hero.Name;

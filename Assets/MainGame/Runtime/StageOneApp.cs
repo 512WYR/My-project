@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using Ruin.Core;
 using UnityEngine;
@@ -49,6 +50,21 @@ namespace Ruin.Runtime
         public bool InRoom { get { return AwaitingNode && Room != RoomView.Map; } }
 
         private MapRules Rules() { return Catalog.MapRules(); }
+
+        // ---- per-node resource report ----
+        // The report is a diff against the stock the party had when it stepped onto the node. Events,
+        // the chest, the shop and debug grants all write the run stock directly, so a diff catches every
+        // source without teaching each call site about the UI. It is deliberately node-scoped: walking to
+        // the next position takes a new baseline and the old report disappears with it.
+        private bool nodeGainsTracked;
+        private int nodeGainSupplies;
+        private readonly Dictionary<string, int> nodeGainAccessories = new Dictionary<string, int>();
+        private readonly Dictionary<string, int> nodeGainConsumables = new Dictionary<string, int>();
+        private readonly Dictionary<string, int> nodeGainProsthetics = new Dictionary<string, int>();
+        // A battle's payout is moved to the moment its result page is built. ContinueBattle calls the same
+        // guard, so the reward is applied once even though both the page and the button ask for it.
+        private bool battleRewardsSettled;
+        private string battleRewardNote;
 
         // Debug only: an event id the next room roll must take instead of the weighted draw.
         private string ForcedEvent;
@@ -111,6 +127,7 @@ namespace Ruin.Runtime
             SupplyShopOpen = false;
             StopAllCoroutines(); Busy = false; ClearPending(); Battle = null;
             Room = RoomView.Map; ActiveNode = null; EventBattle = null; RoomNote = null;
+            nodeGainsTracked = false; battleRewardsSettled = false; battleRewardNote = null;
             AwaitingNode = true;
             MapGenerator.Advance(Run.Map, Rules(), Run.Random, Run.PlayerSanity);
             Hint = "选择一条路线前进。已通过的房间固定不变，前方候选只有在走到跟前才会出现。";
@@ -139,6 +156,7 @@ namespace Ruin.Runtime
             step.ChosenIndex = index;
             ActiveNode = node;
             MapNote = null;
+            BeginNodeGains();
 
             switch (node.Type)
             {
@@ -162,6 +180,77 @@ namespace Ruin.Runtime
             // stage degrades into walking on instead of dead-ending the run.
             RoomNote = "「" + node.Name + "」还没有内容，先继续前进。";
             ResolveCurrent();
+        }
+
+        // Takes the baseline the node's resource report is measured against. Called once, right after the
+        // party steps onto a position and before its room hands anything out.
+        private void BeginNodeGains()
+        {
+            nodeGainsTracked = Run != null && ActiveNode != null;
+            nodeGainSupplies = Run == null || Run.Map == null ? 0 : Run.Map.Supplies;
+            SnapshotStock(Run == null ? null : Run.AccessoryStock, a => a.Id, nodeGainAccessories);
+            SnapshotStock(Run == null ? null : Run.Consumables, c => c.Id, nodeGainConsumables);
+            SnapshotStock(Run == null ? null : Run.Prosthetics, p => p.Id, nodeGainProsthetics);
+        }
+
+        /// <summary>
+        /// What the party has gained while standing on the current node. Only net increases are reported:
+        /// a supply spent in the shop or a prosthetic fitted onto a stump is not a gain, and something
+        /// gained then spent inside the same node nets out to nothing.
+        /// </summary>
+        public List<ResourceGain> NodeGains()
+        {
+            var gains = new List<ResourceGain>();
+            if (!nodeGainsTracked || Run == null || ActiveNode == null) return gains;
+            int supplies = (Run.Map == null ? 0 : Run.Map.Supplies) - nodeGainSupplies;
+            if (supplies > 0)
+                gains.Add(new ResourceGain { Kind = ResourceKind.Supplies, Name = "补给", Amount = supplies });
+            AddStockGains(gains, ResourceKind.Accessory, Run.AccessoryStock, nodeGainAccessories, a => a.Id, a => a.Name);
+            AddStockGains(gains, ResourceKind.Consumable, Run.Consumables, nodeGainConsumables, c => c.Id, c => c.Name);
+            AddStockGains(gains, ResourceKind.Prosthetic, Run.Prosthetics, nodeGainProsthetics, p => p.Id, p => p.Name);
+            return gains;
+        }
+
+        private static void SnapshotStock<T>(List<T> items, Func<T, string> id, Dictionary<string, int> counts)
+        {
+            counts.Clear();
+            if (items == null) return;
+            foreach (var item in items)
+            {
+                if (item == null) continue;
+                string key = id(item);
+                if (string.IsNullOrEmpty(key)) continue;
+                counts.TryGetValue(key, out int count);
+                counts[key] = count + 1;
+            }
+        }
+
+        private static void AddStockGains<T>(List<ResourceGain> gains, ResourceKind kind, List<T> items,
+            Dictionary<string, int> baseline, Func<T, string> id, Func<T, string> name)
+        {
+            if (items == null || items.Count == 0) return;
+            // Count first, then report once per id in the order the stock is held, so a stack of copies
+            // becomes one "×N" line instead of N identical lines.
+            var totals = new Dictionary<string, int>();
+            foreach (var item in items)
+            {
+                if (item == null) continue;
+                string key = id(item);
+                if (string.IsNullOrEmpty(key)) continue;
+                totals.TryGetValue(key, out int count);
+                totals[key] = count + 1;
+            }
+            var reported = new HashSet<string>();
+            foreach (var item in items)
+            {
+                if (item == null) continue;
+                string key = id(item);
+                if (string.IsNullOrEmpty(key) || !reported.Add(key)) continue;
+                baseline.TryGetValue(key, out int before);
+                int delta = totals[key] - before;
+                if (delta > 0)
+                    gains.Add(new ResourceGain { Kind = kind, Name = name(item) ?? key, Amount = delta });
+            }
         }
 
         // ---------------- openings, elevators, and the room pages ----------------
@@ -355,6 +444,35 @@ namespace Ruin.Runtime
 
         // ---------------- battles ----------------
 
+        // Applies a route battle's payout exactly once. The settlement page calls this while it is being
+        // built, which is what lets the result screen list the reward; ContinueBattle calls it again before
+        // walking forward. A fight the event asked for pays nothing here, because ResolveBattleReturn pays
+        // that reward when the room is re-entered.
+        public void EnsureBattleRewards()
+        {
+            if (battleRewardsSettled) return;
+            if (Battle == null || ActiveNode == null) return;
+            battleRewardsSettled = true;
+            battleRewardNote = null;
+            if (Battle.Outcome != BattleOutcome.Victory) return;
+            // A wipe ends the run without a payout even if the engine also called the fight a victory.
+            if (Run.Heroes.All(a => a.Dead)) return;
+            var node = ActiveNode;
+            if (node == EventBattle) return;
+            int supplies = Encounter.SuppliesFor(Rules(), node.Type);
+            Run.Map.Supplies += supplies;
+            battleRewardNote = "战斗胜利，获得 " + supplies + " 点补给。";
+            if (node.Type == NodeType.EliteBattle)
+            {
+                var drop = Encounter.DropProsthetic(Catalog.Rules().Limbs, Run.Random);
+                if (drop != null)
+                {
+                    Run.Prosthetics.Add(drop);
+                    battleRewardNote += "  掉落一件「" + drop.Name + "」，已放进队伍仓库。";
+                }
+            }
+        }
+
         public void ContinueBattle()
         {
             if (Battle == null || Battle.Outcome == BattleOutcome.Active) return;
@@ -367,18 +485,13 @@ namespace Ruin.Runtime
             if (node != null && node == EventBattle) { ReturnToEvent(node, won); return; }
             if (node != null)
             {
-                // Written to MapNote rather than RoomNote: the walk forward right below clears the room
-                // notes, and a reward nobody can read is the same as no reward.
+                // The payout itself lives in EnsureBattleRewards so the result page can list it before
+                // this button is pressed. Written to MapNote rather than RoomNote: the walk forward right
+                // below clears the room notes, and a reward nobody can read is the same as no reward.
                 if (won)
                 {
-                    int supplies = Encounter.SuppliesFor(Rules(), node.Type);
-                    Run.Map.Supplies += supplies;
-                    MapNote = "战斗胜利，获得 " + supplies + " 点补给。";
-                    if (node.Type == NodeType.EliteBattle)
-                    {
-                        var drop = Encounter.DropProsthetic(Catalog.Rules().Limbs, Run.Random);
-                        if (drop != null) { Run.Prosthetics.Add(drop); MapNote += "  掉落一件「" + drop.Name + "」，已放进队伍仓库。"; }
-                    }
+                    EnsureBattleRewards();
+                    MapNote = battleRewardNote;
                 }
                 else MapNote = "撤退：没有获得这个房间的补给。";
             }
@@ -421,6 +534,7 @@ namespace Ruin.Runtime
         {
             StopAllCoroutines(); Busy = false; ClearPending();
             AwaitingNode = false;
+            battleRewardsSettled = false; battleRewardNote = null;
             // Designed formations name their own ranks and already carry their final numbers, so they are
             // not scaled again. The legacy three-enemy fallback is kept for a catalog that has not been
             // regenerated since the monster pass.

@@ -138,6 +138,7 @@ namespace GameMake.IndustrialBattleEditor
             {
                 var slot=panel.SkillButtons[i].transform.parent; SetRect(slot,22+i*87,57,82,137);
                 Skin(panel.SkillButtons[i].transform,"物品框",true,5); SetRect(panel.SkillButtons[i].transform,0,0,80,90);
+                StyleSkillButton(panel.SkillButtons[i]);
                 SetRect(panel.SkillIcons[i].transform,8,8,64,70);
                 Skin(Find(slot,"Hotkey Plate"),"图层 "+(i+1)); SetRect(Find(slot,"Hotkey Plate"),25,96,30,30);
                 SetRect(panel.SkillHotkeys[i].transform,25,96,30,30);
@@ -146,6 +147,7 @@ namespace GameMake.IndustrialBattleEditor
             }
             var move=hud.DisplacementButton.transform.parent; SetRect(move,467,57,78,137);
             Skin(hud.DisplacementButton.transform,"物品框",true,5); SetRect(hud.DisplacementButton.transform,0,0,76,90);
+            StyleSkillButton(hud.DisplacementButton);
             Skin(Find(move,"Displacement Icon"),"位移"); SetRect(Find(move,"Displacement Icon"),9,13,58,58);
             SetRect(Find(move,"Displacement Label"),0,98,76,26);
             var items=Find(skills,"Items - 快捷物品"); SetRect(items,24,211,470,46);
@@ -285,6 +287,19 @@ namespace GameMake.IndustrialBattleEditor
         }
         static void Type(Text t,int size,Color color,TextAnchor align=TextAnchor.MiddleLeft) { t.fontSize=size; t.color=color; t.alignment=align; }
         static void ConfigureFill(Image image,Color tint) { image.sprite=white; image.type=UnityEngine.UI.Image.Type.Filled; image.fillMethod=UnityEngine.UI.Image.FillMethod.Horizontal; image.fillOrigin=0; image.color=tint; }
+        // Normal is deliberately below white so the hover/selected states read as brighter; the old
+        // palette multiplied the frame by gold on highlight, which made a highlighted skill look darker.
+        static void StyleSkillButton(Button button)
+        {
+            var colors=button.colors;
+            colors.normalColor=new Color(.85f,.85f,.85f,1);
+            colors.highlightedColor=Color.white;
+            colors.pressedColor=new Color(1f,.88f,.65f,1);
+            colors.selectedColor=new Color(1f,.95f,.8f,1);
+            colors.disabledColor=new Color(.38f,.38f,.38f,.85f);
+            colors.colorMultiplier=1; colors.fadeDuration=.1f;
+            button.colors=colors;
+        }
         static SilhouetteGraphic GetOrFigure(Transform p,string name,float x,float y,float w,float h)
         {
             var rt=Group(p,name,x,y,w,h); if(!rt.GetComponent<CanvasRenderer>()) rt.gameObject.AddComponent<CanvasRenderer>();
