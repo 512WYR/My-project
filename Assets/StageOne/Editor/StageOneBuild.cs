@@ -6,6 +6,7 @@ using Ruin.Core;
 using Ruin.Runtime;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace Ruin.Editor
@@ -163,16 +164,40 @@ namespace Ruin.Editor
         [MenuItem("GameMake/Build Stage One Windows")]
         public static void BuildWindows()
         {
+            Build("交付/阶段一/Windows试玩版", BuildOptions.Development, "STAGE_ONE_BUILD_OK");
+        }
+
+        // A clean player for handing to players: no DEVELOPMENT_BUILD, so the acceptance console and its
+        // launchers are compiled out by their own #if guards. The whole Windows folder is the deliverable;
+        // zip that folder rather than only the exe, because the Data folder and UnityPlayer.dll sit next to it.
+        [MenuItem("GameMake/Build Playable Demo Windows")]
+        public static void BuildPlayableDemo()
+        {
+            Build("交付/可玩Demo/Windows", BuildOptions.None, "STAGE_ONE_DEMO_BUILD_OK");
+        }
+
+        private static void Build(string relativeFolder, BuildOptions options, string okTag)
+        {
+            if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogError("请先退出播放模式再打包。");
+                return;
+            }
+            // The player reads the scene from disk, so unsaved edits in mainScene would silently be left
+            // out of the demo. Ask before building; a cancelled dialog cancels the build.
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             Prepare();
             string workspace = Directory.GetParent(Application.dataPath).Parent.FullName;
-            string target = Path.Combine(workspace, "交付", "阶段一", "Windows试玩版", "BetweenTheVeils.exe");
+            string target = Path.Combine(workspace,
+                relativeFolder.Replace('/', Path.DirectorySeparatorChar), "BetweenTheVeils.exe");
             Directory.CreateDirectory(Path.GetDirectoryName(target));
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
                 scenes = new[] { ScenePath }, locationPathName = target, target = BuildTarget.StandaloneWindows64,
-                options = BuildOptions.Development
+                options = options
             });
             if (report.summary.result != BuildResult.Succeeded) throw new Exception("Build failed: " + report.summary.result);
-            Debug.Log("STAGE_ONE_BUILD_OK " + target + " size=" + report.summary.totalSize);
+            Debug.Log(okTag + " " + target + " size=" + report.summary.totalSize);
+            if (!Application.isBatchMode) EditorUtility.RevealInFinder(target);
         }
 
         // Asset<T> never overwrites, so a catalog created before these fields existed keeps its old YAML

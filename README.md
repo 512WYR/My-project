@@ -16,7 +16,7 @@
 
 Unity版本：2022.3.62f3c1。打开 `Assets/Scenes/mainScene.unity`，点击Play进入演练。这是唯一的正式入口，游戏页面由预制体绘制，主菜单、背景与战斗演出是运行时全局层。
 
-交付状态：第一阶段代码、入口场景和默认数据已就绪，独立验证副本已通过一次Unity编译。自动测试、实际运行和Windows打包尚未完成；按当前分工，由用户在Unity中执行并验收，开发助手负责代码与反馈修复。
+交付状态：第一阶段代码、入口场景和默认数据已就绪，独立验证副本已通过一次Unity编译。自动测试与实际运行尚未完成；Windows 打包入口已就绪（见下方“结构与验证”），按当前分工由用户在 Unity 中执行并验收，开发助手负责代码与反馈修复。
 
 若首次导入时尚无场景或资源，在Unity顶部菜单选择 **GameMake → Prepare Stage One**。此操作只创建缺少的默认数据，不覆盖已有数据资产的手动修改。
 
@@ -54,8 +54,13 @@ Unity版本：2022.3.62f3c1。打开 `Assets/Scenes/mainScene.unity`，点击Pla
 
 `Core`是无Unity依赖的规则层；`Runtime`是数据适配和uGUI表现；`Editor`负责生成入口与构建；`Tests`包含规则与场景测试。
 
-通过Unity Test Runner运行EditMode及PlayMode测试。菜单 **GameMake → Build Stage One Windows** 生成开发试玩版至工作区 `交付/阶段一/Windows试玩版`。
+通过Unity Test Runner运行EditMode及PlayMode测试。
 
-开发试玩中的验收工具是屏幕上的「调试台」，只存在于编辑器与 Development Build；正式发行构建不包含它，也不包含任何特殊功能键。
+打包菜单：
+
+- **GameMake → Build Playable Demo Windows**：生成可玩 Demo 到工作区 `交付/可玩Demo/Windows/BetweenTheVeils.exe`。使用 Release 构建，不包含调试台。
+- **GameMake → Build Stage One Windows**：生成开发试玩版到 `交付/阶段一/Windows试玩版/`，保留调试台，供验收使用。
+
+分发时压缩整个 `Windows` 文件夹：exe 旁边的 `BetweenTheVeils_Data`、`UnityPlayer.dll` 与 `MonoBleedingEdge` 都是必需的，不要只发 exe。开发试玩中的验收工具是屏幕上的「调试台」，只存在于编辑器与 Development Build；正式发行构建不包含它，也不包含任何特殊功能键。
 
 完成本阶段后暂停，等待用户验收通过，再进入第二阶段。
