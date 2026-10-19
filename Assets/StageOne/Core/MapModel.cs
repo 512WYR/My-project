@@ -20,6 +20,28 @@ namespace Ruin.Core
         public NodeOddsSpec(NodeType type, double weight, double affinity) { Type = type; Weight = weight; Affinity = affinity; }
     }
 
+    // EVT-008 trades one kind of resource against sanity. The side that is not sanity is named here;
+    // the two hero ids split the HP side (ResourceHeroId) from the sanity side (HeroId), because a single
+    // trade can bleed one hero and steady another.
+    public enum AltarResource { Supplies, Health, Prosthetic }
+
+    // Both altar trades are rolled once on entry and stored on the node, so re-rendering the room can
+    // rebuild the same two offers without touching the random sequence. Valid=false means the party has
+    // nothing to pay with; the page still shows the option, disabled, with Refusal as its explanation.
+    [Serializable]
+    public sealed class AltarOffer
+    {
+        public bool Valid = true;
+        public string Refusal;
+        public AltarResource Resource;
+        public int ResourceAmount;       // supplies / HP points / prosthetic count (always 1)
+        public int SanityAmount;
+        public bool PlayerSanity = true; // sanity side is Run.PlayerSanity
+        public string HeroId;            // sanity-side hero when PlayerSanity is false
+        public string ResourceHeroId;    // HP-side hero
+        public ProstheticSpec Prosthetic; // the exact part paid or handed over
+    }
+
     [Serializable]
     public sealed class NodeState
     {
@@ -39,6 +61,9 @@ namespace Ruin.Core
         public string EventTarget; // The hero a "choose a member" step settled on.
         public int EventFlag;      // Free slot for one-off outcomes: potion colour, a 30/70 roll, a retreat.
         public bool EventJump;     // EVT-H001: leaving this room should go straight to the floor's elevator.
+        // EVT-008's two frozen trades: resources -> sanity, and sanity -> resources.
+        public AltarOffer AltarResourceForSanity;
+        public AltarOffer AltarSanityForResource;
         public string Name { get { return MapGenerator.Name(Type); } }
     }
 

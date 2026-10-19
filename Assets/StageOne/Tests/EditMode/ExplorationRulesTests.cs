@@ -528,22 +528,165 @@ namespace Ruin.Tests
             Assert.IsFalse(session.WantsBattle);
         }
 
-        [Test] public void TheWorkshopTradesSanityForSupplies()
+        // 祭坛只给两项交易，报价在进房时冻结；重新渲染不会换一套数字。
+        [Test] public void TheAltarOffersExactlyTwoFrozenTrades()
         {
-            var node = Room("EVT-008");
             var run = Run(50);
-            double sanity = run.Heroes[0].Sanity;
-            EventSession session;
-            Assert.IsTrue(Pick(node, 1, run, out session), "议价");
-            Assert.AreEqual(NodeType.Altar, node.Type, "祭坛房只会抽到祭坛内容");
-            Assert.AreEqual(4, run.Map.Supplies);
-            Assert.That(run.Heroes[0].Sanity, Is.LessThan(sanity), "议价要付出理智");
+            run.Map.Supplies = 8;
+            var node = new NodeState { Type = NodeType.Altar };
+            EventScripts.Roll(node, run, Rules(), "EVT-008");
 
-            var calm = Room("EVT-008");
-            var calmRun = Run(50);
-            calmRun.Heroes[0].Sanity = 40;
-            Assert.IsTrue(Pick(calm, 2, calmRun, out session), "适配方案");
-            Assert.That(calmRun.Heroes[0].Sanity, Is.GreaterThan(40), "适配方案抬的是全队理智");
+            var page = EventScripts.Page(node, run, Rules());
+            Assert.AreEqual(2, page.Choices.Count, "祭坛只有两项交易");
+            Assert.NotNull(node.AltarResourceForSanity);
+            Assert.NotNull(node.AltarSanityForResource);
+            Assert.IsTrue(page.Choices[0].Enabled, "资源换理智在还有资源时可用");
+            Assert.IsTrue(page.Choices[1].Enabled, "理智换资源在理智足够时可用");
+
+            var first = page.Choices.Select(c => c.Detail).ToArray();
+            uint state = run.Random.State;
+            var again = EventScripts.Page(node, run, Rules()).Choices.Select(c => c.Detail).ToArray();
+            Assert.That(again, Is.EqualTo(first), "重新渲染不会重新掷报价");
+            Assert.AreEqual(state, run.Random.State, "渲染祭坛页不消耗随机数");
+        }
+
+        [Test] public void TheAltarTradesResourcesForSanityInProportion()
+        {
+            var run = Run(50);
+            run.Map.Supplies = 10;
+            run.Prosthetics.Add(new ProstheticSpec("test_arm", "测试义肢", LimbPart.Arm, ""));
+            var node = new NodeState { Type = NodeType.Altar };
+            EventScripts.Roll(node, run, Rules(), "EVT-008");
+            var offer = node.AltarResourceForSanity;
+            Assert.IsTrue(offer.Valid);
+
+            double sanityBefore = offer.PlayerSanity ? run.PlayerSanity
+                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
+            int suppliesBefore = run.Map.Supplies;
+            int prostheticsBefore = run.Prosthetics.Count;
+            var wounded = offer.ResourceHeroId == null ? null : run.Heroes.First(h => h.Id == offer.ResourceHeroId);
+            int hpBefore = wounded == null ? 0 : wounded.Hp;
+
+            EventSession session;
+            Assert.IsTrue(Pick(node, 0, run, out session), "献上资源");
+
+            double sanityAfter = offer.PlayerSanity ? run.PlayerSanity
+                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
+            Assert.AreEqual(offer.SanityAmount, sanityAfter - sanityBefore, "理智增益与报价一致");
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                    Assert.AreEqual(suppliesBefore - offer.ResourceAmount, run.Map.Supplies, "按件扣补给");
+                    Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply, offer.SanityAmount);
+                    break;
+                case AltarResource.Health:
+                    Assert.AreEqual(hpBefore - offer.ResourceAmount, wounded.Hp, "按点扣生命");
+                    Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerHealth, offer.SanityAmount);
+                    break;
+                default:
+                    Assert.AreEqual(prostheticsBefore - 1, run.Prosthetics.Count, "交付一件义体");
+                    Assert.AreEqual(EventScripts.AltarSanityPerProsthetic, offer.SanityAmount);
+                    break;
+            }
+            Assert.IsNotEmpty(session.Note);
+            Assert.AreEqual(EventScripts.DoneStep, node.EventStep, "交易完成后祭坛结束");
+        }
+
+        [Test] public void TheAltarTradesSanityForResourcesInProportion()
+        {
+            var run = Run(50);
+            run.Heroes[1].Hp = 10;
+            var node = new NodeState { Type = NodeType.Altar };
+            EventScripts.Roll(node, run, Rules(), "EVT-008");
+            var offer = node.AltarSanityForResource;
+            Assert.IsTrue(offer.Valid);
+
+            double sanityBefore = offer.PlayerSanity ? run.PlayerSanity
+                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
+            int suppliesBefore = run.Map.Supplies;
+            int prostheticsBefore = run.Prosthetics.Count;
+            var target = offer.ResourceHeroId == null ? null : run.Heroes.First(h => h.Id == offer.ResourceHeroId);
+            int hpBefore = target == null ? 0 : target.Hp;
+
+            EventSession session;
+            Assert.IsTrue(Pick(node, 1, run, out session), "献上理智");
+
+            double sanityAfter = offer.PlayerSanity ? run.PlayerSanity
+                : run.Heroes.First(h => h.Id == offer.HeroId).Sanity;
+            Assert.AreEqual(sanityBefore - offer.SanityAmount, sanityAfter, "按报价扣理智");
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                    Assert.AreEqual(suppliesBefore + offer.ResourceAmount, run.Map.Supplies, "按件发补给");
+                    Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply, offer.SanityAmount);
+                    break;
+                case AltarResource.Health:
+                    Assert.AreEqual(hpBefore + offer.ResourceAmount, target.Hp, "按点恢复生命");
+                    Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerHealth, offer.SanityAmount);
+                    break;
+                default:
+                    Assert.AreEqual(prostheticsBefore + 1, run.Prosthetics.Count, "获得一件义体");
+                    Assert.AreEqual(offer.Prosthetic.Id, run.Prosthetics.Last().Id);
+                    Assert.AreEqual(EventScripts.AltarSanityPerProsthetic, offer.SanityAmount);
+                    break;
+            }
+            Assert.IsNotEmpty(session.Note);
+        }
+
+        // 无论随机到哪一项，资源价值与理智都按同一组汇率折算。
+        [Test] public void AltarQuotesStayProportionalAcrossSeeds()
+        {
+            for (uint seed = 1; seed <= 20; seed++)
+            {
+                var run = Run(50, seed);
+                run.Map.Supplies = 12;
+                run.Heroes[1].Hp = 10;
+                run.Prosthetics.Add(new ProstheticSpec("test_arm", "测试义肢", LimbPart.Arm, ""));
+                var node = new NodeState { Type = NodeType.Altar };
+                EventScripts.Roll(node, run, Rules(), "EVT-008");
+
+                AssertProportional(node.AltarResourceForSanity, "resources->sanity seed " + seed);
+                AssertProportional(node.AltarSanityForResource, "sanity->resources seed " + seed);
+            }
+        }
+
+        private static void AssertProportional(AltarOffer offer, string context)
+        {
+            if (!offer.Valid) return;
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                    Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply,
+                        offer.SanityAmount, context);
+                    Assert.GreaterOrEqual(offer.ResourceAmount, 2);
+                    break;
+                case AltarResource.Health:
+                    Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerHealth,
+                        offer.SanityAmount, context);
+                    Assert.GreaterOrEqual(offer.ResourceAmount, 1);
+                    break;
+                default:
+                    Assert.AreEqual(1, offer.ResourceAmount, context);
+                    Assert.AreEqual(EventScripts.AltarSanityPerProsthetic, offer.SanityAmount, context);
+                    Assert.NotNull(offer.Prosthetic, context);
+                    break;
+            }
+        }
+
+        [Test] public void TheAltarDisablesTheResourceTradeWhenSanityIsFull()
+        {
+            var run = Run(100);
+            run.Map.Supplies = 5;
+            var node = new NodeState { Type = NodeType.Altar };
+            EventScripts.Roll(node, run, Rules(), "EVT-008");
+
+            Assert.IsFalse(node.AltarResourceForSanity.Valid, "理智全满时祭坛不收资源");
+            var page = EventScripts.Page(node, run, Rules());
+            Assert.IsFalse(page.Choices[0].Enabled, "不可用的交易仍会显示，但点不动");
+            EventSession session;
+            Assert.IsFalse(Pick(node, 0, run, out session), "不可用交易不会被结算");
+            Assert.AreEqual(5, run.Map.Supplies, "拒绝时不扣资源");
+            Assert.IsTrue(page.Choices[1].Enabled, "理智换资源仍然可用");
         }
 
         // ---------------- 补给站 ----------------

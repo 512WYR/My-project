@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Ruin.Core
 {
@@ -145,6 +146,12 @@ namespace Ruin.Core
         public const int DoneStep = 99;        // The step value that means "this event is over".
         public const double AllDrinkSuccess = 0.30; // EVT-004 全部喝下: the user-specified 30/70.
 
+        // EVT-008 exchange rates. Supplies are the run's only currency, and the supply shop prices a
+        // prosthetic at 4 supplies, so 16 sanity is its matching value. HP trades one for one.
+        public const int AltarSanityPerSupply = 4;
+        public const int AltarSanityPerHealth = 1;
+        public const int AltarSanityPerProsthetic = 16;
+
         private enum Gate { Always, High, Low }
 
         private sealed class Script
@@ -257,6 +264,9 @@ namespace Ruin.Core
                 if (node.EventLimit > 5) node.EventLimit = 5;
                 run.Map.Supplies += 3;
             }
+            // The altar's two trades are frozen here, once, for the same reason as the mine's cap: the
+            // page must show the same numbers every time it is rebuilt.
+            if (node.EventId == "EVT-008") RollAltar(node, run);
         }
 
         public static bool CanLeave(NodeState node)
@@ -597,31 +607,315 @@ namespace Ruin.Core
         private static void Workshop(NodeState node, RunState run, EventPage page)
         {
             page.Step = 1; page.StepCount = 1;
-            page.Body = "工坊里还留着半台工作台，义肢堆在墙边，有些还在动。";
-            page.Hint = "基础服务与两项发现各自结算一次。";
-            page.Choices.Add(new EventChoice("安装义肢", "直接取得一件义肢", s =>
+            page.Body = "工坊里堆着拆下来的义肢，墙中央却立着一座不该出现在这里的黑色祭坛。"
+                + "投料口亮着暗红色的灯，像一只不肯闭上的眼睛。台面上刻着一行小字：「拿来，或者从这里拿走。」";
+            page.Hint = "祭坛只做等价交换：1 补给 = 4 理智，1 生命 = 1 理智，1 件义体 = 16 理智。"
+                + "每次只能选择其中一项交易。";
+
+            var payResource = node.AltarResourceForSanity;
+            var paySanity = node.AltarSanityForResource;
+            page.Choices.Add(new EventChoice("献上资源", DescribeResourceTrade(payResource, run),
+                s => TradeResourceForSanity(s, payResource))
+            { Enabled = payResource != null && payResource.Valid });
+            page.Choices.Add(new EventChoice("献上理智", DescribeSanityTrade(paySanity, run),
+                s => TradeSanityForResource(s, paySanity))
+            { Enabled = paySanity != null && paySanity.Valid });
+        }
+
+        // ---------------- EVT-008 祭坛报价 ----------------
+
+        private static void RollAltar(NodeState node, RunState run)
+        {
+            node.AltarResourceForSanity = RollResourceForSanity(run);
+            node.AltarSanityForResource = RollSanityForResource(run);
+        }
+
+        // Resources -> sanity. The recipient is chosen first: the altar only buys as much sanity as the
+        // target can still hold, which keeps the quoted resource cost exactly proportional to the gain.
+        private static AltarOffer RollResourceForSanity(RunState run)
+        {
+            var heroes = LivingHeroes(run);
+            // A full point of headroom is required, so the quoted gain can always be paid in full.
+            var roomy = heroes.Where(h => 100 - h.Sanity >= 1).ToList();
+            bool playerRoomy = 100 - run.PlayerSanity >= 1;
+            if (!playerRoomy && roomy.Count == 0)
+                return new AltarOffer { Valid = false, Refusal = "所有人的理智都已满，祭坛不收这笔交易。" };
+
+            var offer = new AltarOffer();
+            int headroom;
+            if (playerRoomy && (roomy.Count == 0 || run.Random.NextUnit() < 0.5))
             {
-                var item = s.GrantProsthetic();
-                s.End("工坊给你配了一副义肢。获得 " + (item == null ? "一件义肢" : item.Name) + "。");
-            }));
-            page.Choices.Add(new EventChoice("议价", "玩家理智 -4 · 补给 +4", s =>
+                offer.PlayerSanity = true;
+                headroom = (int)Math.Floor(100 - run.PlayerSanity);
+            }
+            else
+            {
+                var hero = roomy[PickIndex(roomy, run.Random)];
+                offer.PlayerSanity = false;
+                offer.HeroId = hero.Id;
+                headroom = (int)Math.Floor(100 - hero.Sanity);
+            }
+
+            var stock = run.Prosthetics == null ? new List<ProstheticSpec>()
+                : run.Prosthetics.Where(p => p != null).ToList();
+            var kinds = new List<AltarResource>();
+            if (run.Map != null && run.Map.Supplies >= 2 && headroom >= AltarSanityPerSupply * 2)
+                kinds.Add(AltarResource.Supplies);
+            if (stock.Count > 0 && headroom >= AltarSanityPerProsthetic)
+                kinds.Add(AltarResource.Prosthetic);
+            if (headroom >= AltarSanityPerHealth && heroes.Any(h => h.Hp > 1))
+                kinds.Add(AltarResource.Health);
+            if (kinds.Count == 0)
+                return new AltarOffer { Valid = false, Refusal = "祭坛嫌这笔交易太小，什么也没收。" };
+
+            offer.Resource = kinds[PickIndex(kinds, run.Random)];
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                {
+                    // Never charge more than the purse holds, and never buy more sanity than fits.
+                    int most = Math.Min(4, Math.Min(run.Map.Supplies, headroom / AltarSanityPerSupply));
+                    offer.ResourceAmount = Range(run.Random, 2, Math.Max(2, most));
+                    offer.SanityAmount = offer.ResourceAmount * AltarSanityPerSupply;
+                    break;
+                }
+                case AltarResource.Health:
+                {
+                    // 10..25% of max HP, but never below the death door at 1 HP or past the sanity cap.
+                    var victims = heroes.Where(h => h.Hp > 1).ToList();
+                    var victim = victims[PickIndex(victims, run.Random)];
+                    int wanted = (int)Math.Ceiling(victim.Definition.MaxHp * Range(run.Random, 10, 25) / 100.0 - 1e-9);
+                    offer.ResourceHeroId = victim.Id;
+                    offer.ResourceAmount = Math.Max(1, Math.Min(wanted, Math.Min(victim.Hp - 1, headroom)));
+                    offer.SanityAmount = offer.ResourceAmount * AltarSanityPerHealth;
+                    break;
+                }
+                case AltarResource.Prosthetic:
+                {
+                    var item = stock[PickIndex(stock, run.Random)];
+                    offer.Prosthetic = new ProstheticSpec(item.Id, item.Name, item.Part, item.Description);
+                    offer.ResourceAmount = 1;
+                    offer.SanityAmount = AltarSanityPerProsthetic;
+                    break;
+                }
+            }
+            return offer;
+        }
+
+        // Sanity -> resources. Candidates that the richest sanity pool cannot afford are dropped before
+        // the draw, so the quoted price is always payable.
+        private static AltarOffer RollSanityForResource(RunState run)
+        {
+            var heroes = LivingHeroes(run);
+            double maxSanity = run.PlayerSanity;
+            for (int i = 0; i < heroes.Count; i++) maxSanity = Math.Max(maxSanity, heroes[i].Sanity);
+
+            var kinds = new List<AltarResource>();
+            if (maxSanity >= AltarSanityPerSupply * 2) kinds.Add(AltarResource.Supplies);
+            if (maxSanity >= AltarSanityPerProsthetic) kinds.Add(AltarResource.Prosthetic);
+            var wounded = heroes.Where(h => h.Hp < h.Definition.MaxHp).ToList();
+            if (wounded.Count > 0 && maxSanity >= AltarSanityPerHealth) kinds.Add(AltarResource.Health);
+            if (kinds.Count == 0)
+                return new AltarOffer { Valid = false, Refusal = "你们的理智不足以支付任何东西。" };
+
+            var offer = new AltarOffer { Resource = kinds[PickIndex(kinds, run.Random)] };
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                {
+                    int most = Math.Min(4, (int)(maxSanity / AltarSanityPerSupply));
+                    offer.ResourceAmount = Range(run.Random, 2, Math.Max(2, most));
+                    offer.SanityAmount = offer.ResourceAmount * AltarSanityPerSupply;
+                    break;
+                }
+                case AltarResource.Health:
+                {
+                    var target = wounded[PickIndex(wounded, run.Random)];
+                    int wanted = (int)Math.Ceiling(target.Definition.MaxHp * Range(run.Random, 10, 25) / 100.0 - 1e-9);
+                    int amount = Math.Min(Math.Max(1, wanted), target.Definition.MaxHp - target.Hp);
+                    if (amount > maxSanity) amount = Math.Max(1, (int)Math.Floor(maxSanity));
+                    offer.ResourceHeroId = target.Id;
+                    offer.ResourceAmount = amount;
+                    offer.SanityAmount = amount * AltarSanityPerHealth;
+                    break;
+                }
+                case AltarResource.Prosthetic:
+                    offer.Prosthetic = Encounter.DropProsthetic(null, run.Random);
+                    if (offer.Prosthetic == null)
+                        return new AltarOffer { Valid = false, Refusal = "祭坛拿不出一件完整的义体。" };
+                    offer.ResourceAmount = 1;
+                    offer.SanityAmount = AltarSanityPerProsthetic;
+                    break;
+            }
+            ChooseSanityPayer(offer, run, heroes);
+            return offer;
+        }
+
+        private static void ChooseSanityPayer(AltarOffer offer, RunState run, List<ActorState> heroes)
+        {
+            bool playerCan = run.PlayerSanity >= offer.SanityAmount;
+            var able = heroes.Where(h => h.Sanity >= offer.SanityAmount).ToList();
+            if (playerCan && (able.Count == 0 || run.Random.NextUnit() < 0.5))
+            {
+                offer.PlayerSanity = true;
+                offer.HeroId = null;
+                return;
+            }
+            if (able.Count > 0)
+            {
+                offer.PlayerSanity = false;
+                offer.HeroId = able[PickIndex(able, run.Random)].Id;
+                return;
+            }
+            // Defensive only: RollSanityForResource filtered by the highest pool, so one side can pay.
+            offer.Valid = false;
+            offer.Refusal = "理智不足，祭坛收回了它的报价。";
+        }
+
+        private static string DescribeResourceTrade(AltarOffer offer, RunState run)
+        {
+            if (offer == null) return "祭坛没有回应。";
+            if (!offer.Valid) return offer.Refusal;
+            string gainer = offer.PlayerSanity ? "玩家理智" : HeroName(run, offer.HeroId) + "的理智";
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                    return "支付 " + offer.ResourceAmount + " 补给 · " + gainer + " +" + offer.SanityAmount;
+                case AltarResource.Health:
+                    return "支付 " + offer.ResourceAmount + " 生命（" + HeroName(run, offer.ResourceHeroId)
+                        + "） · " + gainer + " +" + offer.SanityAmount;
+                default:
+                    return "交付「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name)
+                        + "」 · " + gainer + " +" + offer.SanityAmount;
+            }
+        }
+
+        private static string DescribeSanityTrade(AltarOffer offer, RunState run)
+        {
+            if (offer == null) return "祭坛没有回应。";
+            if (!offer.Valid) return offer.Refusal;
+            string payer = offer.PlayerSanity ? "玩家理智" : HeroName(run, offer.HeroId) + "的理智";
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                    return payer + " -" + offer.SanityAmount + " · 获得 " + offer.ResourceAmount + " 补给";
+                case AltarResource.Health:
+                    return payer + " -" + offer.SanityAmount + " · " + HeroName(run, offer.ResourceHeroId)
+                        + " 恢复 " + offer.ResourceAmount + " 生命";
+                default:
+                    return payer + " -" + offer.SanityAmount + " · 获得「"
+                        + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
+            }
+        }
+
+        private static void TradeResourceForSanity(EventSession s, AltarOffer offer)
+        {
+            if (s == null || offer == null || !offer.Valid) { if (s != null) s.End(offer == null ? "祭坛没有回应。" : offer.Refusal); return; }
+            string paid;
+            int sanity;
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                {
+                    int amount = Math.Min(offer.ResourceAmount, s.Run.Map.Supplies);
+                    s.Run.Map.Supplies -= amount;
+                    paid = amount + " 点补给";
+                    sanity = amount * AltarSanityPerSupply;
+                    break;
+                }
+                case AltarResource.Health:
+                {
+                    var hero = FindHero(s.Run, offer.ResourceHeroId);
+                    int amount = hero == null ? 0 : Math.Max(0, Math.Min(offer.ResourceAmount, hero.Hp - 1));
+                    if (hero != null) hero.Hp -= amount;
+                    paid = hero == null ? "生命" : hero.Name + " 的 " + amount + " 点生命";
+                    sanity = amount * AltarSanityPerHealth;
+                    break;
+                }
+                default:
+                {
+                    int index = FindProsthetic(s.Run, offer.Prosthetic);
+                    if (index >= 0) s.Run.Prosthetics.RemoveAt(index);
+                    paid = "「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
+                    sanity = index >= 0 ? AltarSanityPerProsthetic : 0;
+                    break;
+                }
+            }
+            if (sanity <= 0) { s.End("祭坛没有收下任何东西。"); return; }
+
+            string gainer;
+            if (offer.PlayerSanity)
             {
                 double before = s.Run.PlayerSanity;
-                s.Run.PlayerSanity = SanityProbability.Clamp(before - 4, 0, 100);
-                s.GainSupplies(4, "补给");
-                s.End("你和看不见的摊主磨了几句。玩家理智 -" + (before - s.Run.PlayerSanity).ToString("0.0") + "。");
-            }));
-            page.Choices.Add(new EventChoice("适配方案", "全队理智 +5", s =>
+                s.Run.PlayerSanity = SanityProbability.Clamp(before + sanity, 0, 100);
+                sanity = (int)Math.Round(s.Run.PlayerSanity - before);
+                gainer = "玩家理智";
+            }
+            else
             {
-                s.TeamSanity(5);
-                s.End("工作台给每个人量了一遍尺寸，队伍安心了一些：全队理智 +5。");
-            }));
-            page.Choices.Add(new EventChoice("调查搏动组织", "全队理智 -8 · 补给 +6", s =>
+                var hero = FindHero(s.Run, offer.HeroId);
+                double before = hero == null ? 0 : hero.Sanity;
+                if (hero != null) hero.Sanity = SanityProbability.Clamp(before + sanity, 0, 100);
+                sanity = hero == null ? 0 : (int)Math.Round(hero.Sanity - before);
+                gainer = (hero == null ? "队员" : hero.Name) + "的理智";
+            }
+            if (sanity <= 0) { s.End("祭坛收下了" + paid + "，但什么也没有回给你。"); return; }
+            s.End("你把" + paid + "放上祭坛。投料口合拢了一次，" + gainer + " +" + sanity + "。祭坛没有道谢。");
+        }
+
+        private static void TradeSanityForResource(EventSession s, AltarOffer offer)
+        {
+            if (s == null || offer == null || !offer.Valid) { if (s != null) s.End(offer == null ? "祭坛没有回应。" : offer.Refusal); return; }
+            int spend;
+            string payer;
+            if (offer.PlayerSanity)
             {
-                s.TeamSanity(-8);
-                s.GainSupplies(6, "补给");
-                s.End("义肢里的组织还在搏动，工坊和某个敌人脱不了干系。全队理智 -8。");
-            }));
+                spend = Math.Min(offer.SanityAmount, (int)Math.Floor(s.Run.PlayerSanity));
+                s.Run.PlayerSanity = SanityProbability.Clamp(s.Run.PlayerSanity - spend, 0, 100);
+                payer = "玩家理智";
+            }
+            else
+            {
+                var hero = FindHero(s.Run, offer.HeroId);
+                spend = hero == null ? 0 : Math.Min(offer.SanityAmount, (int)Math.Floor(hero.Sanity));
+                if (hero != null) hero.Sanity = SanityProbability.Clamp(hero.Sanity - spend, 0, 100);
+                payer = (hero == null ? "队员" : hero.Name) + "的理智";
+            }
+            if (spend <= 0) { s.End("祭坛什么也没有取走。"); return; }
+
+            string bought;
+            switch (offer.Resource)
+            {
+                case AltarResource.Supplies:
+                {
+                    int amount = Math.Max(1, spend / AltarSanityPerSupply);
+                    s.Run.Map.Supplies += amount;
+                    bought = " " + amount + " 补给";
+                    break;
+                }
+                case AltarResource.Health:
+                {
+                    var hero = FindHero(s.Run, offer.ResourceHeroId);
+                    int amount = Math.Max(1, spend);
+                    int healed = 0;
+                    if (hero != null)
+                    {
+                        healed = Math.Min(amount, hero.Definition.MaxHp - hero.Hp);
+                        hero.Hp += healed;
+                    }
+                    bought = (hero == null ? "队员" : hero.Name) + "的生命 +" + healed;
+                    break;
+                }
+                default:
+                {
+                    if (offer.Prosthetic != null)
+                        s.Run.Prosthetics.Add(new ProstheticSpec(offer.Prosthetic.Id, offer.Prosthetic.Name,
+                            offer.Prosthetic.Part, offer.Prosthetic.Description));
+                    bought = "「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
+                    break;
+                }
+            }
+            s.End(payer + " -" + spend + "。投料口吐出了" + bought + "，像早就等在那里。");
         }
 
         // ---------------- EVT-H001 隐藏的岔道（高理智） ----------------
@@ -715,6 +1009,52 @@ namespace Ruin.Core
             if (pool.Count <= 1) return 0;
             int index = (int)(random.NextUnit() * pool.Count);
             return index >= pool.Count ? pool.Count - 1 : index;
+        }
+
+        private static int PickIndex<T>(IList<T> pool, RunRandom random)
+        {
+            if (pool == null || pool.Count == 0) return -1;
+            if (pool.Count <= 1) return 0;
+            int index = (int)(random.NextUnit() * pool.Count);
+            return index >= pool.Count ? pool.Count - 1 : index;
+        }
+
+        // Inclusive on both ends; the altar uses it for small integer ranges.
+        private static int Range(RunRandom random, int min, int max)
+        {
+            int value = min + (int)(random.NextUnit() * (max - min + 1));
+            return value > max ? max : value;
+        }
+
+        private static List<ActorState> LivingHeroes(RunState run)
+        {
+            var list = new List<ActorState>();
+            if (run == null || run.Heroes == null) return list;
+            for (int i = 0; i < run.Heroes.Count; i++)
+                if (run.Heroes[i] != null && !run.Heroes[i].Dead) list.Add(run.Heroes[i]);
+            return list;
+        }
+
+        private static ActorState FindHero(RunState run, string id)
+        {
+            if (run == null || run.Heroes == null || string.IsNullOrEmpty(id)) return null;
+            for (int i = 0; i < run.Heroes.Count; i++)
+                if (run.Heroes[i] != null && run.Heroes[i].Id == id) return run.Heroes[i];
+            return null;
+        }
+
+        private static string HeroName(RunState run, string id)
+        {
+            var hero = FindHero(run, id);
+            return hero == null ? "队员" : hero.Name;
+        }
+
+        private static int FindProsthetic(RunState run, ProstheticSpec item)
+        {
+            if (run == null || run.Prosthetics == null || item == null) return -1;
+            for (int i = 0; i < run.Prosthetics.Count; i++)
+                if (run.Prosthetics[i] != null && run.Prosthetics[i].Id == item.Id) return i;
+            return -1;
         }
 
         // Prefers content the run has not shown yet. Once every eligible script has appeared, the one
