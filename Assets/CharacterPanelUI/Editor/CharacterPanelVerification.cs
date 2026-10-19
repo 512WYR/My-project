@@ -99,6 +99,7 @@ namespace GameMake.CharacterEditor
             for(int i=0;i<4;i++)
             {
                 var limb=LimbSystem.Get(hero,(LimbPart)i); limb.Hp=0;
+                app.Run.Consumables.Add(ConsumableSystem.Clone(ConsumableSystem.ForKind(ConsumableKind.SurgeryKit)));
             }
             app.Refresh(); Check(Enumerable.Range(0,4).All(i=>view.LimbImages[i].sprite==view.Damaged[i]),"Broken limbs do not use supplied damaged icons");
             var hover=view.LimbButtons[2].GetComponent<LimbInstallHover>();
@@ -107,7 +108,7 @@ namespace GameMake.CharacterEditor
             RaycastClick(view.LimbButtons[2]); Capture("Map-Character-Limb-Hover");
             ExecuteEvents.Execute(hover.gameObject,new PointerEventData(EventSystem.current),ExecuteEvents.pointerExitHandler);
             int beforeInstall=app.Run.Prosthetics.Count;
-            RaycastClick(ActiveButton(view.PickerItems,"装载"));
+            RaycastClick(ActiveButton(view.PickerItems,"消耗手术包装载"));
             Check(LimbSystem.Get(hero,LimbPart.Arm).ProstheticFitted && app.Run.Prosthetics.Count==beforeInstall-1 && view.LimbImages[2].sprite==view.Healthy[2],"Prosthetic does not consume stock or restore arm/icon");
             int stock=app.Run.Prosthetics.Count; app.CharacterInstallProsthetic("prosthetic_arm"); Check(stock==app.Run.Prosthetics.Count,"Repeated installation consumes another item");
             var leg=LimbSystem.Get(hero,LimbPart.Leg); leg.Hp=Mathf.Max(1,leg.MaxHp/2); app.Refresh();
@@ -160,13 +161,23 @@ namespace GameMake.CharacterEditor
             CheckScreenEdgeRails(view);
             hero=app.CharacterHero; hero.Hp=1;
             app.Run.Consumables.Add(ConsumableSystem.Clone(ConsumableSystem.ForKind(ConsumableKind.HpRestore)));
+            app.Run.Consumables.Add(ConsumableSystem.Clone(ConsumableSystem.ForKind(ConsumableKind.SurgeryKit)));
             LimbSystem.Get(hero,LimbPart.Head).Hp=0;
             app.Run.Prosthetics.Add(LimbSystem.DefaultProsthetics[0]);
             app.Run.AccessoryStock.Add(AccessorySystem.Clone(AccessorySystem.Find("acc_apple"))); app.Refresh();
-            view.ShowLimb(0); yield return .1f; RaycastClick(ActiveButton(view.PickerItems,"装载"));
-            Check(LimbSystem.Get(hero,LimbPart.Head).ProstheticFitted,"Combat prosthetic install fails");
             app.CharacterEquipAccessory("acc_apple"); Check(hero.EquippedAccessories.Any(a=>a.Id=="acc_apple"),"Combat accessory install fails");
+            view.ShowLimb(0); yield return .1f;
             Capture("Battle-Character-Panel");
+            int kits=ConsumableSystem.Count(app.Run,ConsumableKind.SurgeryKit);
+            RaycastClick(ActiveButton(view.PickerItems,"消耗手术包装载"));
+            Check(LimbSystem.Get(hero,LimbPart.Head).ProstheticFitted,"Combat prosthetic install fails");
+            Check(ConsumableSystem.Count(app.Run,ConsumableKind.SurgeryKit)==kits-1,"Combat prosthetic install did not spend a kit");
+            Check(!app.CharacterPanelOpen,"Combat prosthetic install left the popup open");
+            Check(app.Busy || battle.Current!=actor,"Combat prosthetic install did not consume action");
+            while(app.Busy && EditorApplication.timeSinceStartup<until) yield return .1f;
+            Check(battle.Outcome==BattleOutcome.Active && battle.Current!=null && battle.Current.Player,"Enemy loop did not return to a player turn");
+            hero=battle.Current; hero.Hp=1;
+            RaycastClick(hud.Panel.PartyButtons[app.Run.Heroes.IndexOf(hero)]); yield return .1f;
             int stockBefore=ConsumableSystem.Count(app.Run,ConsumableKind.HpRestore); RaycastClick(view.PotionButtons[0]);
             Check(!app.CharacterPanelOpen && hero.Hp>1 && ConsumableSystem.Count(app.Run,ConsumableKind.HpRestore)==stockBefore-1 && battle.Events.Count>marker,"Battle potion does not execute through combat engine");
             Check(app.Busy || battle.Current!=actor,"Battle potion did not consume action");
@@ -174,7 +185,7 @@ namespace GameMake.CharacterEditor
             while(app.Busy && EditorApplication.timeSinceStartup<until) yield return .1f;
             RaycastClick(hud.Panel.PartyButtons[0]); Check(app.CharacterHero==app.Run.Heroes[0],"Battle popup cannot reopen for another hero");
             app.NewRun(); Check(!view.Page.activeSelf && !app.CharacterPanelOpen,"Popup retains previous run hero");
-            Pass("combat portrait opens without firing pending skill; combat equipment works; potion uses battle action and closes; stale clicks rejected; new run clears popup");
+            Pass("combat portrait opens without firing pending skill; combat surgery spends a kit and the action; combat equipment works; potion uses battle action and closes; stale clicks rejected; new run clears popup");
         }
         static void CheckScreenEdgeRails(CharacterPanelView view)
         {

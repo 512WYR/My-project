@@ -26,8 +26,9 @@ namespace Ruin.Core
             },
             new ConsumableSpec
             {
-                Id = "con_surgery_kit", Name = "手术包", Kind = ConsumableKind.SurgeryKit, Implemented = false,
-                Description = "功能待定。可以持有与查看，暂时不能使用。"
+                Id = "con_surgery_kit", Name = "手术包", Kind = ConsumableKind.SurgeryKit,
+                Description = "为一名队员的断肢装载仓库中的一件义体，消耗一个手术包。"
+                    + "补给站等特殊地点的安装选项不需要手术包。"
             }
         };
 
@@ -77,7 +78,10 @@ namespace Ruin.Core
         public static string UseBlockedReason(RunState run, ActorState hero, ConsumableSpec item, bool inBattle)
         {
             if (item == null) return "请选择一件道具。";
-            if (!item.Implemented || item.Kind == ConsumableKind.SurgeryKit) return "功能待定。";
+            if (!item.Implemented) return "功能待定。";
+            // A kit needs a second choice (which prosthetic), so the generic Use path cannot settle it.
+            // The character panel installs through UseSurgeryKit with that choice already made.
+            if (item.Kind == ConsumableKind.SurgeryKit) return "请在角色面板的义体列表中选择要安装的义体。";
             if (hero == null) return "请选择一名队员。";
             if (hero.Dead) return "已经阵亡。";
             switch (item.Kind)
@@ -90,6 +94,39 @@ namespace Ruin.Core
                     break;
             }
             return null;
+        }
+
+        // ---- 手术包 ----
+        // The kit is the field alternative to a supply station's fitting service: one kit plus one
+        // stocked prosthetic fits it onto a severed part. Everything else still follows LimbSystem's
+        // install rules (severed part, matching silhouette). A refused fitting keeps both items.
+
+        public static string SurgeryKitBlockedReason(RunState run, ActorState hero, ProstheticSpec item)
+        {
+            if (item == null) return "请选择一件义体。";
+            if (hero == null) return "请选择一名队员。";
+            if (hero.Dead) return "已经阵亡。";
+            var blocked = LimbSystem.InstallBlockedReason(hero, item);
+            if (blocked != null) return blocked;
+            if (Count(run, ConsumableKind.SurgeryKit) <= 0) return "需要手术包才能在这里安装义体。";
+            return null;
+        }
+
+        // Installs and only then spends the kit and the stocked piece, so a refused fitting never
+        // changes either list.
+        public static bool UseSurgeryKit(RunState run, ActorState hero, ProstheticSpec item, out string note)
+        {
+            note = null;
+            string blocked = SurgeryKitBlockedReason(run, hero, item);
+            if (blocked != null) { note = blocked; return false; }
+            if (!LimbSystem.Install(hero, item)) { note = "只有断肢才能安装义体。"; return false; }
+            int kit = run.Consumables == null ? -1
+                : run.Consumables.FindIndex(c => c != null && c.Kind == ConsumableKind.SurgeryKit);
+            if (kit >= 0) run.Consumables.RemoveAt(kit);
+            if (run.Prosthetics != null) run.Prosthetics.Remove(item);
+            note = hero.Name + " 消耗手术包，装上了" + item.Name + "，"
+                + LimbSystem.PartName(item.Part) + "恢复基础功能。";
+            return true;
         }
 
         // Consumes one item only after the effect has been accepted, so a refused use leaves the stock and

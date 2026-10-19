@@ -30,7 +30,7 @@ namespace Ruin.Core
             var products=new List<ShopProduct>();
             foreach(var item in LimbSystem.Resolve(rules).Prosthetics)
                 products.Add(new ShopProduct {Id=item.Id,Name=item.Name,
-                    Description=item.Description+Restriction(item)+" 仅断肢可安装；在补给站安装另需 "+InstallPrice+" 矿石。",
+                    Description=item.Description+Restriction(item)+" 仅断肢可安装；在补给站安装需 "+InstallPrice+" 矿石，也可以消耗手术包在角色面板安装。",
                     Category=ShopCategory.Prosthetic,Price=ProstheticPrice,Prosthetic=item});
             foreach(var item in AccessorySystem.Defaults)
                 products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+Restriction(item),Category=ShopCategory.Accessory,Price=AccessoryPrice,Accessory=item});

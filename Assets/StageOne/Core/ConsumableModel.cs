@@ -9,7 +9,7 @@ namespace Ruin.Core
     {
         SanityLock, // 理智锁定药剂
         HpRestore,  // 血量恢复药
-        SurgeryKit  // 手术包（功能待定）
+        SurgeryKit  // 手术包：消耗一件并为断肢装载义体
     }
 
     [Serializable]
@@ -19,8 +19,8 @@ namespace Ruin.Core
         public string Name;
         public string Description;
         public ConsumableKind Kind;
-        // Catalogued but not usable yet. The surgery kit is grantable and visible, but every use is
-        // refused, so it can never be spent by accident.
+        // Catalogued but not usable yet. Every generic use is refused while this is false, so a
+        // placeholder item can never be spent by accident.
         public bool Implemented = true;
     }
 }

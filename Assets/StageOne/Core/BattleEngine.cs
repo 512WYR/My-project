@@ -340,6 +340,17 @@ namespace Ruin.Core
             return true;
         }
 
+        // A surgery-kit fitting is settled by ConsumableSystem because it needs a second choice (which
+        // prosthetic), so it cannot go through UseConsumable. Like any item it still spends the current
+        // hero's action and runs the same end-of-action prosthetic hooks.
+        public void EndTurnAfterSurgery(string note)
+        {
+            if (Outcome != BattleOutcome.Active || Current == null || !Current.Player) return;
+            if (!string.IsNullOrEmpty(note)) Log(note, "limb", Current.Id, Current.Id);
+            OnProstheticActionEnd(Current);
+            if (!CheckEnd()) Advance();
+        }
+
         private bool ExecuteSwap(ActionRequest request, out string error)
         {
             error = SwapDisabledReason();

@@ -147,7 +147,7 @@ namespace Ruin.Runtime
             int calmPrice = StationPrice(app, SupplyShop.StationCalmPrice);
             view.Body = "治疗为每名队员恢复 " + ratio + "% 生命，阵亡成员不会复活。\n"
                 + "静养为玩家理智 +" + Exploration.CalmSanity.ToString("0.#") + "。\n"
-                + "重伤部位可以修复，断肢需要安装对应部位的义肢。\n"
+                + "重伤部位可以修复，断肢可以在这里直接安装对应部位的义肢，不需要手术包。\n"
                 + (healPrice == 0 && calmPrice == 0
                     ? "本层补给站的治疗与静养免费。"
                     : "本层治疗与静养各需 " + healPrice + " 矿石。");
@@ -195,7 +195,7 @@ namespace Ruin.Runtime
         {
             var view = Base(app, "补给终端", "部位与义肢", "SUPPLY / 选择队员");
             view.Body = "选择一名队员，处理他的四个部位。\n"
-                + "只有重伤部位能在这里修复；断肢只能安装对应部位的义肢。";
+                + "只有重伤部位能在这里修复；断肢可以在这里直接安装义肢，不需要手术包。";
             view.Hint = StockText(app);
 
             for (int i = 0; i < app.Run.Heroes.Count; i++)

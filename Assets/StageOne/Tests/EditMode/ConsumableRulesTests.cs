@@ -55,7 +55,7 @@ namespace Ruin.Tests
         }
 
         [Test]
-        public void DefaultsHoldExactlyThreeUniqueItemsAndOnlyTheSurgeryKitIsUnimplemented()
+        public void DefaultsHoldExactlyThreeUniqueImplementedItems()
         {
             Assert.AreEqual(3, ConsumableSystem.Defaults.Length);
             Assert.AreEqual(3, ConsumableSystem.Defaults.Select(c => c.Id).Distinct().Count());
@@ -64,9 +64,7 @@ namespace Ruin.Tests
             Assert.IsNotNull(Find("con_sanity_lock"));
             Assert.IsNotNull(Find("con_hp_restore"));
             Assert.IsNotNull(Find("con_surgery_kit"));
-            Assert.IsTrue(Find("con_sanity_lock").Implemented);
-            Assert.IsTrue(Find("con_hp_restore").Implemented);
-            Assert.IsFalse(Find("con_surgery_kit").Implemented);
+            Assert.That(ConsumableSystem.Defaults.All(c => c.Implemented), "every catalogued item is usable");
             Assert.AreEqual(ConsumableKind.SurgeryKit, Find("con_surgery_kit").Kind);
         }
 
@@ -228,7 +226,53 @@ namespace Ruin.Tests
         }
 
         [Test]
-        public void TheSurgeryKitIsNeverUsableOrConsumed()
+        public void TheSurgeryKitFitsAStockedProstheticAndSpendsExactlyOneKit()
+        {
+            var rules = new CombatRules();
+            var run = Run(rules, HeroSpec("a", maxHp: 40));
+            var hero = run.Heroes[0];
+            LimbSystem.Get(hero, LimbPart.Arm).Hp = 0;
+            run.Prosthetics.Add(LimbSystem.Clone(LimbSystem.Prosthetic("prosthetic_arm", rules.Limbs)));
+            Grant(run, ConsumableKind.SurgeryKit);
+            Grant(run, ConsumableKind.SurgeryKit);
+            Grant(run, ConsumableKind.HpRestore);
+
+            string note;
+            Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, run.Prosthetics[0], out note), Is.True, note);
+            Assert.IsTrue(LimbSystem.HasProsthetic(hero, LimbPart.Arm));
+            Assert.AreEqual(LimbSystem.Get(hero, LimbPart.Arm).MaxHp, LimbSystem.Get(hero, LimbPart.Arm).Hp);
+            Assert.AreEqual(1, ConsumableSystem.Count(run, ConsumableKind.SurgeryKit), "one kit per fitting");
+            Assert.AreEqual(1, ConsumableSystem.Count(run, ConsumableKind.HpRestore), "other items stay put");
+            Assert.AreEqual(0, run.Prosthetics.Count, "the fitted piece leaves the stock");
+        }
+
+        [Test]
+        public void TheSurgeryKitKeepsBothItemsWhenTheFittingIsRefused()
+        {
+            var rules = new CombatRules();
+            var run = Run(rules, HeroSpec("a", maxHp: 40));
+            var hero = run.Heroes[0];
+            run.Prosthetics.Add(LimbSystem.Clone(LimbSystem.Prosthetic("prosthetic_arm", rules.Limbs)));
+
+            string note;
+            // No kit yet, limb already severed.
+            LimbSystem.Get(hero, LimbPart.Arm).Hp = 0;
+            Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, run.Prosthetics[0], out note), Is.False);
+            Assert.AreEqual("需要手术包才能在这里安装义体。", note);
+            Assert.IsFalse(LimbSystem.HasProsthetic(hero, LimbPart.Arm));
+            Assert.AreEqual(1, run.Prosthetics.Count);
+
+            // Kit in hand, but the part is still flesh.
+            Grant(run, ConsumableKind.SurgeryKit);
+            LimbSystem.Get(hero, LimbPart.Arm).Hp = LimbSystem.Get(hero, LimbPart.Arm).MaxHp;
+            Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, run.Prosthetics[0], out note), Is.False);
+            Assert.AreEqual("只能安装在断肢上。", note);
+            Assert.AreEqual(1, ConsumableSystem.Count(run, ConsumableKind.SurgeryKit));
+            Assert.AreEqual(1, run.Prosthetics.Count);
+        }
+
+        [Test]
+        public void TheGenericUsePathPointsAtTheCharacterPanelWithoutSpendingTheKit()
         {
             var rules = new CombatRules();
             var run = Run(rules, HeroSpec("a", maxHp: 40));
@@ -237,13 +281,13 @@ namespace Ruin.Tests
 
             string note;
             Assert.That(ConsumableSystem.Use(run, hero, 0, false, out note), Is.False);
-            Assert.AreEqual("功能待定。", note);
+            Assert.AreEqual("请在角色面板的义体列表中选择要安装的义体。", note);
             Assert.AreEqual(1, run.Consumables.Count);
 
             var battle = Battle(run, rules, Foe(speed: 1));
             Assert.AreSame(hero, battle.Current);
             Assert.That(battle.UseConsumable(0, hero.Id, out note), Is.False);
-            Assert.AreEqual("功能待定。", note);
+            Assert.AreEqual("请在角色面板的义体列表中选择要安装的义体。", note);
             Assert.AreEqual(1, run.Consumables.Count);
             Assert.AreSame(hero, battle.Current, "a refused use does not spend the turn");
         }

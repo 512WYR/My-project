@@ -52,15 +52,38 @@ namespace Ruin.Runtime
                 Hint = note; Refresh();
             }
         }
+        // The character panel fits a prosthetic only with a surgery kit; the supply station's own install
+        // option is the other route. The view asks the same method, so the visible reason and the command
+        // can never disagree.
+        public string CharacterInstallBlockedReason(ProstheticSpec item)
+        {
+            if (CharacterHero == null) return "请选择一名队员";
+            if (CharacterHero.Dead) return "角色已阵亡";
+            if (!CanManageCharacter) return "等待我方行动";
+            return ConsumableSystem.SurgeryKitBlockedReason(Run, CharacterHero, item);
+        }
         public void CharacterInstallProsthetic(string itemId)
         {
             if (!CanManageCharacter || CharacterHero == null || CharacterHero.Dead) return;
             var item = Run.Prosthetics.FirstOrDefault(p => p != null && p.Id == itemId);
             if (item == null) { Hint = "没有对应部位的义体库存。"; Refresh(); return; }
-            string blocked = LimbSystem.InstallBlockedReason(CharacterHero, item);
+            string blocked = ConsumableSystem.SurgeryKitBlockedReason(Run, CharacterHero, item);
             if (blocked != null) { Hint = blocked; Refresh(); return; }
-            if (!LimbSystem.Install(CharacterHero, item)) { Hint = "只有断肢才能安装义体。"; Refresh(); return; }
-            Run.Prosthetics.Remove(item); Hint = CharacterHero.Name + " 装上了" + item.Name + "。";
+            var hero = CharacterHero;
+            bool inBattle = !AwaitingNode;
+            int from = inBattle ? Battle.Events.Count : 0;
+            if (!ConsumableSystem.UseSurgeryKit(Run, hero, item, out string note))
+            { Hint = note; Refresh(); return; }
+            Hint = note;
+            if (inBattle)
+            {
+                // A field fitting is an item use: it spends the current hero's action and lets the enemy
+                // turns play out, exactly like a potion.
+                Battle.EndTurnAfterSurgery(note);
+                CharacterPanelOpen = false; CharacterHeroId = null; ClearPending();
+                StartCoroutine(ContinueEnemies(from));
+                return;
+            }
             Refresh();
         }
         public void CharacterEquipAccessory(string itemId)

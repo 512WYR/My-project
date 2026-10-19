@@ -532,7 +532,7 @@ namespace Ruin.Core
             if (run.PlayerSanity >= SanitySplit)
             {
                 page.Body = "药柜后面卡着一副义体，型号不对，但零件是全的。";
-                page.Hint = "义体只是取走，安装仍然要在义肢工坊里做。";
+                page.Hint = "义体只是取走；安装需要消耗手术包，或在补给站的「部位与义肢」里进行。";
                 page.Choices.Add(new EventChoice("取走义体", "获得一件义肢", s =>
                 {
                     var item = s.GrantProsthetic();
