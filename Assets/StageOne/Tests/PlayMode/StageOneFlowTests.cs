@@ -42,6 +42,72 @@ namespace Ruin.Tests
             Assert.IsFalse(app.Busy); Assert.IsTrue(app.Battle.Events.Any(e => e.Kind == "action" || e.Kind == "miss"));
         }
 
+        // Group skills have no single main target, so every living actor on their side confirms the cast.
+        // Selecting the skill must not fire it; clicking any highlighted actor does. Blocked slots must
+        // still open the description instead of swallowing clicks.
+        [UnityTest] public IEnumerator GroupSkillsReleaseFromAnyTargetAndBlockedSkillsStayReadable()
+        {
+            app.DebugForceRoom(NodeType.Battle); yield return null;
+            var battle = app.Battle;
+            Assert.NotNull(battle);
+
+            // Turn order is speed-based, so skip forward until a hero owns a castable group skill.
+            int guard = 0;
+            while (guard++ < 40 && battle.Outcome == BattleOutcome.Active)
+            {
+                var actor = battle.Current;
+                if (actor == null) break;
+                var actorSkills = battle.SkillsFor(actor);
+                if (actor.Player && Enumerable.Range(0, actorSkills.Length)
+                        .Any(i => actorSkills[i].Targeting == SkillTargeting.All && battle.SkillDisabledReason(i) == null))
+                    break;
+                if (actor.Player) battle.SkipCurrentTurn(out _); else battle.ExecuteEnemy();
+                app.Refresh(); yield return null;
+            }
+            var current = battle.Current;
+            Assert.NotNull(current); Assert.IsTrue(current.Player, "没有走到可释放群体技能的我方回合");
+            var skills = battle.SkillsFor(current);
+            int group = Enumerable.Range(0, skills.Length)
+                .First(i => skills[i].Targeting == SkillTargeting.All && battle.SkillDisabledReason(i) == null);
+
+            int before = battle.Events.Count;
+            app.SelectSkill(group); yield return null;
+            Assert.AreEqual(group, app.PendingSkill, "点击技能只应选中");
+            Assert.AreEqual(group, app.InspectedSkill);
+            Assert.AreEqual(before, battle.Events.Count, "选中群体技能不能直接释放");
+            var clickTarget = battle.Targets(group).FirstOrDefault();
+            Assert.NotNull(clickTarget, "群体技能应把整侧存活目标列为可点击项");
+
+            app.SelectActor(clickTarget.Id); yield return null;
+            int frames = 0; while (app.Busy && frames++ < 400) yield return null;
+            Assert.Greater(battle.Events.Count, before, "点击任意高亮目标应释放群体技能");
+
+            // Find a rank where this form has a blocked skill, then check it still opens the description.
+            while (!app.Busy && battle.Outcome == BattleOutcome.Active && battle.Current != null && !battle.Current.Player)
+            {
+                battle.ExecuteEnemy(); app.Refresh(); yield return null;
+            }
+            current = battle.Current;
+            Assert.NotNull(current); Assert.IsTrue(current.Player, "确认释放后没有回到我方回合");
+            int savedRank = current.Rank; int blocked = -1;
+            // Keep the rank that makes the skill blocked while clicking: SelectSkill reads the reason
+            // synchronously, then the original rank is restored.
+            for (int rank = 0; rank < 4 && blocked < 0; rank++)
+            {
+                current.Rank = rank;
+                for (int i = 0; i < battle.SkillsFor(current).Length; i++)
+                    if (battle.SkillDisabledReason(i) != null) { blocked = i; break; }
+            }
+            Assert.GreaterOrEqual(blocked, 0, "当前形态应至少有一个受站位限制的技能可用于检查说明");
+            int mark = battle.Events.Count;
+            app.SelectSkill(blocked); yield return null;
+            current.Rank = savedRank;
+            Assert.AreEqual(blocked, app.InspectedSkill, "不可用技能也应显示说明");
+            Assert.IsNull(app.PendingSkill, "不可用技能不能进入待释放状态");
+            Assert.AreEqual(mark, battle.Events.Count, "查看说明不应改变战斗");
+            Assert.IsNotEmpty(app.Hint);
+        }
+
         [UnityTest] public IEnumerator DebugPresetAndFeedbackContinueThroughTheSettlementPage()
         {
             app.NewRun(85); yield return null;

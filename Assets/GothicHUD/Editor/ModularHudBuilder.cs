@@ -31,8 +31,10 @@ namespace GameMake.GothicHUDEditor
         // Position cards, in the 1920x1080 reference space. They sit on top of the operation frame, lined up
         // with the two formation rails already painted inside it: allied rail x176..851, enemy rail
         // x1150..1820, both at the frame's top edge y750. Rank 0 is the front rank in both columns.
-        const float CardW = 160, CardH = 180, CardStep = 161;
-        const float AllyCardsX = 192, EnemyCardsX = 1164, CardsY = 570;
+        // The cards grew upward to give the portrait more room while the bottom edge stays on the
+        // formation rail. Nothing is drawn as a card body: the art is the card.
+        const float CardW = 160, CardH = 220, CardStep = 161;
+        const float AllyCardsX = 192, EnemyCardsX = 1164, CardsY = 530;
         public static string Output => Path.GetFullPath(Path.Combine(Application.dataPath, "../../交付/哥特HUD/新版"));
 
         static SpriteRect Rect(string name, int x, int y, int w, int h, int height, Vector4 border = default)
@@ -286,23 +288,24 @@ namespace GameMake.GothicHUDEditor
             var slot = Group(parent, name, x, y, CardW, CardH);
             var card = slot.gameObject.AddComponent<GothicBattleCard>();
 
-            // The body doubles as the click target, so a card costs one raycastable graphic and nothing else.
-            card.Background = Solid(slot, "Body", 0, 0, CardW, CardH, card.AliveBody);
+            // The body is an invisible click target, not a painted frame. Keeping it means the whole
+            // portrait and the empty space around it stay selectable without drawing a box.
+            card.Background = Solid(slot, "Body - invisible hit area", 0, 0, CardW, CardH, Color.clear);
             card.Hit = Click(card.Background);
-            card.Highlight = card.Background.gameObject.AddComponent<Outline>();
-            card.Highlight.effectColor = Gold; card.Highlight.effectDistance = new Vector2(2, -2); card.Highlight.enabled = false;
+            // The portrait owns the card now; selection reads from the tint and the 行动/可选 badges,
+            // so no Outline rectangle is created here.
 
-            var art = Group(slot, "Silhouette", 6, 6, CardW - 12, 78).gameObject.AddComponent<SilhouetteGraphic>();
+            var art = Group(slot, "Art - 立绘（无边框）", 2, 0, CardW - 4, 136).gameObject.AddComponent<SilhouetteGraphic>();
             art.raycastTarget = false; card.Art = art;
 
-            card.Name = Label(slot, "Name", ally ? "角色" : "敌人", 4, 88, CardW - 8, 22, 15, Gold, TextAnchor.MiddleCenter);
-            card.HealthFill = Bar(slot, "Health", 6, 112, CardW - 12, 17, new Color32(174, 47, 38, 255), out var healthValue);
+            card.Name = Label(slot, "Name", ally ? "角色" : "敌人", 4, 138, CardW - 8, 20, 16, Gold, TextAnchor.MiddleCenter);
+            card.HealthFill = Bar(slot, "Health", 6, 160, CardW - 12, 16, new Color32(174, 47, 38, 255), out var healthValue);
             card.HealthValue = healthValue;
-            card.Status = Label(slot, "Status", "", 6, 132, CardW - 12, 42, 12, Muted, TextAnchor.UpperLeft);
-            if (!ally) card.Intent = Label(slot, "Intent", "", 6, 132, CardW - 12, 42, 12, Rust, TextAnchor.UpperLeft);
-            card.ActiveBadge = Label(slot, "Active Badge", "行动", 6, 4, 48, 18, 13, Gold).gameObject;
-            card.TargetBadge = Label(slot, "Target Badge", "可选", CardW - 54, 4, 48, 18, 13, Gold, TextAnchor.MiddleRight).gameObject;
-            card.DeadCross = Label(slot, "Dead Cross", "✕", 0, 44, CardW, 70, 44, Rust, TextAnchor.MiddleCenter).gameObject;
+            card.Status = Label(slot, "Status", "", 6, 180, CardW - 12, 38, 12, Muted, TextAnchor.UpperLeft);
+            if (!ally) card.Intent = Label(slot, "Intent", "", 6, 180, CardW - 12, 38, 12, Rust, TextAnchor.UpperLeft);
+            card.ActiveBadge = Label(slot, "Active Badge", "行动", 4, 2, 44, 18, 13, Gold).gameObject;
+            card.TargetBadge = Label(slot, "Target Badge", "可选", CardW - 48, 2, 44, 18, 13, Gold, TextAnchor.MiddleRight).gameObject;
+            card.DeadCross = Label(slot, "Dead Cross", "✕", 0, 34, CardW, 76, 44, Rust, TextAnchor.MiddleCenter).gameObject;
             card.ActiveBadge.SetActive(false); card.TargetBadge.SetActive(false); card.DeadCross.SetActive(false);
             return card;
         }

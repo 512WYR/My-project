@@ -4,20 +4,36 @@ using UnityEngine.UI;
 
 namespace Ruin.Runtime
 {
-    // Vector silhouettes keep the prototype self-contained and easily replaceable by sprites.
+    // Vector silhouettes keep the prototype self-contained and easily replaceable by sprites. When a
+    // Portrait texture is assigned the vector body is skipped and the texture is drawn instead, fitted
+    // inside the same rect, so every existing builder keeps working without a second Image node.
     public sealed class SilhouetteGraphic : Graphic
     {
         public string Silhouette;
         public EnemyPattern Enemy;
         public bool IsEnemy;
         public Color Accent = new Color(0.7f, 0.7f, 0.7f);
+        public Texture2D Portrait;
         private VertexHelper mesh;
         private Vector2 origin;
         private Vector2 scale;
 
+        // The canvas material samples whatever mainTexture reports. Switching between the sprite and the
+        // white texture therefore requires the material to be refreshed, not only the mesh.
+        public override Texture mainTexture => Portrait != null ? Portrait : base.mainTexture;
+
+        public void SetPortrait(Texture2D portrait)
+        {
+            if (Portrait == portrait) return;
+            Portrait = portrait;
+            SetVerticesDirty();
+            SetMaterialDirty();
+        }
+
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear(); mesh = vh;
+            if (Portrait != null) { DrawPortrait(); return; }
             var r = rectTransform.rect; origin = r.min; scale = new Vector2(r.width / 100, r.height / 160);
             Color shadow = color;
             Poly(shadow, new Vector2(25, 4), new Vector2(41, 4), new Vector2(49, 50), new Vector2(35, 54));
@@ -81,6 +97,22 @@ namespace Ruin.Runtime
                 Line(new Vector2(75, 61), new Vector2(97, 95), 5, Accent);
                 Line(new Vector2(37, 131), new Vector2(63, 131), 3, Accent);
             }
+        }
+
+        // Contain-fit, centred. Portraits come in different aspect ratios and must not be stretched; the
+        // card's dark background shows through the leftover space on either side.
+        private void DrawPortrait()
+        {
+            var r = rectTransform.rect;
+            float fit = Mathf.Min(r.width / Portrait.width, r.height / Portrait.height);
+            var size = new Vector2(Portrait.width * fit, Portrait.height * fit);
+            Vector2 min = r.center - size * 0.5f;
+            mesh.AddVert(new Vector2(min.x, min.y), color, new Vector2(0, 0));
+            mesh.AddVert(new Vector2(min.x, min.y + size.y), color, new Vector2(0, 1));
+            mesh.AddVert(new Vector2(min.x + size.x, min.y + size.y), color, new Vector2(1, 1));
+            mesh.AddVert(new Vector2(min.x + size.x, min.y), color, new Vector2(1, 0));
+            mesh.AddTriangle(0, 1, 2);
+            mesh.AddTriangle(2, 3, 0);
         }
 
         private Vector2 P(Vector2 p) { return origin + Vector2.Scale(p, scale); }

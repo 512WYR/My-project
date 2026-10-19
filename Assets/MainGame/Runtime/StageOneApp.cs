@@ -19,6 +19,8 @@ namespace Ruin.Runtime
         // 本回合已经点开、正等着点目标的技能下标。换位走一个单独的开关，因为它没有下标。
         public int? PendingSkill { get; private set; }
         public bool PendingSwap { get; private set; }
+        // 正在说明区查看的技能下标。不可用的技能也能点开，所以它可以和 PendingSkill 不同。
+        public int? InspectedSkill { get; private set; }
         // 任意一种「已选好行动、等待点目标」的状态。
         public bool Choosing { get { return PendingSkill.HasValue || PendingSwap; } }
         public string InspectedId { get; private set; }
@@ -555,19 +557,26 @@ namespace Ruin.Runtime
         {
             if (CharacterPanelOpen) return;
             if (Busy || AwaitingNode || Battle == null) return;
+            var skill = Battle.SkillFor(Battle.Current, index);
+            if (skill == null) return;
+            // Every slot the player clicks owns the description panel, usable or not. A blocked skill only
+            // explains itself; it never arms a cast.
+            InspectedSkill = index;
             string reason = Battle.SkillDisabledReason(index);
-            if (reason != null) { Hint = reason; Refresh(); return; }
-            PendingSwap = false;
-            // Group and self skills have no target to click. Targets() is empty for them by design, so
-            // leaving them in PendingSkill would strand the skill with no submit path. Cast immediately,
-            // exactly like Battle Lab does with target = null.
-            if (!Battle.Targets(index).Any())
+            if (reason != null)
             {
-                Submit(new ActionRequest(ActionKind.Skill, null, index));
+                PendingSkill = null; PendingSwap = false;
+                Hint = reason;
+                Refresh();
                 return;
             }
+            PendingSwap = false;
             PendingSkill = index;
-            Hint = "点击高亮目标以执行「" + Battle.SkillFor(Battle.Current, index).Name + "」。Esc取消选择。";
+            // A group skill has no single main target, but every living actor on its side is a valid
+            // confirmation, so the page highlights them all and any one of them releases the skill.
+            Hint = skill.Targeting == SkillTargeting.All
+                ? "点击任意高亮目标释放「" + skill.Name + "」。Esc取消选择。"
+                : "点击高亮目标以执行「" + skill.Name + "」。Esc取消选择。";
             Refresh();
         }
 
@@ -577,12 +586,12 @@ namespace Ruin.Runtime
             if (Busy || AwaitingNode || Battle == null) return;
             string reason = Battle.SwapDisabledReason();
             if (reason != null) { Hint = reason; Refresh(); return; }
-            PendingSkill = null; PendingSwap = true;
+            PendingSkill = null; PendingSwap = true; InspectedSkill = null;
             Hint = "点击相邻的高亮队员，交换站位并消耗本次行动。Esc取消选择。";
             Refresh();
         }
 
-        private void ClearPending() { PendingSkill = null; PendingSwap = false; }
+        private void ClearPending() { PendingSkill = null; PendingSwap = false; InspectedSkill = null; }
 
         public void SelectActor(string id)
         {

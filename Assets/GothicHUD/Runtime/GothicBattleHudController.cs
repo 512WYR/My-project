@@ -214,23 +214,50 @@ namespace GameMake.GothicHUD
                 bool has = i < skills.Length;
                 string reason = has ? battle.SkillDisabledReason(i) : null;
                 var button = Panel.SkillButtons[i];
-                bool available = has && reason == null && !app.Busy;
-                if (button) button.interactable = available;
+                // Blocked slots stay clickable so their description can be read. Only an empty slot or an
+                // action already in flight refuses the click.
+                bool clickable = has && !app.Busy;
+                bool available = clickable && reason == null;
+                if (button)
+                {
+                    button.interactable = clickable;
+                    // A clickable-but-blocked slot keeps the click but drops the hover tint, so it still
+                    // reads as unusable while the description panel explains why.
+                    if (button.targetGraphic)
+                    {
+                        if (clickable && reason != null)
+                        {
+                            button.transition = Selectable.Transition.None;
+                            button.targetGraphic.color = new Color(.55f, .55f, .55f, .85f);
+                        }
+                        else
+                        {
+                            // Only reset the colour when leaving the untinted state. Writing it on every
+                            // refresh would erase the hover/pressed tint while the pointer rests on a slot.
+                            bool restoreTint = button.transition != Selectable.Transition.ColorTint;
+                            button.transition = Selectable.Transition.ColorTint;
+                            if (restoreTint)
+                                button.targetGraphic.color = clickable
+                                    ? Color.white
+                                    : new Color(.78f, .78f, .78f, .5f);
+                        }
+                    }
+                }
                 // The frame dims through the button tint. The icon is a separate graphic, so dim it too
                 // once real artwork is assigned; a null sprite would otherwise draw a solid quad.
                 if (Panel.SkillIcons != null && i < Panel.SkillIcons.Length && Panel.SkillIcons[i] && Panel.SkillIcons[i].sprite)
                     Panel.SkillIcons[i].color = available ? Color.white : new Color(.45f, .45f, .45f, .55f);
                 if (Panel.SkillSelections != null && i < Panel.SkillSelections.Length && Panel.SkillSelections[i])
-                    Panel.SkillSelections[i].SetActive(app.PendingSkill == i);
+                    Panel.SkillSelections[i].SetActive(app.InspectedSkill == i);
             }
 
             var swap = Presentation ? Presentation.DisplacementButton : null;
             if (swap) swap.interactable = battle.SwapDisabledReason() == null && !app.Busy;
 
             if (!Panel.DescriptionTitle || !Panel.DescriptionBody) return;
-            if (app.PendingSkill.HasValue && app.PendingSkill.Value < skills.Length)
+            if (app.InspectedSkill.HasValue && app.InspectedSkill.Value < skills.Length)
             {
-                var skill = skills[app.PendingSkill.Value];
+                var skill = skills[app.InspectedSkill.Value];
                 Panel.DescriptionTitle.text = skill.Name;
                 Panel.DescriptionBody.text = Detail(app, battle, battle.Current, skill) + "\n\n" + (app.Hint ?? "");
             }

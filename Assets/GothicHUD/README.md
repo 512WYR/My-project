@@ -97,6 +97,8 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 
 位置卡的生命条下方各有一条理智条（`GothicBattleCard.SanityFill / SanityValue`），与 Vitals 区的数值同步；敌方卡同样显示，但敌方理智通常不参与战斗。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
 
+技能槽的交互：有目标技能仍为“点技能 → 点高亮目标”；群体/自身技能第一次点击只选中并显示说明，同时高亮其目标侧的全部存活角色，**再点击任意高亮目标即释放**（提交的目标只用于确认，效果由引擎作用于整侧）。不可用的技能（站位不符 / 次数用尽 / 没有合法目标）也可以点击，说明区会显示技能详情与不可用原因，但不会进入待释放状态。
+
 底部右侧的六行属性预留（攻击、防御、速度、闪避、命中、暴击）由 `GothicHudPanel.AttributeValues` 提供，当前由 `IndustrialBattleDetails` 写入选中队员的有效值：攻击、防御、速度取 `BattleEngine.Effective*`（含肢体重伤惩罚与临时增益），命中计入头部重伤与饰品下限，暴击计入必暴饰品；数值为空时显示 `—`。
 
 ### 节点页（已移除）

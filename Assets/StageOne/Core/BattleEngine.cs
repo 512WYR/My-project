@@ -252,12 +252,18 @@ namespace Ruin.Core
             return SwapTargets().Any() ? null : "没有相邻的存活队员";
         }
 
+        // Choose skills expose the actors the player may pick as the main target. All skills take no main
+        // target, but every living actor on their side is still a valid confirmation click for the UI, so
+        // they are returned too; ExecuteSkill ignores the chosen id for them. TargetRanks is not applied to
+        // All skills because their assets deliberately leave it at zero.
         public IEnumerable<ActorState> Targets(int skillIndex)
         {
             if (Current == null) return Enumerable.Empty<ActorState>();
             var skill = SkillFor(Current, skillIndex);
-            if (!NeedsTarget(skill)) return Enumerable.Empty<ActorState>();
+            if (skill == null) return Enumerable.Empty<ActorState>();
             var side = skill.Target == TargetSide.Ally ? (IEnumerable<ActorState>)Run.Heroes : Enemies;
+            if (skill.Targeting == SkillTargeting.All) return side.Where(a => !a.Dead).ToList();
+            if (!NeedsTarget(skill)) return Enumerable.Empty<ActorState>();
             return side.Where(a => !a.Dead && a.OccupiesAnyRank(skill.TargetRanks)
                 && (skill.Effect != SkillEffect.Heal || a.Hp < a.Definition.MaxHp || (skill.Cleanse && a.BleedTurns > 0))
                 && (skill.Effect != SkillEffect.Protect || a != Current));

@@ -171,12 +171,13 @@ public void SelectSkill(int index)
 
 ### 验收标准
 
-- 上述 5 个技能在主场景中点击后立即释放，正确作用于己方全体。
+- 上述 5 个技能在主场景中第一次点击只选中并显示说明，再点击任意高亮目标才释放，正确作用于己方全体。
 - 释放后正常消耗行动、技能次数（`s_phalanx` 每场 1 次）并推进敌方回合。
 - 需要选择目标的技能（`Targeting = Choose`）仍保持“先选技能、再点目标”的原有流程。
+- 不可用的技能（站位不符、次数用尽、没有合法目标）仍可点击，说明区显示技能详情与不可用原因，但不会进入待释放状态。
 - Esc 取消、Busy 期间屏蔽、帮助/调试面板打开时屏蔽等现有保护不被破坏。
 
-### 修复记录（2026-10-18）
+### 修复记录（2026-10-18，释放交互已被 2026-10-19 调整取代）
 
 在主场景补上“无需目标即刻释放”的提交路径：
 
@@ -184,6 +185,17 @@ public void SelectSkill(int index)
 2. 需要目标的技能仍走原来的“选技能 → 点高亮目标”流程；`SelectActor` 的提交逻辑未改动。
 3. 该判断复用引擎公开语义：`Targeting = All` 的技能 `Targets()` 必然为空，而 `Choose` 技能若没有合法目标会先被 `SkillDisabledReason` 拦截，因此不会误提交。
 4. 独立控制台验证“群体技能无目标可提交”：`allSkill: targets=empty submit=True`，覆盖「壁垒」「群体药雾」等技能共用的引擎路径。主场景点击链路仍需 Unity 内人工验收。
+
+### 交互调整（2026-10-19）
+
+“点击后立即释放”的体验被改为二次确认，并让不可用技能也能点开查看说明：
+
+1. `StageOneApp` 新增 `InspectedSkill`，专门记录说明区正在展示的技能；它和等待目标的 `PendingSkill` 分离，不可用技能只写前者。
+2. 群体/自身技能第一次点击进入 `PendingSkill` 并高亮其目标侧的全部存活角色；再点击任意一个高亮目标才调用 `Submit` 释放，点击其他技能、换位或 Esc 会取消。
+3. `BattleEngine.Targets` 对 `Targeting = All` 的技能返回该技能目标侧的全部存活角色。群体技能的 `TargetRanks` 资产值为 0，因此这类技能不应用站位过滤；`ExecuteSkill` 仍忽略提交的目标 id，效果照常作用于整侧。
+4. 不可用技能不再被 `Button.interactable = false` 拦住：槽位保持可点，按钮变暗、去掉了悬停高亮，说明区显示技能详情与 `SkillDisabledReason`；同时清空之前待释放的选择，避免读完说明后误点目标释放旧技能。
+5. `GothicBattleHudController` 的选中标记改跟 `InspectedSkill`，因此不可用技能也有明确的“正在查看”反馈。
+6. 新增 PlayMode 回归测试 `GroupSkillsReleaseFromAnyTargetAndBlockedSkillsStayReadable`，覆盖第一次点击不释放、点击任意目标释放、不可用技能只显示说明且不改变战斗。该测试尚待在 Unity Test Runner 中执行。
 
 ---
 
@@ -455,7 +467,7 @@ tankHp=100->88 healerHp=100 healerRank=2
 | `Assets/StageOne/Core/BattleEngine.cs:709-729` | `PullToFront` 的移动、1 号位与 `Immobile` 反馈 |
 | `Assets/StageOne/Core/Models.cs:206` | `ImbalanceImmuneRounds` 默认值 |
 | `Assets/StageOne/Resources/StageOne/Skills/g_grapple.asset` | 拖拽射击数值（75% 伤害 / 40% 拖拽） |
-| `Assets/MainGame/Runtime/StageOneApp.cs` | `SelectSkill` 对空目标技能直接提交，其余仍等待点击；`SelectActor` 提交有目标技能 |
+| `Assets/MainGame/Runtime/StageOneApp.cs` | `SelectSkill` 第一次点击只记录 `InspectedSkill`；空目标技能再点同一槽位才提交，不可用技能只展示说明；`SelectActor` 提交有目标技能 |
 | `Assets/GothicHUD/Runtime/GothicBattleCard.cs:80-102` | 主场景卡片状态行；失衡经由 `Battle.Intent` 显示 |
 | `Assets/StageOne/Editor/StageOneBuild.cs:92-166` | 5 个群体技能的定义位置 |
 | `Assets/StageOne/Core/BattleEngine.cs:1654` | `Kill` 标记死亡并登记站位释放 |

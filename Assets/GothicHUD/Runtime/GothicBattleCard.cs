@@ -34,8 +34,12 @@ namespace GameMake.GothicHUD
         public Color AllyAccent = new Color32(129, 193, 200, 255);
         public Color EnemyAccent = new Color32(206, 136, 117, 255);
         public Color DeadAccent = new Color32(90, 94, 93, 255);
-        public Color PossibleTint = new Color32(52, 76, 82, 255);
-        public Color ActiveTint = new Color32(45, 54, 58, 255);
+        // The card itself has no painted body any more: the portrait/silhouette stands directly on the
+        // stage. These tints only appear while the position is actionable or inspected, so idle cards
+        // never show a rectangle around the art.
+        public Color PossibleTint = new Color32(52, 76, 82, 70);
+        public Color ActiveTint = new Color32(45, 54, 58, 90);
+        public Color InspectedTint = new Color32(70, 82, 86, 55);
 
         // Filled by the controller so a click can be routed back without the card knowing about the battle.
         [HideInInspector] public string ActorId;
@@ -49,14 +53,16 @@ namespace GameMake.GothicHUD
             Color accent = actor.Player ? AllyAccent : EnemyAccent;
             if (actor.Dead) accent = DeadAccent;
 
+            // Idle positions are fully transparent: the art is the card. Only interaction states add a
+            // soft backplate, so there is no permanent frame around the portrait.
             if (Background)
-                Background.color = actor.Dead ? DeadBody : possible ? PossibleTint : active ? ActiveTint : AliveBody;
+                Background.color = actor.Dead || (!possible && !active && !inspected)
+                    ? Color.clear
+                    : possible ? PossibleTint : active ? ActiveTint : InspectedTint;
 
-            if (Highlight)
-            {
-                Highlight.enabled = possible || active || inspected;
-                Highlight.effectColor = possible || active ? new Color32(219, 187, 131, 255) : accent;
-            }
+            // The old gold Outline drew a rectangle around the whole card. Selection is already carried
+            // by the tint and the 行动 / 可选 badges, so the outline stays off even in older prefabs.
+            if (Highlight) Highlight.enabled = false;
 
             if (Art)
             {
@@ -64,7 +70,14 @@ namespace GameMake.GothicHUD
                 Art.Enemy = actor.Definition.Pattern;
                 Art.IsEnemy = !actor.Player;
                 Art.Accent = accent;
-                Art.color = actor.Dead ? DeadBody : AliveBody;
+                // Heroes and monsters may both ship a portrait under Resources/StageOne/<HeroArt|EnemyArt>/<Id>.
+                // Anything without a file keeps the procedural silhouette.
+                Art.SetPortrait(ActorArt.Portrait(actor.Definition));
+                // A portrait carries its own colours, so only the dead state tints it. The vector figure
+                // still uses the stage's near-black body colour.
+                Art.color = Art.Portrait != null
+                    ? (actor.Dead ? new Color32(120, 120, 120, 255) : Color.white)
+                    : (actor.Dead ? DeadBody : AliveBody);
                 Art.raycastTarget = false;
                 // The silhouette fields are plain fields on a mesh that is only rebuilt when the graphic is
                 // marked dirty, and the colour alone may be unchanged when a swap puts a different hero on
