@@ -21,11 +21,11 @@ MonoBehaviour:
   Speed: 6
   SpeedMin: 5
   SpeedMax: 7
-  Attack: 10
+  Attack: 12
   Accuracy: 0.9
   CritChance: 0.1
-  Dodge: 0
-  Defense: 0
+  Dodge: 0.1
+  Defense: 0.1
   SanityOffset: 0
   BasicSkills:
   - {fileID: 11400000, guid: fe55a93e7205f654eb2cc5dc3a54e674, type: 2}

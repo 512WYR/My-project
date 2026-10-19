@@ -25,7 +25,7 @@ MonoBehaviour:
   Attack: 10
   Accuracy: 0.9
   CritChance: 0.1
-  Dodge: 0
+  Dodge: 0.1
   Defense: 0
   Primary: {fileID: 11400000, guid: 0d70c3bcc976ccc4da054c2a3384c37c, type: 2}
   Support: {fileID: 11400000, guid: d6ee2d5ef520fa241b1b93c7cb3f3f5e, type: 2}

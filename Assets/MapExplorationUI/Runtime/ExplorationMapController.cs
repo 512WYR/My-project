@@ -112,7 +112,7 @@ namespace GameMake.ExplorationUI
             }
             if(reopening && Entrance && Application.isPlaying) Entrance.Enter();
             RenderMap(Source.Map, Source.Catalog.MapRules(), reopening);
-            Stock.text = "补给  " + Source.Map.Supplies.ToString("D2") + "     /     玩家理智  " + Source.Run.PlayerSanity.ToString("0");
+            Stock.text = "矿石  " + Source.Map.Supplies.ToString("D2") + "     /     玩家理智  " + Source.Run.PlayerSanity.ToString("0");
             UpdateParty();
         }
         public void RenderMap(MapState map, MapRules rules, bool reopening = false)
@@ -234,7 +234,7 @@ namespace GameMake.ExplorationUI
         {
             switch (type)
             {
-                case NodeType.Battle: return "遭遇敌人，战胜后取得补给。";
+                case NodeType.Battle: return "遭遇敌人，战胜后取得矿石。";
                 case NodeType.EliteBattle: return "强敌盘踞，危险与收益并存。";
                 case NodeType.Event: return "调查异象，决定下一步行动。";
                 case NodeType.Altar: return "接近祭坛，回应未知的呼唤。";

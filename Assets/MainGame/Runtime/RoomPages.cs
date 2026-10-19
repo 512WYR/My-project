@@ -146,7 +146,7 @@ namespace Ruin.Runtime
             view.Choices.Add(new RoomPageChoice(
                 "部位与义肢",
                 "查看每名队员的四个部位，修复重伤或安装义肢"));
-            view.Choices.Add(new RoomPageChoice("商店", "使用补给购买义体、饰品与药品"));
+            view.Choices.Add(new RoomPageChoice("商店", "使用矿石购买义体、饰品与药品"));
 
             view.Choose = index =>
             {
@@ -275,7 +275,7 @@ namespace Ruin.Runtime
                     return h.Name + (h.Dead ? "   阵亡" : "   生命 " + h.Hp + " / " + h.Definition.MaxHp)
                         + "   " + (limbs.Length == 0 ? "部位全部完好" : "最严重 " + limbs);
                 }));
-            view.Hint = StockText(app) + "\n补给 " + app.Map.Supplies
+            view.Hint = StockText(app) + "\n矿石 " + app.Map.Supplies
                 + "   ·   玩家理智 " + app.Run.PlayerSanity.ToString("0.0");
             view.CanLeave = true;
             view.AdvanceLabel = "下到第 " + (app.Map.Floor + 1) + " 层  →";

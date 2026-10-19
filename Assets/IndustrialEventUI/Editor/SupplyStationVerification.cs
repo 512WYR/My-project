@@ -157,7 +157,7 @@ namespace GameMake.EventEditor
             Check(shop.ProductDescription.text.Contains("暂时不能使用"),"Surgery limitation missing from product description");
             Capture(view,"Supply-Shop-Surgery"); yield return .2f;
             app.Map.Supplies=0; app.Refresh();
-            Check(!shop.Cards[0].Buy.interactable && shop.Cards[0].BuyLabel.text=="补给不足","Insufficient funds button not disabled");
+            Check(!shop.Cards[0].Buy.interactable && shop.Cards[0].BuyLabel.text=="矿石不足","Insufficient funds button not disabled");
             stock=app.Run.Consumables.Count;
             Check(!app.BuySupplyShopItem(shop.Cards[0].ProductId) && app.Map.Supplies==0 && app.Run.Consumables.Count==stock,"Insufficient funds changed inventory");
             Check(!app.BuySupplyShopItem("not-a-product") && app.Map.Supplies==0,"Unknown item accepted");

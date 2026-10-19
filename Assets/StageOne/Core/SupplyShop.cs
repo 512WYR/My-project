@@ -17,7 +17,7 @@ namespace Ruin.Core
 
     public static class SupplyShop
     {
-        // Initial balance, in the existing run-wide supply currency.
+        // Initial balance, in the run-wide ore currency (Map.Supplies, displayed as 矿石).
         public const int ProstheticPrice=4, AccessoryPrice=6, HealthPrice=2, SanityPrice=3, SurgeryPrice=3;
 
         public static List<ShopProduct> Products(LimbRules rules)
@@ -58,7 +58,7 @@ namespace Ruin.Core
             if(run==null || run.Map==null || run.Map.Finished) return false;
             var product=Products(rules).FirstOrDefault(p=>p.Id==id);
             if(product==null) { note="商品不存在。"; return false; }
-            if(run.Map.Supplies<product.Price) { note="补给不足。"; return false; }
+            if(run.Map.Supplies<product.Price) { note="矿石不足。"; return false; }
             if(product.Prosthetic!=null)
             {
                 var p=product.Prosthetic;

@@ -585,7 +585,7 @@ namespace GameMake.IndustrialDebugUI
             text.AppendLine("种子          " + run.Seed + "      玩家理智  " + run.PlayerSanity.ToString("0.0") + " / 100");
             text.AppendLine("层 / 位置     第 " + map.Floor + " 层 · 第 " + (map.StepIndex + 1) + " / "
                 + MapGenerator.TotalSteps(app.Catalog.MapRules()) + " 步 · 已通过 " + map.ResolvedSteps + " 步");
-            text.AppendLine("补给          " + map.Supplies + "      战斗场次  " + run.Battles
+            text.AppendLine("矿石          " + map.Supplies + "      战斗场次  " + run.Battles
                 + "      本局状态  " + (map.Finished ? (map.Cleared ? "已通关" : "已结束") : "进行中"));
             text.AppendLine("初始增益      " + (map.BuffChosen
                 ? OpeningBuffs.Name(map.Buff) + "（" + OpeningBuffs.Describe(map.Buff) + "）"
@@ -861,7 +861,7 @@ namespace GameMake.IndustrialDebugUI
                 text.AppendLine("第 " + map.Floor + " 层 · 步 " + (map.StepIndex + 1) + " / "
                     + MapGenerator.TotalSteps(rules) + " · 已通过 " + map.ResolvedSteps + " 步");
                 text.AppendLine("本层采样位置：" + (MapGenerator.StepsOnFloor(rules, map.Floor)));
-                text.AppendLine("补给 " + map.Supplies + " · 初始增益 " + (map.BuffChosen
+                text.AppendLine("矿石 " + map.Supplies + " · 初始增益 " + (map.BuffChosen
                     ? OpeningBuffs.Name(map.Buff) : "未选择"));
                 text.AppendLine("当前候选：");
                 var step = map.Current;
@@ -1105,7 +1105,7 @@ namespace GameMake.IndustrialDebugUI
                     + (odds[i] * 100).ToString("0.0") + "%");
             text.AppendLine("当前理智房间概率  " + string.Join(" · ", parts));
             text.AppendLine("补给站治疗    " + (rules.SupplyHealRatio * 100).ToString("0") + "%");
-            text.AppendLine("补给/精英/首领  " + rules.SuppliesPerBattle + " / " + rules.SuppliesPerElite + " / " + rules.SuppliesPerBoss);
+            text.AppendLine("矿石/精英/首领  " + rules.SuppliesPerBattle + " / " + rules.SuppliesPerElite + " / " + rules.SuppliesPerBoss);
             text.AppendLine("精英          +" + rules.EliteHealthBonus + " HP · ×" + rules.EliteAttackScale.ToString("0.00") + " 攻");
             text.AppendLine("首领          +" + rules.BossHealthBonus + " HP · ×" + rules.BossAttackScale.ToString("0.00") + " 攻");
             text.AppendLine("初始增益      " + string.Join(" / ", rules.OpeningBuffs.Select(OpeningBuffs.Name)));

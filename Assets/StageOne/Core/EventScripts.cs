@@ -87,7 +87,7 @@ namespace Ruin.Core
         public void GainSupplies(int amount, string what)
         {
             Run.Map.Supplies = Math.Max(0, Run.Map.Supplies + amount);
-            Note = (Note == null ? "" : Note + " ") + (what ?? "补给") + (amount >= 0 ? " +" : " ") + amount + "。";
+            Note = (Note == null ? "" : Note + " ") + (what ?? "矿石") + (amount >= 0 ? " +" : " ") + amount + "。";
         }
 
         public int HealHero(ActorState hero, int percent) { return Exploration.Heal(hero, percent); }
@@ -331,12 +331,12 @@ namespace Ruin.Core
             {
                 case "EVT-001":
                     run.Map.Supplies += 2;
-                    return "矿道深处的响动终于停了。你在碎石里又挑出了一些矿石：补给 +2。";
+                    return "矿道深处的响动终于停了。你在碎石里又挑出了一些矿石：矿石 +2。";
                 case "EVT-003":
                     return "门后确实有人，只是已经不说话了。你们取下了他身上的饰品：" + NameAccessory(run);
                 case "EVT-006":
                     run.Map.Supplies += 3;
-                    return "休整被打断了，但敌人留下了能用的东西：补给 +3。";
+                    return "休整被打断了，但敌人留下了能用的东西：矿石 +3。";
                 case "EVT-H001":
                     return "岔道尽头的东西安静下来。你们得到一件饰品：" + NameAccessory(run)
                         + "　岔道后面有一部还能用的电梯井。";
@@ -431,7 +431,7 @@ namespace Ruin.Core
             }
             page.Step = 2; page.StepCount = 2;
             page.Body = "门缝里透出一点光。敲击声又响了一次。";
-            page.Hint = "开门会按理智分出两种结果，交易需要付出补给。";
+            page.Hint = "开门会按理智分出两种结果，交易需要付出矿石。";
             page.Choices.Add(new EventChoice("打开门", "理智判定：发现无人，或进入战斗", s =>
             {
                 if (s.HighSanity)
@@ -443,11 +443,11 @@ namespace Ruin.Core
                 s.RequestBattle(NodeType.Battle, "门后不是人。");
                 s.End("门开的一瞬间，里面的东西扑了上来。");
             }));
-            page.Choices.Add(new EventChoice("隔墙交易", "付出 2 补给 · 换回 6 矿石", s =>
+            page.Choices.Add(new EventChoice("隔墙交易", "付出 2 矿石 · 换回 6 矿石", s =>
             {
                 s.Run.Map.Supplies = Math.Max(0, s.Run.Map.Supplies - 2);
                 s.GainSupplies(6, "矿石");
-                s.End("你隔着门把补给推过去，对面递回一堆矿石。");
+                s.End("你隔着门把矿石推过去，对面递回更大的一堆。");
             }));
         }
 
@@ -609,7 +609,7 @@ namespace Ruin.Core
             page.Step = 1; page.StepCount = 1;
             page.Body = "工坊里堆着拆下来的义肢，墙中央却立着一座不该出现在这里的黑色祭坛。"
                 + "投料口亮着暗红色的灯，像一只不肯闭上的眼睛。台面上刻着一行小字：「拿来，或者从这里拿走。」";
-            page.Hint = "祭坛只做等价交换：1 补给 = 4 理智，1 生命 = 1 理智，1 件义体 = 16 理智。"
+            page.Hint = "祭坛只做等价交换：1 矿石 = 4 理智，1 生命 = 1 理智，1 件义体 = 16 理智。"
                 + "每次只能选择其中一项交易。";
 
             var payResource = node.AltarResourceForSanity;
@@ -780,7 +780,7 @@ namespace Ruin.Core
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
-                    return "支付 " + offer.ResourceAmount + " 补给 · " + gainer + " +" + offer.SanityAmount;
+                    return "支付 " + offer.ResourceAmount + " 矿石 · " + gainer + " +" + offer.SanityAmount;
                 case AltarResource.Health:
                     return "支付 " + offer.ResourceAmount + " 生命（" + HeroName(run, offer.ResourceHeroId)
                         + "） · " + gainer + " +" + offer.SanityAmount;
@@ -798,7 +798,7 @@ namespace Ruin.Core
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
-                    return payer + " -" + offer.SanityAmount + " · 获得 " + offer.ResourceAmount + " 补给";
+                    return payer + " -" + offer.SanityAmount + " · 获得 " + offer.ResourceAmount + " 矿石";
                 case AltarResource.Health:
                     return payer + " -" + offer.SanityAmount + " · " + HeroName(run, offer.ResourceHeroId)
                         + " 恢复 " + offer.ResourceAmount + " 生命";
@@ -819,7 +819,7 @@ namespace Ruin.Core
                 {
                     int amount = Math.Min(offer.ResourceAmount, s.Run.Map.Supplies);
                     s.Run.Map.Supplies -= amount;
-                    paid = amount + " 点补给";
+                    paid = amount + " 点矿石";
                     sanity = amount * AltarSanityPerSupply;
                     break;
                 }
@@ -890,7 +890,7 @@ namespace Ruin.Core
                 {
                     int amount = Math.Max(1, spend / AltarSanityPerSupply);
                     s.Run.Map.Supplies += amount;
-                    bought = " " + amount + " 补给";
+                    bought = " " + amount + " 矿石";
                     break;
                 }
                 case AltarResource.Health:

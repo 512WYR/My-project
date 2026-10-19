@@ -21,9 +21,9 @@ MonoBehaviour:
   Speed: 5
   SpeedMin: 4
   SpeedMax: 6
-  Attack: 3
+  Attack: 6
   Accuracy: 0.9
-  CritChance: 0
+  CritChance: 0.1
   Dodge: 0
   Defense: 0
   SanityOffset: 0

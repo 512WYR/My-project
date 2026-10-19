@@ -24,7 +24,7 @@ MonoBehaviour:
   Attack: 10
   Accuracy: 0.9
   CritChance: 0.1
-  Dodge: 0
+  Dodge: 0.1
   Defense: 0
   SanityOffset: 0
   BasicSkills:

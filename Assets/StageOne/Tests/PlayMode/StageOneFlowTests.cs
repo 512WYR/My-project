@@ -339,7 +339,7 @@ namespace Ruin.Tests
             app.LeaveRoom(); yield return null;
             Assert.AreEqual(RoomView.Map, app.Room, "离开宝箱房要能回到路线页");
             Assert.IsTrue(app.AwaitingNode);
-            Assert.AreEqual(supplies, app.Map.Supplies, "宝箱房只发饰品，不发补给");
+            Assert.AreEqual(supplies, app.Map.Supplies, "宝箱房只发饰品，不发矿石");
         }
 
         [UnityTest] public IEnumerator TheCharacterPanelEquipsAndUnequipsAnAccessory()

@@ -206,7 +206,7 @@ namespace Ruin.Runtime
             if (!nodeGainsTracked || Run == null || ActiveNode == null) return gains;
             int supplies = (Run.Map == null ? 0 : Run.Map.Supplies) - nodeGainSupplies;
             if (supplies > 0)
-                gains.Add(new ResourceGain { Kind = ResourceKind.Supplies, Name = "补给", Amount = supplies });
+                gains.Add(new ResourceGain { Kind = ResourceKind.Supplies, Name = "矿石", Amount = supplies });
             AddStockGains(gains, ResourceKind.Accessory, Run.AccessoryStock, nodeGainAccessories, a => a.Id, a => a.Name);
             AddStockGains(gains, ResourceKind.Consumable, Run.Consumables, nodeGainConsumables, c => c.Id, c => c.Name);
             AddStockGains(gains, ResourceKind.Prosthetic, Run.Prosthetics, nodeGainProsthetics, p => p.Id, p => p.Name);
@@ -463,7 +463,7 @@ namespace Ruin.Runtime
             if (node == EventBattle) return;
             int supplies = Encounter.SuppliesFor(Rules(), node.Type);
             Run.Map.Supplies += supplies;
-            battleRewardNote = "战斗胜利，获得 " + supplies + " 点补给。";
+            battleRewardNote = "战斗胜利，获得 " + supplies + " 点矿石。";
             if (node.Type == NodeType.EliteBattle)
             {
                 var drop = Encounter.DropProsthetic(Catalog.Rules().Limbs, Run.Random);
@@ -495,7 +495,7 @@ namespace Ruin.Runtime
                     EnsureBattleRewards();
                     MapNote = battleRewardNote;
                 }
-                else MapNote = "撤退：没有获得这个房间的补给。";
+                else MapNote = "撤退：没有获得这个房间的矿石。";
             }
             if (node != null && node.Type == NodeType.Boss)
             {

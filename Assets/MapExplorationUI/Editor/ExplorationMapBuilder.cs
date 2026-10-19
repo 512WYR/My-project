@@ -124,7 +124,7 @@ namespace GameMake.ExplorationEditor
             var frame=Art(map,"Map Border","Map",0,0,1424,1048,true,1.2f); frame.fillCenter=false; Stretch(frame.rectTransform,Vector2.zero,Vector2.zero);
             view.Heading=Text(map,"Floor Heading","第 01 层  /  探索路线",78,67,800,46,32,Cream);
             view.Progress=Text(map,"Room Progress","房间 01 / 07",80,121,800,29,20,Muted);
-            view.Stock=Text(map,"Supplies and Sanity","补给  00     /     玩家理智  50",80,167,900,27,18,Green);
+            view.Stock=Text(map,"Supplies and Sanity","矿石  00     /     玩家理智  50",80,167,900,27,18,Green);
             Text(map,"Route Legend","◆ 可选     ◆ 已通过     ◇ 未探索",80,646,900,29,18,Muted);
             var route=Group(map,"Route Connections",0,0,1424,700).gameObject.AddComponent<ExplorationRouteGraphic>(); route.raycastTarget=false; view.Connections=route;
             view.RouteSlots=new ExplorationRouteSlot[11];

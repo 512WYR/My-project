@@ -176,12 +176,13 @@ namespace Ruin.Tests
             var heal = battle.SkillFor(medic, 1);
             Assert.AreEqual(SkillEffect.Heal, heal.Effect);
             Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Skill, "shield", 1), out error), error);
-            Assert.AreEqual(14, run.Heroes[0].Hp); Assert.IsFalse(run.Heroes[0].DeathDoor);
+            Assert.AreEqual(12, run.Heroes[0].Hp); Assert.IsFalse(run.Heroes[0].DeathDoor); // 奶妈 8 攻击 × 1.4
         }
 
         [Test] public void DefenseHalvesAttackButDoesNotHalveBleeding()
         {
-            var run = Run(); var battle = Battle(run); var hero = run.Heroes[0]; hero.Defending = true;
+            var run = Run(); var battle = Battle(run); var hero = run.Heroes[0];
+            hero.Definition.Defense = 0; hero.Defending = true; // 只验证防御姿态，排除角色自带减伤
             battle.Damage(hero, 10); Assert.AreEqual(39, hero.Hp);
             battle.Damage(hero, 2, bleeding: true); Assert.AreEqual(37, hero.Hp);
         }
@@ -388,8 +389,9 @@ namespace Ruin.Tests
         [Test] public void GuardRedirectsTheWholeRoundToTheProtector()
         {
             var run = Run(50, 1); var specs = catalog.Enemies.Select(x => x.ToSpec()).Take(1).ToArray();
-            specs[0].Speed = 100; specs[0].Accuracy = 1;
+            specs[0].Speed = 100; specs[0].Accuracy = 1; specs[0].CritChance = 0;
             var battle = new BattleEngine(run, specs, catalog.Rules());
+            run.Heroes[0].Definition.Dodge = 0; run.Heroes[2].Definition.Dodge = 0; // 排除闪避，只验证守护转移
             run.Heroes[0].ProtectorId = "medic"; // 盾卫被奶妈守护
             int shieldHp = run.Heroes[0].Hp; int medicHp = run.Heroes[2].Hp;
             int expected = battle.EnemyDamage(battle.Enemies[0]);

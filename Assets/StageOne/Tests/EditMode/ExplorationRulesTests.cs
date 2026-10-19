@@ -267,7 +267,7 @@ namespace Ruin.Tests
             Assert.AreEqual(id, node.EventId, "已有内容的节点不重抽");
             Assert.AreEqual(history, run.Map.EventHistory.Count, "不重复写历史");
             Assert.AreEqual(state, run.Random.State, "不消耗随机数");
-            Assert.AreEqual(supplies, run.Map.Supplies, "EVT-001 的进房补给不重复发放");
+            Assert.AreEqual(supplies, run.Map.Supplies, "EVT-001 的进房矿石不重复发放");
         }
 
         private string RollEvent(RunState run)
@@ -448,7 +448,7 @@ namespace Ruin.Tests
             int supplies = run.Map.Supplies;
             int stock = run.AccessoryStock.Count;
             EventScripts.ResolveBattleReturn(node, run, Rules(), false);
-            Assert.AreEqual(supplies, run.Map.Supplies, "撤退不发补给");
+            Assert.AreEqual(supplies, run.Map.Supplies, "撤退不发矿石");
             Assert.AreEqual(stock, run.AccessoryStock.Count, "撤退不发饰品");
             Assert.AreEqual(2, node.EventFlag, "记下这是一次撤退");
             Assert.IsTrue(EventScripts.CanLeave(node));
@@ -576,7 +576,7 @@ namespace Ruin.Tests
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
-                    Assert.AreEqual(suppliesBefore - offer.ResourceAmount, run.Map.Supplies, "按件扣补给");
+                    Assert.AreEqual(suppliesBefore - offer.ResourceAmount, run.Map.Supplies, "按件扣矿石");
                     Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply, offer.SanityAmount);
                     break;
                 case AltarResource.Health:
@@ -617,7 +617,7 @@ namespace Ruin.Tests
             switch (offer.Resource)
             {
                 case AltarResource.Supplies:
-                    Assert.AreEqual(suppliesBefore + offer.ResourceAmount, run.Map.Supplies, "按件发补给");
+                    Assert.AreEqual(suppliesBefore + offer.ResourceAmount, run.Map.Supplies, "按件发矿石");
                     Assert.AreEqual(offer.ResourceAmount * EventScripts.AltarSanityPerSupply, offer.SanityAmount);
                     break;
                 case AltarResource.Health:

@@ -76,7 +76,7 @@ namespace GameMake.EventEditor
             card.Buy=Button(Art(card.transform,"Buy",frame,288,166,156,42));
             card.BuyLabel=Label(card.Buy.transform,"Label","购买",8,4,140,34,20,Cream,TextAnchor.MiddleCenter);
             card.gameObject.SetActive(false);
-            shop.Notice=Label(window,"Purchase Notice","选择商品查看详情，使用补给购买。",52,820,1484,34,22,Muted);
+            shop.Notice=Label(window,"Purchase Notice","选择商品查看详情，使用矿石购买。",52,820,1484,34,22,Muted);
             page.gameObject.SetActive(false);
         }
         static RectTransform Group(Transform parent,string name,float x,float y,float w,float h)

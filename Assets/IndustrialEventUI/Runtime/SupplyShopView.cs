@@ -86,7 +86,7 @@ namespace GameMake.EventUI
                 var product=shown[i];
                 var card=Instantiate(CardTemplate,Content); card.name="Product - "+product.Id; card.gameObject.SetActive(true);
                 card.ProductId=product.Id; card.Title.text=product.Name; card.Description.text=product.Description;
-                card.Price.text=product.Price+" 补给";
+                card.Price.text=product.Price+" 矿石";
                 ((RectTransform)card.transform).anchoredPosition=new Vector2((i%2)*488,-(i/2)*238);
                 card.Select.onClick.AddListener(()=>{selected=product.Id; RefreshStock();});
                 card.Buy.onClick.AddListener(()=>
@@ -103,7 +103,7 @@ namespace GameMake.EventUI
         }
         void RefreshStock()
         {
-            Balance.text="持有补给  "+bound.Map.Supplies;
+            Balance.text="持有矿石  "+bound.Map.Supplies;
             Notice.text=bound.SupplyShopNote;
             foreach(var card in Cards)
             {
@@ -111,14 +111,14 @@ namespace GameMake.EventUI
                 bool afford=bound.Map.Supplies>=product.Price;
                 card.Owned.text="库存 "+SupplyShop.Owned(bound.Run,product);
                 card.Buy.interactable=afford;
-                card.BuyLabel.text=afford?"购买":"补给不足";
+                card.BuyLabel.text=afford?"购买":"矿石不足";
                 card.Frame.color=selected==product.Id?Color.white:new Color(.75f,.77f,.72f);
             }
             var chosen=products.FirstOrDefault(p=>p.Id==selected);
             ProductCategory.text=CategoryNames[(int)category]+"  /  商品资料";
             ProductName.text=chosen?.Name??"选择商品";
             ProductDescription.text=chosen?.Description??"";
-            ProductOwned.text=chosen==null?"":"库存 "+SupplyShop.Owned(bound.Run,chosen)+"    /    单价 "+chosen.Price+" 补给";
+            ProductOwned.text=chosen==null?"":"库存 "+SupplyShop.Owned(bound.Run,chosen)+"    /    单价 "+chosen.Price+" 矿石";
             Mascot.sprite=Owner.SupplyView.Mascot.sprite; Mascot.enabled=Mascot.sprite;
         }
     }

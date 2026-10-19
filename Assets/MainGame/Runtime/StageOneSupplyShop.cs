@@ -12,7 +12,7 @@ namespace Ruin.Runtime
         public void OpenSupplyShop()
         {
             if(!SupplyShopAvailable || SupplyShopOpen) return;
-            SupplyShopOpen=true; SupplyShopNote="选择商品查看详情，使用补给购买。"; ClearPending(); Refresh();
+            SupplyShopOpen=true; SupplyShopNote="选择商品查看详情，使用矿石购买。"; ClearPending(); Refresh();
         }
         public void CloseSupplyShop()
         {
