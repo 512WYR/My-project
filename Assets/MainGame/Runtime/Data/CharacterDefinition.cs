@@ -21,7 +21,12 @@ namespace Ruin.Runtime
         // Replaces the old profession: the silhouette key the view draws, e.g. "warrior"/"shield"/"gunner"/"medic".
         public string Silhouette;
         public int MaxHp = 30;
+        // Base speed. When the range below is unset, this is the fixed speed.
         public int Speed = 5;
+        // Inclusive range used for the speed drawn at the start of every battle round. 0 means "unset";
+        // the migration fills it with Speed ± 1, and a designer can widen or narrow it per character.
+        public int SpeedMin;
+        public int SpeedMax;
         // Character combat attributes. Static per character; never derived from sanity.
         public int Attack = 10;
         public double Accuracy = 0.9;
@@ -71,7 +76,7 @@ namespace Ruin.Runtime
             return new ActorSpec
             {
                 Id = Id, Name = DisplayName, Subtitle = Subtitle, Silhouette = Silhouette,
-                MaxHp = MaxHp, Speed = Speed,
+                MaxHp = MaxHp, Speed = Speed, SpeedMin = SpeedMin, SpeedMax = SpeedMax,
                 Attack = Attack, Accuracy = Accuracy, CritChance = CritChance, Dodge = Dodge, Defense = Defense,
                 // Monsters have no sanity at all; the offset is a hero-only field.
                 SanityOffset = isMonster ? 0 : SanityOffset,

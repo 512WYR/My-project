@@ -149,7 +149,8 @@ namespace Ruin.Core
             var spec = new ActorSpec
             {
                 Id = source.Id, Name = source.Name, Subtitle = source.Subtitle, Silhouette = source.Silhouette,
-                MaxHp = source.MaxHp, Speed = source.Speed, StartRank = source.StartRank, Attack = source.Attack,
+                MaxHp = source.MaxHp, Speed = source.Speed, SpeedMin = source.SpeedMin, SpeedMax = source.SpeedMax,
+                StartRank = source.StartRank, Attack = source.Attack,
                 Accuracy = source.Accuracy, CritChance = source.CritChance, Dodge = source.Dodge,
                 Defense = source.Defense, SanityOffset = source.SanityOffset, Pattern = source.Pattern,
                 Behavior = source.Behavior, RankWidth = source.RankWidth, Immobile = source.Immobile,

@@ -160,6 +160,9 @@ namespace Ruin.Runtime
             Spec.Name = string.IsNullOrEmpty(Spec.Name) ? "英雄 " + (slot + 1) : Spec.Name;
             Spec.MaxHp = Math.Max(1, Spec.MaxHp);
             Spec.Speed = Math.Max(1, Spec.Speed);
+            Spec.SpeedMin = Spec.SpeedMin <= 0 ? Math.Max(1, Spec.Speed - 1) : Spec.SpeedMin;
+            Spec.SpeedMax = Spec.SpeedMax <= 0 ? Spec.Speed + 1 : Math.Max(Spec.SpeedMin, Spec.SpeedMax);
+            Spec.Speed = Math.Max(Spec.SpeedMin, Math.Min(Spec.SpeedMax, Spec.Speed));
             Spec.Attack = Math.Max(0, Spec.Attack);
             Spec.Accuracy = Clamp01(Spec.Accuracy, 0.9);
             Spec.CritChance = Clamp01(Spec.CritChance, 0.1);
@@ -233,6 +236,9 @@ namespace Ruin.Runtime
             Spec.Name = string.IsNullOrEmpty(Spec.Name) ? "敌人 " + (slot + 1) : Spec.Name;
             Spec.MaxHp = Math.Max(1, Spec.MaxHp);
             Spec.Speed = Math.Max(1, Spec.Speed);
+            Spec.SpeedMin = Spec.SpeedMin <= 0 ? Math.Max(1, Spec.Speed - 1) : Spec.SpeedMin;
+            Spec.SpeedMax = Spec.SpeedMax <= 0 ? Spec.Speed + 1 : Math.Max(Spec.SpeedMin, Spec.SpeedMax);
+            Spec.Speed = Math.Max(Spec.SpeedMin, Math.Min(Spec.SpeedMax, Spec.Speed));
             Spec.Attack = Math.Max(0, Spec.Attack);
             Spec.Accuracy = Clamp01(Spec.Accuracy, 0.9);
             Spec.CritChance = Clamp01(Spec.CritChance, 0.1);

@@ -18,6 +18,8 @@ MonoBehaviour:
   Role: 0
   MaxHp: 42
   Speed: 4
+  SpeedMin: 3
+  SpeedMax: 5
   SanityOffset: 0
   EnemyPattern: 0
   Attack: 10

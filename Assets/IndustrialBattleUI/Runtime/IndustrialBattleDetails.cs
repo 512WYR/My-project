@@ -91,7 +91,10 @@ namespace GameMake.IndustrialBattleUI
             var limbs=battle.Rules.Limbs;
             SetAttribute(0,Mathf.RoundToInt((float)battle.EffectiveAttack(hero)).ToString());
             SetAttribute(1,Percent(battle.EffectiveDefense(hero)));
-            SetAttribute(2,battle.EffectiveSpeed(hero).ToString());
+            string speed=hero.Definition.MaxSpeed>hero.Definition.MinSpeed
+                ? hero.Definition.MinSpeed+"–"+hero.Definition.MaxSpeed
+                : battle.EffectiveSpeed(hero).ToString();
+            SetAttribute(2,speed);
             SetAttribute(3,Percent(hero.Definition.Dodge));
             SetAttribute(4,Percent(Math.Max(hero.Definition.Accuracy*LimbSystem.AccuracyFactor(hero,limbs)+hero.AccuracyBuff,AccessorySystem.AccuracyFloor(hero))));
             SetAttribute(5,Percent(AccessorySystem.AlwaysCrit(hero)?1:hero.Definition.CritChance));

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Ruin.Core;
@@ -38,6 +39,7 @@ namespace Ruin.Editor
                 x.Enemies = new[] { cleaver, whisperer, hunter };
             });
             Migrate(catalog);
+            BackfillSpeedRanges(catalog);
             EnsureEnemyContent(catalog, monsters);
             AssignKinds(catalog);
             PlayerSettings.productName = "Between the Veils - Stage One";
@@ -272,6 +274,73 @@ namespace Ruin.Editor
             return 1;
         }
 
+        // Assets created before speed ranges existed read SpeedMin/SpeedMax back as zero. Fill only the
+        // blank ones with the default ±1 span, so a designer's narrower or wider range is never overwritten.
+        [MenuItem("GameMake/Backfill Speed Ranges")]
+        public static void BackfillSpeedRangesMenu()
+        {
+            var catalog = AssetDatabase.LoadAssetAtPath<GameCatalog>(Data + "/GameCatalog.asset");
+            if (!catalog)
+            {
+                Debug.LogWarning("GameCatalog not found at " + Data + "/GameCatalog.asset; run GameMake/Prepare Stage One first.");
+                return;
+            }
+            int changed = BackfillSpeedRanges(catalog);
+            if (changed > 0) AssetDatabase.SaveAssets();
+            Debug.Log("STAGE_ONE_SPEED_RANGES " + changed);
+        }
+
+        private static int BackfillSpeedRanges(GameCatalog catalog)
+        {
+            var seen = new HashSet<int>();
+            int changed = 0;
+            if (catalog.Heroes != null)
+                foreach (var hero in catalog.Heroes) changed += BackfillSpeedRange(hero, seen);
+            changed += BackfillMonsterRanges(catalog.Enemies, seen);
+            changed += BackfillMonsterRanges(catalog.Monsters, seen);
+            changed += BackfillMonsterSlotRanges(catalog.NormalEncounters, seen);
+            changed += BackfillMonsterSlotRanges(catalog.EliteEncounters, seen);
+            changed += BackfillMonsterSlotRanges(catalog.BossEncounters, seen);
+            return changed;
+        }
+
+        private static int BackfillMonsterRanges(CharacterDefinition[] monsters, HashSet<int> seen)
+        {
+            int changed = 0;
+            if (monsters == null) return changed;
+            foreach (var monster in monsters)
+            {
+                changed += BackfillSpeedRange(monster, seen);
+                if (monster != null && monster.SummonPool != null)
+                    foreach (var summon in monster.SummonPool) changed += BackfillSpeedRange(summon, seen);
+            }
+            return changed;
+        }
+
+        private static int BackfillMonsterSlotRanges(EnemyLineup[] lineups, HashSet<int> seen)
+        {
+            int changed = 0;
+            if (lineups == null) return changed;
+            foreach (var lineup in lineups)
+            {
+                if (lineup == null || lineup.Slots == null) continue;
+                foreach (var monster in lineup.Slots) changed += BackfillSpeedRange(monster, seen);
+            }
+            return changed;
+        }
+
+        private static int BackfillSpeedRange(CharacterDefinition definition, HashSet<int> seen)
+        {
+            if (!definition || definition.SpeedMax > 0) return 0;
+            if (!seen.Add(definition.GetInstanceID())) return 0;
+            int speed = Math.Max(1, definition.Speed);
+            definition.Speed = speed;
+            definition.SpeedMin = Math.Max(1, speed - 1);
+            definition.SpeedMax = speed + 1;
+            EditorUtility.SetDirty(definition);
+            return 1;
+        }
+
         // ---------------- designed monsters ----------------
         //
         // Damage is carried by Attack × Multiplier so the existing resolver (defense, guard, block,
@@ -383,7 +452,8 @@ namespace Ruin.Editor
             {
                 x.Kind = ActorKind.Monster;
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = "enemy";
-                x.MaxHp = hp; x.Speed = speed; x.Attack = attack; x.Accuracy = accuracy;
+                x.MaxHp = hp; x.Speed = speed; x.SpeedMin = Math.Max(1, speed - 1); x.SpeedMax = speed + 1;
+                x.Attack = attack; x.Accuracy = accuracy;
                 x.CritChance = 0; x.Dodge = 0; x.Defense = 0;
                 x.EnemyPattern = pattern; x.Behavior = behavior; x.EnemySkills = skills;
                 if (extra != null) extra(x);
@@ -484,7 +554,8 @@ namespace Ruin.Editor
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x => {
                 x.Kind = ActorKind.Hero;
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = silhouette;
-                x.MaxHp = hp; x.Speed = speed; x.SanityOffset = sanity;
+                x.MaxHp = hp; x.Speed = speed; x.SpeedMin = Math.Max(1, speed - 1); x.SpeedMax = speed + 1;
+                x.SanityOffset = sanity;
                 x.Attack = 10; x.Accuracy = 0.9; x.CritChance = 0.1; x.Dodge = 0; x.Defense = 0;
                 x.BasicSkills = basic; x.PrimalSkills = primal; x.TechnicalSpecial = technicalSpecial;
             });
@@ -494,7 +565,9 @@ namespace Ruin.Editor
         {
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x => {
                 x.Kind = ActorKind.Monster;
-                x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = "enemy"; x.MaxHp = hp; x.Speed = speed; x.EnemyPattern = pattern;
+                x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = "enemy"; x.MaxHp = hp;
+                x.Speed = speed; x.SpeedMin = Math.Max(1, speed - 1); x.SpeedMax = speed + 1;
+                x.EnemyPattern = pattern;
                 x.Attack = 10; x.Accuracy = 0.86; x.CritChance = 0.1; x.Dodge = 0; x.Defense = 0;
             });
         }

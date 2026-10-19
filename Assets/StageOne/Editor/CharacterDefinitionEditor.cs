@@ -16,7 +16,7 @@ namespace Ruin.Editor
     {
         private static readonly string[] Common =
         {
-            "Id", "DisplayName", "Subtitle", "Silhouette", "MaxHp", "Speed",
+            "Id", "DisplayName", "Subtitle", "Silhouette", "MaxHp", "Speed", "SpeedMin", "SpeedMax",
             "Attack", "Accuracy", "CritChance", "Dodge", "Defense"
         };
 

@@ -149,7 +149,11 @@ namespace Ruin.Tests
 
         [Test] public void SwapOnlyAllowsAdjacentLivingAllyAndChangesRanks()
         {
-            var run = Run(); var battle = Battle(run); var gunner = battle.Current;
+            var run = Run();
+            // Speed is rolled from an authored span now; pin the gunner so the swap case still starts from
+            // the same fixed-order premise the test was written for.
+            run.Heroes[3].Definition.Speed = 100;
+            var battle = Battle(run); var gunner = battle.Current;
             Assert.AreEqual("gunner", gunner.Id); Assert.AreEqual(3, gunner.Rank);
             Assert.IsFalse(battle.SwapTargets().Contains(run.Heroes[1]), "只能与相邻的队员换位");
             string error; Assert.IsTrue(battle.Execute(new ActionRequest(ActionKind.Swap, "medic"), out error));

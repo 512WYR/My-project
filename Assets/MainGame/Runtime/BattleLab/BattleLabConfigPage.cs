@@ -212,7 +212,7 @@ namespace Ruin.Runtime
                 var slot = Config.Heroes[i];
                 string sourceName = string.IsNullOrEmpty(slot.Spec.Name) ? "（空槽）" : slot.Spec.Name;
                 string summary = slot.Enabled
-                    ? "HP " + slot.Spec.MaxHp + " · 攻 " + slot.Spec.Attack + " · 速 " + slot.Spec.Speed
+                    ? "HP " + slot.Spec.MaxHp + " · 攻 " + slot.Spec.Attack + " · 速 " + slot.Spec.MinSpeed + "–" + slot.Spec.MaxSpeed
                       + " · 站位 " + (slot.Rank < 0 ? "自动" : (slot.Rank + 1).ToString())
                       + " · 理智 " + slot.Sanity.ToString("0.#")
                     : "未启用";
@@ -408,7 +408,7 @@ namespace Ruin.Runtime
                 var slot = Config.Enemies[i];
                 string sourceName = string.IsNullOrEmpty(slot.Spec.Name) ? "（空槽）" : slot.Spec.Name;
                 string summary = slot.Enabled
-                    ? "HP " + slot.Spec.MaxHp + " · 攻 " + slot.Spec.Attack + " · 速 " + slot.Spec.Speed
+                    ? "HP " + slot.Spec.MaxHp + " · 攻 " + slot.Spec.Attack + " · 速 " + slot.Spec.MinSpeed + "–" + slot.Spec.MaxSpeed
                       + " · 站位 " + (slot.StartRank < 0 ? "槽位" : (slot.StartRank + 1).ToString())
                       + (slot.Spec.RankWidth > 1 ? " · 宽 " + slot.Spec.RankWidth : "")
                       + " · " + slot.Spec.Behavior

@@ -19,6 +19,8 @@ MonoBehaviour:
   Silhouette: enemy
   MaxHp: 12
   Speed: 3
+  SpeedMin: 2
+  SpeedMax: 4
   Attack: 3
   Accuracy: 0.75
   CritChance: 0

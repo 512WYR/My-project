@@ -361,7 +361,8 @@ namespace Ruin.Runtime
             // ---- 基础属性 ----
             bool stats = Ui.GroupOpen("edit-stats", false);
             bool statsNext = BattleLabUi.Foldout(stats, "基础属性",
-                "攻 " + definition.Attack + " · 速 " + definition.Speed + " · 命 " + definition.Accuracy.ToString("0.##"));
+                "攻 " + definition.Attack + " · 速 " + definition.MinSpeed + "–" + definition.MaxSpeed
+                + " · 命 " + definition.Accuracy.ToString("0.##"));
             Ui.SetGroupOpen("edit-stats", statsNext);
             if (statsNext)
             {

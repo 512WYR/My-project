@@ -151,6 +151,7 @@ namespace Ruin.Core
                     // Boss summons and refills happen before the turn queue is built, so a unit summoned
                     // "at the end of round one" is already standing when round two starts.
                     RunRoundStartHooks();
+                    RollRoundSpeeds();
                     foreach (var actor in All.Where(a => !a.Dead).OrderByDescending(a => EffectiveSpeed(a)).ThenBy(a => a.Player ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal))
                     {
                         turns.Enqueue(actor);
@@ -760,10 +761,22 @@ namespace Ruin.Core
             return SanityProbability.Clamp((actor.Definition.Defense + actor.DefenseBuff) * LimbSystem.DefenseFactor(actor, Rules.Limbs), 0, 1);
         }
 
+        // One draw per living actor with a real speed span, in the stable roster order (heroes, then
+        // enemies). Called after round-start hooks so units summoned at the start of the round are included;
+        // dead actors and fixed-speed actors spend no draw. The queue is built from these values.
+        private void RollRoundSpeeds()
+        {
+            foreach (var actor in All.Where(a => !a.Dead).ToArray())
+                actor.SpeedRoll = actor.Definition.RollSpeed(Run.Random);
+        }
+
         // Speed drives turn order, so a broken leg has to be visible here rather than on ActorState.Speed.
+        // The limb factor is applied after the round's roll; before the first roll (or for a unit summoned
+        // mid-round that has not acted yet) the base speed is the fallback.
         public int EffectiveSpeed(ActorState actor)
         {
-            return Math.Max(1, (int)Math.Round(actor.Definition.Speed * LimbSystem.SpeedFactor(actor, Rules.Limbs), MidpointRounding.AwayFromZero));
+            int baseSpeed = actor.SpeedRoll > 0 ? actor.SpeedRoll : actor.Definition.Speed;
+            return Math.Max(1, (int)Math.Round(baseSpeed * LimbSystem.SpeedFactor(actor, Rules.Limbs), MidpointRounding.AwayFromZero));
         }
 
         public int SkillValue(ActorState actor, SkillSpec skill)
@@ -1451,7 +1464,8 @@ namespace Ruin.Core
             return new ActorSpec
             {
                 Id = source.Id, Name = source.Name, Subtitle = source.Subtitle, Silhouette = source.Silhouette,
-                MaxHp = source.MaxHp, Speed = source.Speed, StartRank = source.StartRank,
+                MaxHp = source.MaxHp, Speed = source.Speed, SpeedMin = source.SpeedMin, SpeedMax = source.SpeedMax,
+                StartRank = source.StartRank,
                 Attack = source.Attack, Accuracy = source.Accuracy, CritChance = source.CritChance,
                 Dodge = source.Dodge, Defense = source.Defense, SanityOffset = source.SanityOffset,
                 Pattern = source.Pattern, Behavior = source.Behavior, RankWidth = source.RankWidth,

@@ -129,7 +129,40 @@ namespace Ruin.Core
         public string Subtitle;
         public string Silhouette; // Replaces HeroRole: "warrior" / "shield" / "gunner" / "medic", or null for enemies.
         public int MaxHp;
+        // Base speed. Still the authoring fallback: when the range below is unset, or when a debug/test
+        // caller moves Speed outside its authored span, this value is used as a fixed speed.
         public int Speed;
+        // Inclusive roll range for the speed drawn at the start of every round. 0 means "no span" and
+        // keeps Speed fixed. SpeedMin/SpeedMax are authored as the actual endpoints (e.g. 5 and 7).
+        public int SpeedMin;
+        public int SpeedMax;
+        // Effective endpoints, including the runtime-override guard. If Speed has been moved outside the
+        // authored span, the caller deliberately overrode it (debug tools and tests do this), so the span
+        // collapses to that fixed value instead of silently ignoring the override.
+        public int MinSpeed { get { return SpeedRangeValid ? SpeedMin : Math.Max(1, Speed); } }
+        public int MaxSpeed
+        {
+            get
+            {
+                if (!SpeedRangeValid) return Math.Max(1, Speed);
+                return Math.Max(MinSpeed, SpeedMax);
+            }
+        }
+        private bool SpeedRangeValid
+        {
+            get
+            {
+                return SpeedMin > 0 && SpeedMax >= SpeedMin && Speed >= SpeedMin && Speed <= SpeedMax;
+            }
+        }
+        // Uniform integer in [MinSpeed, MaxSpeed]. A fixed-speed actor returns immediately without drawing,
+        // so adding this rule never shifts the random sequence for specs that have no real span.
+        public int RollSpeed(RunRandom random)
+        {
+            int min = MinSpeed, max = MaxSpeed;
+            if (max <= min || random == null) return min;
+            return min + (int)(random.NextUnit() * (max - min + 1));
+        }
         // Starting enemy rank. -1 means "use the array index", which keeps the old constructor contract
         // for heroes and tests; a formation instead names the rank explicitly so empty slots stay empty.
         public int StartRank = -1;
@@ -261,6 +294,9 @@ namespace Ruin.Core
         // battle that activates when the next one starts. Both are cleared when a battle settles.
         public bool SanityLocked;
         public bool SanityLockPending;
+        // Speed drawn for the current round. 0 means "not rolled yet"; read EffectiveSpeed on the engine
+        // instead of this field when applying limb penalties.
+        public int SpeedRoll;
         public int Speed { get { return Definition.Speed; } }
         public string Name { get { return Definition.Name; } }
         public bool DeathDoor { get { return Player && !Dead && Hp <= 0; } }

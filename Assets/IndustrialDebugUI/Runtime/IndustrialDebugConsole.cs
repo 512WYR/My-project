@@ -674,7 +674,9 @@ namespace GameMake.IndustrialDebugUI
                 text.AppendLine("副标题        " + definition.Subtitle + "   剪影 " + definition.Silhouette);
                 text.AppendLine("生命          " + hero.Hp + " / " + definition.MaxHp
                     + "      理智  " + hero.Sanity.ToString("0.0"));
-                text.AppendLine("速度 " + definition.Speed + "   攻击 " + definition.Attack
+                text.AppendLine("速度 " + definition.MinSpeed + "–" + definition.MaxSpeed
+                    + "（本回合 " + (hero.SpeedRoll > 0 ? hero.SpeedRoll : definition.Speed) + "）"
+                    + "   攻击 " + definition.Attack
                     + "   命中 " + definition.Accuracy.ToString("0.00")
                     + "   暴击 " + definition.CritChance.ToString("0.00")
                     + "   闪避 " + definition.Dodge.ToString("0.00")
@@ -1138,7 +1140,7 @@ namespace GameMake.IndustrialDebugUI
                     if (!definition) continue;
                     var spec = definition.ToSpec();
                     text.AppendLine("  " + spec.Name + "  " + spec.Id + "  HP " + spec.MaxHp
-                        + "  攻 " + spec.Attack + "  速 " + spec.Speed
+                        + "  攻 " + spec.Attack + "  速 " + spec.MinSpeed + "–" + spec.MaxSpeed
                         + "  命 " + spec.Accuracy.ToString("0.00")
                         + "  暴 " + spec.CritChance.ToString("0.00")
                         + "  闪 " + spec.Dodge.ToString("0.00")
@@ -1335,8 +1337,9 @@ namespace GameMake.IndustrialDebugUI
         }
         private double speed(ActorState hero)
         {
-            return hero.Definition == null ? 0
-                : hero.Definition.Speed * LimbSystem.SpeedFactor(hero, Source.Catalog.Rules().Limbs);
+            if (hero.Definition == null) return 0;
+            int baseSpeed = hero.SpeedRoll > 0 ? hero.SpeedRoll : hero.Definition.Speed;
+            return baseSpeed * LimbSystem.SpeedFactor(hero, Source.Catalog.Rules().Limbs);
         }
         private double accuracy(ActorState hero)
         {
