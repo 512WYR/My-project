@@ -7,6 +7,12 @@ namespace Ruin.Runtime
     // Vector silhouettes keep the prototype self-contained and easily replaceable by sprites. When a
     // Portrait texture is assigned the vector body is skipped and the texture is drawn instead, fitted
     // inside the same rect, so every existing builder keeps working without a second Image node.
+    //
+    // In Unity 2022 Graphic's RequireComponent moved to its concrete subclasses, so a runtime
+    // AddComponent<SilhouetteGraphic>() otherwise gets no CanvasRenderer: OnPopulateMesh still builds
+    // the mesh, but there is no renderer to submit it. Prefab-authored instances hid this because the
+    // editor saved the CanvasRenderer alongside the script.
+    [RequireComponent(typeof(CanvasRenderer))]
     public sealed class SilhouetteGraphic : Graphic
     {
         public string Silhouette;

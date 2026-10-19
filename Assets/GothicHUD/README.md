@@ -90,12 +90,14 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 
 | 区域 | 来源 | 内容 |
 |---|---|---|
-| 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、生命条下方的理智条、状态行（我方）或敌人意图（敌方）、行动/可选标记、阵亡叉 |
+| 位置卡 ×8 | GothicBattleCard | 剪影、姓名、生命条、生命条下方的理智条、状态行（我方）或敌人意图（敌方）、立绘底部的具体状态条、行动/可选标记、阵亡叉 |
 | 血量 | ModularHudController / Vitals | 当前被查看角色的生命与理智 |
 | 技能 | ModularHudController / Skills | 五个技能槽、位移键、技能说明 |
 | 调试台 | IndustrialDebugConsole | 九个页签：概览、队伍、战斗、地图与房间、事件、部位与义肢、物品与饰品、规则与目录、日志；包含新开演练、玩家/队员理智拖动条与输入框、常态/技术/原始形态按钮、生命、强制房间与事件、战斗结算、义肢与饰品管理 |
 
 位置卡的生命条下方各有一条理智条（`GothicBattleCard.SanityFill / SanityValue`），与 Vitals 区的数值同步；敌方卡同样显示，但敌方理智通常不参与战斗。最左列的 Party 队伍头像栏本次不驱动，保持预制体原样。战斗记录没有放入 UI。
+
+立绘底部另有一条运行时生成的状态条，内容来自 `Ruin.Core.BattleStatus`：格挡、反击、追击、防御力/命中加成、流血、失衡、易伤、理智锁定、假寐、成瘾物、心脏、锈血勋章与断肢/受伤，最多显示 4 条并追加 `+N`。它挂在立绘 `Art` 之下，不参与多格占位的直接子节点布局；悬停时由排序 70 的 `BattleStatusTooltip` 显示每条效果的完整说明。状态条自身是独立点击目标，因此会把点击转发给卡片的 `Hit`，不会吞掉角色选择。角色死亡或没有任何状态时整条隐藏。
 
 技能槽的交互：有目标技能仍为“点技能 → 点高亮目标”；群体/自身技能第一次点击只选中并显示说明，同时高亮其目标侧的全部存活角色，**再点击任意高亮目标即释放**（提交的目标只用于确认，效果由引擎作用于整侧）。不可用的技能（站位不符 / 次数用尽 / 没有合法目标）也可以点击，说明区会显示技能详情与不可用原因，但不会进入待释放状态。
 
@@ -111,7 +113,7 @@ GameMake / Gothic HUD / Build mainScene 会生成 Assets/Scenes/mainScene.unity�
 
 mainScene 中的 HUD 实例把 Follow Stage One Battle 关掉，由 `GothicBattleHudController` 单独写入角色、卡面和技能，避免两个控制器争同一个控件。
 
-战场卡点击会选中该角色，选中技能或位移后可作为目标。受击与治疗的闪色由 HUD 自己维护卡片图字典并实现 `StageOneApp.BattleEventAnimation`，不再依赖代码生成的页面。
+战场卡点击会选中该角色，选中技能或位移后可作为目标。受击与治疗的结果由运行时全屏演出层 `BattlePresentation` 显示，HUD 不再维护闪色字典，也不再读写 `StageOneApp.BattleEventAnimation`。
 
 ## 验收与备份
 

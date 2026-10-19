@@ -80,6 +80,7 @@ namespace Ruin.Runtime
             MusicDirector.Ensure().Bind(this);
             Catalog = Catalog ? Catalog : Resources.Load<GameCatalog>("StageOne/GameCatalog");
             if (!Catalog) { Debug.LogError("StageOne catalog missing. Run GameMake/Prepare Stage One from the editor."); return; }
+            PreparePresentation();
             NewRun();
             PrepareStartMenu();
         }
@@ -133,6 +134,7 @@ namespace Ruin.Runtime
             // A new run always starts with the game in view: dismiss the title or pause overlay and
             // restore the clock before any of the state below begins animating.
             if (menu) menu.HideAllForGameplay();
+            HidePresentation();
             SupplyShopOpen = false; SupplyShopNote = null;
             CharacterPanelOpen = false; CharacterHeroId = null;
             StopAllCoroutines(); Busy = false; ClearPending();
@@ -599,7 +601,7 @@ namespace Ruin.Runtime
         // the elite branch of a scripted fight would otherwise never scale anything.
         private void StartBattle(NodeState node, NodeType kind)
         {
-            StopAllCoroutines(); Busy = false; ClearPending();
+            StopAllCoroutines(); HidePresentation(); Busy = false; ClearPending();
             AwaitingNode = false;
             battleRewardsSettled = false; battleRewardNote = null;
             // Designed formations name their own ranks and already carry their final numbers, so they are
@@ -682,30 +684,47 @@ namespace Ruin.Runtime
         private IEnumerator ContinueEnemies(int from)
         {
             Busy = true; Refresh();
-            yield return AnimateEvents(Battle.Events.Skip(from).ToArray(), AutomationMode);
-            while (Battle.Outcome == BattleOutcome.Active && Battle.Current != null && !Battle.Current.Player)
+            try
             {
-                Hint = Battle.Current.Name + " 即将行动。";
-                Refresh();
-                yield return new WaitForSeconds(AutomationMode ? 0.01f : 0.65f);
-                int marker = Battle.Events.Count;
-                Battle.ExecuteEnemy();
-                Refresh();
-                yield return AnimateEvents(Battle.Events.Skip(marker).ToArray(), AutomationMode);
+                yield return AnimateEvents(Battle.Events.Skip(from).ToArray(), AutomationMode);
+                while (Battle != null && Battle.Outcome == BattleOutcome.Active
+                    && Battle.Current != null && !Battle.Current.Player)
+                {
+                    Hint = Battle.Current.Name + " 即将行动。";
+                    Refresh();
+                    yield return new WaitForSeconds(AutomationMode ? 0.01f : 0.65f);
+                    int marker = Battle.Events.Count;
+                    Battle.ExecuteEnemy();
+                    Refresh();
+                    yield return AnimateEvents(Battle.Events.Skip(marker).ToArray(), AutomationMode);
+                }
             }
-            Busy = false;
-            if (Battle.Current != null && Battle.Current.Player) InspectedId = Battle.Current.Id;
-            Hint = "选择技能，再点击高亮目标。Esc 取消目标；右上角「调试台」提供验收命令与后台信息。";
-            Refresh();
+            finally
+            {
+                // An exception in a presentation hook must not leave the turn locked out forever.
+                Busy = false;
+                if (Battle != null && Battle.Current != null && Battle.Current.Player) InspectedId = Battle.Current.Id;
+                Hint = "选择技能，再点击高亮目标。Esc 取消目标；右上角「调试台」提供验收命令与后台信息。";
+                Refresh();
+            }
         }
 
-        // The HUD owns the cards, so it also owns the flash between two events. If nothing is bound the
-        // wait still keeps the pace the old view had.
+        // A presentation hook stays available for tools, but the game itself now plays the full-screen
+        // cut-in. Fast runs (automation, batch playmode) take exactly one frame and build no UI.
         public Func<BattleEvent[], bool, IEnumerator> BattleEventAnimation;
         private IEnumerator AnimateEvents(BattleEvent[] events, bool fast)
         {
             if (BattleEventAnimation != null) { yield return BattleEventAnimation(events, fast); yield break; }
-            yield return new WaitForSeconds(fast ? 0.01f : 0.12f);
+            if (fast || Application.isBatchMode) { yield return null; yield break; }
+
+            List<BattleShowGroup> plan = null;
+            try { plan = BattleShowPlan.Build(events, Battle == null ? null : (Func<string, ActorState>)Battle.Find); }
+            catch (Exception e) { Debug.LogException(e); }
+            if (plan == null || plan.Count == 0) { yield return null; yield break; }
+
+            if (!presentation) presentation = BattlePresentation.Ensure(this);
+            if (presentation) yield return presentation.Play(plan);
+            else yield return null;
         }
 
         // Everything that changes state funnels through Refresh(), so this is the one place a second UI can

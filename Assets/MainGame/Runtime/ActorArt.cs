@@ -13,6 +13,9 @@ namespace Ruin.Runtime
         // Heroes are checked first, then monsters. Ids are unique per side, so one cache covers both.
         private static readonly string[] Roots = { "StageOne/HeroArt/", "StageOne/EnemyArt/" };
         private static readonly Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
+        // Image-based HUDs (the authored Gothic panel) take a Sprite instead of a Texture2D, so the
+        // sprite form is cached alongside the texture and built once per Id.
+        private static readonly Dictionary<string, Sprite> spriteCache = new Dictionary<string, Sprite>();
 
         public static Texture2D Portrait(ActorSpec spec)
         {
@@ -25,6 +28,26 @@ namespace Ruin.Runtime
             // Resources lookup for the characters that have no art would otherwise hit the asset system.
             cache[spec.Id] = texture;
             return texture;
+        }
+
+        // Sprite form of the same file, for Image slots. A single-sprite import is returned as-is; a
+        // Texture2D-only import is wrapped in a Sprite so either import mode works.
+        public static Sprite PortraitSprite(ActorSpec spec)
+        {
+            if (spec == null || string.IsNullOrEmpty(spec.Id)) return null;
+            if (spriteCache.TryGetValue(spec.Id, out var cached)) return cached;
+            Sprite sprite = null;
+            for (int i = 0; i < Roots.Length && sprite == null; i++)
+            {
+                sprite = Resources.Load<Sprite>(Roots[i] + spec.Id);
+                if (sprite != null) continue;
+                var texture = Load(Roots[i] + spec.Id);
+                if (texture != null)
+                    sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f), 100f);
+            }
+            spriteCache[spec.Id] = sprite;
+            return sprite;
         }
 
         private static Texture2D Load(string path)

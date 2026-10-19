@@ -383,6 +383,15 @@ namespace Ruin.Core
         public string TargetId;
         public int Amount;
         public string Kind;
+        // Structured payload for effects that cannot be reconstructed from the number alone: the limb
+        // part name, "locked" for a sanity lock, or the concrete buff list. Value carries the actual
+        // sanity delta and the severed flag (1 = severed, 0 = only injured).
+        public string Detail;
+        public double Value;
+        // True when a status crossed a visible threshold: a limb turned injured (half health) or was
+        // severed. The engine still logs every guaranteed hit for the combat log; only milestones get
+        // a line in the cut-in.
+        public bool Milestone;
     }
 
     public sealed class ActionRequest

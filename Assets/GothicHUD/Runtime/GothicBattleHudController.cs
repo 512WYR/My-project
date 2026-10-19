@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -54,21 +53,16 @@ namespace GameMake.GothicHUD
         private StageOneApp bound;
         private bool hooked;
         private GameObject quickItemRoot;
-        // Owned here now that the code-generated page is gone: the app asks for a flash and the cards
-        // answer with their own background images.
-        private readonly Dictionary<string, Image> cardImages = new Dictionary<string, Image>();
 
         private void OnEnable() { Bind(); Sync(); }
         private void Start() { Bind(); Sync(); }
         private void OnDisable()
         {
-            if (bound)
-            {
-                bound.Changed -= Sync;
-                bound.BattleEventAnimation = null;
-            }
-            cardImages.Clear();
+            if (bound) bound.Changed -= Sync;
             bound = null;
+            // The page can disappear while the pointer is over a feet plate; the tooltip lives on its own
+            // canvas and would otherwise stay on screen after leaving the battle.
+            BattleStatusTooltip.HideAll();
         }
 
         private void Bind()
@@ -83,11 +77,10 @@ namespace GameMake.GothicHUD
             if (quickItemRoot) quickItemRoot.SetActive(false);
             if (bound != BattleSource)
             {
-                if (bound) { bound.Changed -= Sync; bound.BattleEventAnimation = null; }
+                if (bound) bound.Changed -= Sync;
                 bound = BattleSource;
                 if (bound) bound.Changed += Sync;
             }
-            if (bound) bound.BattleEventAnimation = AnimateEvents;
             if (hooked) return;
             hooked = true;
             if (Panel)
@@ -162,7 +155,11 @@ namespace GameMake.GothicHUD
             // The old sheet is never shown: the authored console replaced it. Hiding it here also keeps
             // a stale prefab from covering the laid-out page if the scene was saved while it was open.
             if (DebugRoot) DebugRoot.SetActive(false);
-            if (!live) return;
+            if (!live)
+            {
+                BattleStatusTooltip.HideAll();
+                return;
+            }
 
             SyncPresentation(app);
             if (Counter) Counter.SetRound(battle.Round);
@@ -314,8 +311,6 @@ namespace GameMake.GothicHUD
                 var hero = app.Run.Heroes.FirstOrDefault(h => h.Rank == rank);
                 card.Render(hero, hero != null && battle.Current == hero, hero != null && possible.Contains(hero.Id),
                     hero != null && app.InspectedId == hero.Id, null);
-                // Keep the card body so the damage flash has something to tint; this page owns that map now.
-                if (hero != null && card.Background) cardImages[hero.Id] = card.Background;
             }
             if (Enemies == null || Enemies.Length == 0) return;
             // A living enemy owns as many consecutive cards as its Width. The owner's card is stretched
@@ -357,7 +352,6 @@ namespace GameMake.GothicHUD
                 card.Render(enemy, battle.Current == enemy, possible.Contains(enemy.Id),
                     app.InspectedId == enemy.Id, battle.Intent(enemy), battle.IsHeartTarget(enemy));
                 card.SetSpan(Mathf.Clamp(enemy.Width, 1, Enemies.Length), step);
-                if (card.Background) cardImages[enemy.Id] = card.Background;
             }
         }
 
@@ -394,23 +388,6 @@ namespace GameMake.GothicHUD
             for (int i = 0; i < width; i++)
                 if (claimed[start + i]) return false;
             return true;
-        }
-
-        // StageOneApp asks the bound page to flash the cards between two events. The old code-generated
-        // view used to do this; the HUD now owns both the cards and the animation.
-        private IEnumerator AnimateEvents(BattleEvent[] events, bool fast)
-        {
-            var hits = events.Where(e => e.Kind == "damage" || e.Kind == "heal").ToArray();
-            if (hits.Length == 0) { yield return new WaitForSeconds(fast ? 0.01f : 0.12f); yield break; }
-            foreach (var e in hits)
-            {
-                Image img;
-                if (e.TargetId == null || !cardImages.TryGetValue(e.TargetId, out img) || !img) continue;
-                Color saved = img.color;
-                img.color = e.Kind == "heal" ? new Color32(0x39, 0x72, 0x74, 0xFF) : new Color32(0x80, 0x3F, 0x39, 0xFF);
-                yield return new WaitForSeconds(fast ? 0.01f : 0.18f);
-                if (img) img.color = saved;
-            }
         }
     }
 }

@@ -94,6 +94,9 @@ namespace GameMake.GothicHUD
             {
                 var source = lastRun.Heroes[i]; var target = Characters[i];
                 target.Name = source.Name; target.Subtitle = source.Definition.Subtitle;
+                // Fill the authored portrait slot from Resources/StageOne/HeroArt/<Id> when the slot has
+                // not been given custom art by hand.
+                if (!target.Portrait) target.Portrait = ActorArt.PortraitSprite(source.Definition);
                 target.Health = source.Hp; target.MaxHealth = source.Definition.MaxHp; target.Sanity = (float)source.Sanity;
                 if (source.Id == BattleSource.InspectedId) SelectedCharacter = i;
             }

@@ -111,13 +111,24 @@ namespace GameMake.IndustrialBattleUI
         static void Figure(SilhouetteGraphic figure,ActorState hero)
         {
             if(!figure) return;
-            figure.Silhouette=hero.Definition.Silhouette; figure.color=hero.Dead?new Color32(78,78,72,255):new Color32(210,190,154,255);
+            figure.Silhouette=hero.Definition.Silhouette;
+            // Same lookup as the battle cards: a portrait under Resources/StageOne/HeroArt/<Id> replaces
+            // the vector figure, and anything without art keeps it.
+            var portrait=ActorArt.Portrait(hero.Definition);
+            figure.SetPortrait(portrait);
+            figure.color=portrait?hero.Dead?new Color(0.47f,0.47f,0.47f,1f):Color.white
+                :hero.Dead?new Color32(78,78,72,255):new Color32(210,190,154,255);
             figure.SetVerticesDirty();
         }
         static void TintCard(GothicBattleCard card)
         {
             if(!card || !card.Art) return;
-            card.Art.color=card.DeadCross.activeSelf?new Color32(70,70,66,255):new Color32(206,190,163,255);
+            // The bronze tint is for the vector figure. A portrait carries its own colours, so it only
+            // greys out when the actor is dead — the same rule GothicBattleCard.Render applies.
+            card.Art.color=card.Art.Portrait
+                ?(card.DeadCross.activeSelf?new Color32(120,120,120,255):Color.white)
+                :card.DeadCross.activeSelf?new Color32(70,70,66,255):new Color32(206,190,163,255);
+            card.Art.SetVerticesDirty();
         }
         IEnumerator Spin()
         {

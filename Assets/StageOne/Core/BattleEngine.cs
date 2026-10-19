@@ -174,8 +174,9 @@ namespace Ruin.Core
                 if (next.BleedTurns > 0)
                 {
                     next.BleedTurns--;
-                    Damage(next, next.BleedDamage, null, true);
-                    Log(next.Name + " 流血，剩余 " + next.BleedTurns + " 次。", "bleed", null, next.Id);
+                    int bleedDealt = Damage(next, next.BleedDamage, null, true);
+                    Log(next.Name + " 流血，剩余 " + next.BleedTurns + " 次。", "bleed", null, next.Id,
+                        Math.Max(0, bleedDealt), 0, "流血");
                     if (CheckEnd()) return;
                     // Bleed can kill an enemy inside Advance, outside any Execute call. Close that gap
                     // before the turn queue picks the next actor.
@@ -294,8 +295,18 @@ namespace Ruin.Core
             var target = Run.Heroes.FirstOrDefault(a => a != null && a.Id == targetId);
             if (target == null) { note = "请选择一名存活队员。"; return false; }
             var item = Run.Consumables[stockIndex];
+            int hpBefore = target.Hp;
+            bool lockedBefore = target.SanityLocked;
             if (!ConsumableSystem.Use(Run, target, stockIndex, true, out note)) return false;
-            Log(note, item.Kind == ConsumableKind.HpRestore ? "heal" : "sanity", Current.Id, target.Id);
+            if (item.Kind == ConsumableKind.HpRestore)
+            {
+                Log(note, "heal", Current.Id, target.Id, Math.Max(0, target.Hp - hpBefore));
+            }
+            else
+            {
+                bool lockedNow = !lockedBefore && target.SanityLocked;
+                Log(note, "sanity", Current.Id, target.Id, 0, 0, lockedNow ? "locked" : null);
+            }
             if (!CheckEnd()) Advance();
             return true;
         }
@@ -412,14 +423,21 @@ namespace Ruin.Core
                 if (!AccessorySystem.LimbLock(actor))
                 {
                     var part = AccessorySystem.RandomPart(Run.Random, actor);
+                    var limb = LimbSystem.Get(actor, part);
+                    var conditionBefore = limb == null ? LimbCondition.Intact : LimbSystem.ConditionOf(limb);
                     bool severed = LimbSystem.Damage(actor, part, AccessorySystem.GutterLimbDamage);
+                    bool milestone = severed
+                        || (limb != null && LimbSystem.ConditionOf(limb) != conditionBefore);
                     Log(actor.Name + " 的穿肠弹反噬" + LimbSystem.PartName(part) + " -" + AccessorySystem.GutterLimbDamage
-                        + (severed ? "，部位断裂！" : "。"), "limb", actor.Id, actor.Id);
+                        + (severed ? "，部位断裂！" : milestone ? "，陷入受伤。" : "。"), "limb", actor.Id, actor.Id,
+                        milestone ? AccessorySystem.GutterLimbDamage : 0,
+                        severed ? 1 : 0, LimbSystem.PartName(part), milestone);
                 }
                 actor.BleedDamage += AccessorySystem.GutterBleed;
                 actor.BleedTurns = Math.Max(actor.BleedTurns, 2);
                 Log(actor.Name + " 因穿肠弹流血 " + actor.BleedDamage + " × " + actor.BleedTurns + " 次行动。",
-                    "bleed", actor.Id, actor.Id, AccessorySystem.GutterBleed);
+                    "bleed", actor.Id, actor.Id, AccessorySystem.GutterBleed, 0,
+                    "流血 " + actor.BleedDamage + "×" + actor.BleedTurns);
             }
             if (AccessorySystem.Has(actor, AccessoryKind.Addiction) && actor.AccessoryBattle.AddictionActive)
             {
@@ -559,7 +577,8 @@ namespace Ruin.Core
             {
                 target.BleedDamage = skill.Bleed;
                 target.BleedTurns = Math.Max(1, skill.BleedTurns);
-                Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed", actor.Id, target.Id);
+                Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed",
+                    actor.Id, target.Id, 0, 0, "流血 " + target.BleedDamage + "×" + target.BleedTurns);
             }
             // Only the main target is interrupted: the piercing round's rear targets just take damage.
             if (isMain && skill.Interrupt && !target.Player)
@@ -595,7 +614,8 @@ namespace Ruin.Core
                 {
                     target.BleedDamage = skill.Bleed;
                     target.BleedTurns = Math.Max(1, skill.BleedTurns);
-                    Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed", actor.Id, target.Id);
+                    Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed",
+                        actor.Id, target.Id, 0, 0, "流血 " + target.BleedDamage + "×" + target.BleedTurns);
                 }
                 return;
             }
@@ -621,12 +641,42 @@ namespace Ruin.Core
         {
             if (target == null || target.Dead) return;
             bool touched = false;
-            if ((grant & AllyBuff.Block) != 0) { target.BlockCharges++; touched = true; }
-            if ((grant & AllyBuff.Counter) != 0) { target.Counter = true; touched = true; }
-            if ((grant & AllyBuff.Followup) != 0) { target.Followup = true; target.FollowupAttack = actor.Definition.Attack; touched = true; }
-            if ((grant & AllyBuff.DefenseUp) != 0) { target.DefenseBuff = Math.Max(target.DefenseBuff, skill.GrantDefense); touched = true; }
-            if ((grant & AllyBuff.AccuracyUp) != 0) { target.AccuracyBuff = Math.Max(target.AccuracyBuff, skill.GrantAccuracy); touched = true; }
-            if (touched) Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 获得增益。", "guard", actor.Id, target.Id);
+            var labels = new List<string>(5);
+            if ((grant & AllyBuff.Block) != 0)
+            {
+                target.BlockCharges++;
+                labels.Add("格挡×1");
+                touched = true;
+            }
+            if ((grant & AllyBuff.Counter) != 0)
+            {
+                target.Counter = true;
+                labels.Add("反击");
+                touched = true;
+            }
+            if ((grant & AllyBuff.Followup) != 0)
+            {
+                target.Followup = true;
+                target.FollowupAttack = actor.Definition.Attack;
+                labels.Add("追击");
+                touched = true;
+            }
+            if ((grant & AllyBuff.DefenseUp) != 0)
+            {
+                target.DefenseBuff = Math.Max(target.DefenseBuff, skill.GrantDefense);
+                labels.Add("防御力+" + (skill.GrantDefense * 100).ToString("0.#") + "%");
+                touched = true;
+            }
+            if ((grant & AllyBuff.AccuracyUp) != 0)
+            {
+                target.AccuracyBuff = Math.Max(target.AccuracyBuff, skill.GrantAccuracy);
+                labels.Add("命中+" + (skill.GrantAccuracy * 100).ToString("0.#") + "%");
+                touched = true;
+            }
+            if (!touched) return;
+            string detail = string.Join("、", labels);
+            Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 获得 " + detail + "。",
+                "buff", actor.Id, target.Id, 0, 0, detail);
         }
 
         private void ApplyRider(ActorState actor, ActorState primary, SkillSpec skill, int damageDealt)
@@ -1005,7 +1055,7 @@ namespace Ruin.Core
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Whisperer)
                 { ChangeSanity(target, -14, "受到低语侵蚀"); }
                 if (!target.Dead && enemy.Definition.Pattern == EnemyPattern.Hunter)
-                { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id); }
+                { target.BleedDamage = 2; target.BleedTurns = 2; Log(target.Name + " 开始流血，2×2次行动。", "bleed", enemy.Id, target.Id, 0, 0, "流血 2×2"); }
                 if (!target.Dead) WearLimb(target, dealt, enemy.Id);
                 TryCounter(target, enemy);
             }
@@ -1547,9 +1597,14 @@ namespace Ruin.Core
             if (limb == null || limb.Hp <= 0) return;
             int loss = Math.Max(1,
                 (int)Math.Ceiling(dealt * LimbSystem.EffectiveDamageRatio(Rules.Limbs) - 1e-9));
+            var conditionBefore = LimbSystem.ConditionOf(limb);
             bool severed = LimbSystem.Damage(target, part, loss);
-            Log(target.Name + " 的" + LimbSystem.PartName(part) + "受到 " + loss + " 点部位伤害，"
-                + (severed ? "已经断肢！" : "陷入重伤。"), "limb", sourceId, target.Id, loss);
+            // The cut-in only announces the two thresholds the player can see on the limb track: a part
+            // turning injured at half health, and a part reaching zero. Every other hit stays in the log.
+            bool milestone = severed || LimbSystem.ConditionOf(limb) != conditionBefore;
+            Log(target.Name + " 的" + LimbSystem.PartName(part) + "受到 " + loss + " 点部位伤害"
+                + (severed ? "，已经断肢！" : milestone ? "，陷入受伤。" : "。"), "limb", sourceId, target.Id,
+                loss, severed ? 1 : 0, LimbSystem.PartName(part), milestone);
         }
 
         public void ChangeSanity(ActorState actor, double amount, string reason)
@@ -1559,12 +1614,13 @@ namespace Ruin.Core
             // the golden apple's direct-death roll out of a locked hero.
             if (actor.SanityLocked)
             {
-                Log(actor.Name + " 的理智已被锁定，无法变化。", "sanity", actor.Id);
+                Log(actor.Name + " 的理智已被锁定，无法变化。", "sanity", actor.Id, actor.Id, 0, 0, "locked");
                 return;
             }
             double before = actor.Sanity;
             actor.Sanity = SanityProbability.Clamp(before + amount, 0, 100);
-            Log(actor.Name + " " + reason + "：理智 " + before.ToString("0.#") + " → " + actor.Sanity.ToString("0.#") + "。", "sanity", actor.Id);
+            Log(actor.Name + " " + reason + "：理智 " + before.ToString("0.#") + " → " + actor.Sanity.ToString("0.#") + "。",
+                "sanity", actor.Id, actor.Id, 0, actor.Sanity - before);
             // 金丝苹果: crossing to zero triggers one direct-death check, not one per further drain at zero.
             if (before > 0 && actor.Sanity <= 0 && actor.Player && !actor.Dead
                 && AccessorySystem.Has(actor, AccessoryKind.GoldenApple))
@@ -1611,9 +1667,14 @@ namespace Ruin.Core
                 {
                     var part = AccessorySystem.RandomPart(Run.Random, actor);
                     int hit = LimbSystem.HitAmount(actor, part, Rules.Limbs);
+                    var limb = LimbSystem.Get(actor, part);
+                    var conditionBefore = limb == null ? LimbCondition.Intact : LimbSystem.ConditionOf(limb);
                     bool severed = LimbSystem.Damage(actor, part, hit);
-                    Log(actor.Name + " 的" + LimbSystem.PartName(part) + "受到 " + hit + " 点部位伤害，"
-                        + (severed ? "已经断肢！" : "陷入重伤。"), "limb", null, actor.Id, hit);
+                    bool milestone = severed
+                        || (limb != null && LimbSystem.ConditionOf(limb) != conditionBefore);
+                    Log(actor.Name + " 的" + LimbSystem.PartName(part) + "受到 " + hit + " 点部位伤害"
+                        + (severed ? "，已经断肢！" : milestone ? "，陷入受伤。" : "。"), "limb", null, actor.Id,
+                        hit, severed ? 1 : 0, LimbSystem.PartName(part), milestone);
                 }
                 ChangeSanity(actor, -AccessorySystem.SleepSanityDrain, "假寐药剂的代价");
                 // The potion already spent a limb on its own; returning zero keeps the attack site from
@@ -1764,7 +1825,20 @@ namespace Ruin.Core
             return result;
         }
 
-        private void Log(string message, string kind, string actorId = null, string targetId = null, int amount = 0)
-        { Events.Add(new BattleEvent { Message = message, Kind = kind, ActorId = actorId, TargetId = targetId, Amount = amount }); }
+        private void Log(string message, string kind, string actorId = null, string targetId = null,
+            int amount = 0, double value = 0, string detail = null, bool milestone = false)
+        {
+            Events.Add(new BattleEvent
+            {
+                Message = message,
+                Kind = kind,
+                ActorId = actorId,
+                TargetId = targetId,
+                Amount = amount,
+                Value = value,
+                Detail = detail,
+                Milestone = milestone
+            });
+        }
     }
 }

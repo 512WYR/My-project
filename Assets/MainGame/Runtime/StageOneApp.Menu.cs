@@ -44,6 +44,7 @@ namespace Ruin.Runtime
             if (Run == null) return;
 
             StopAllCoroutines();
+            HidePresentation();
             Busy = false;
             ClearPending();
             SupplyShopOpen = false; SupplyShopNote = null;

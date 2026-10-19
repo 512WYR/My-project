@@ -20,6 +20,9 @@ namespace Ruin.Runtime
         public string ActorId;
         public string TargetId;
         public int Amount;
+        public string Detail;
+        public double Value;
+        public bool Milestone;
     }
 
     public static class BattleLabLog
@@ -27,7 +30,7 @@ namespace Ruin.Runtime
         public static readonly string[] Kinds =
         {
             "system", "round", "action", "damage", "heal", "sanity", "control",
-            "limb", "death", "deathdoor", "bleed", "form", "move", "guard", "miss", "dodge",
+            "limb", "death", "deathdoor", "bleed", "form", "move", "guard", "buff", "miss", "dodge",
             "settlement", "debug"
         };
 
@@ -43,7 +46,10 @@ namespace Ruin.Runtime
                 Message = e.Message ?? "",
                 ActorId = e.ActorId,
                 TargetId = e.TargetId,
-                Amount = e.Amount
+                Amount = e.Amount,
+                Detail = e.Detail,
+                Value = e.Value,
+                Milestone = e.Milestone
             };
         }
 
@@ -66,8 +72,9 @@ namespace Ruin.Runtime
             string ids = "";
             if (!string.IsNullOrEmpty(e.ActorId)) ids += " [" + e.ActorId + "]";
             if (!string.IsNullOrEmpty(e.TargetId)) ids += " → " + e.TargetId;
+            string detail = string.IsNullOrEmpty(e.Detail) ? "" : "  [" + e.Detail + "]";
             return "#" + e.Index.ToString("0000") + "  第" + e.Battle + "场 R" + e.Round
-                + "  " + (string.IsNullOrEmpty(e.Kind) ? "log" : e.Kind) + ids + "  " + e.Message;
+                + "  " + (string.IsNullOrEmpty(e.Kind) ? "log" : e.Kind) + ids + "  " + e.Message + detail;
         }
 
         public static string ToText(IEnumerable<BattleLabLogEntry> entries)

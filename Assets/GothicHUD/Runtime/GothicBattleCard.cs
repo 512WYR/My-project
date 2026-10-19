@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using Ruin.Core;
 using Ruin.Runtime;
 using UnityEngine;
@@ -43,6 +44,16 @@ namespace GameMake.GothicHUD
 
         // Filled by the controller so a click can be routed back without the card knowing about the battle.
         [HideInInspector] public string ActorId;
+
+        // The feet strip is created lazily under the art, never as a direct child of the card: the span
+        // code caches direct-child positions and would treat it as a badge. It shows the concrete buff
+        // and injury names, while the authored Status slot keeps the older limb/form summary.
+        private RectTransform buffStrip;
+        private Text buffStripText;
+        private BattleStatusHover buffHover;
+        private readonly List<BattleStatusEntry> statusEntries = new List<BattleStatusEntry>();
+        private readonly StringBuilder statusBuilder = new StringBuilder();
+        private string buffStripCached;
 
         public void Render(ActorState actor, bool active, bool possible, bool inspected, string intent, bool heartTarget = false)
         {
@@ -121,6 +132,84 @@ namespace GameMake.GothicHUD
             if (ActiveBadge) ActiveBadge.SetActive(active);
             if (TargetBadge) TargetBadge.SetActive(possible);
             if (DeadCross) DeadCross.SetActive(actor.Dead);
+
+            RenderBuffStrip(actor);
+        }
+
+        private void RenderBuffStrip(ActorState actor)
+        {
+            if (actor == null || actor.Dead)
+            {
+                HideBuffStrip();
+                return;
+            }
+
+            EnsureBuffStrip();
+            if (!buffStrip) return;
+
+            BattleStatus.Build(actor, statusEntries);
+            if (statusEntries.Count == 0)
+            {
+                HideBuffStrip();
+                return;
+            }
+
+            statusBuilder.Length = 0;
+            BattleStatus.AppendCompact(statusEntries, statusBuilder, 4);
+            string text = statusBuilder.ToString();
+            // Render is called on every HUD refresh; only touch the Text when the summary really changed.
+            if (text != buffStripCached)
+            {
+                buffStripCached = text;
+                buffStripText.text = text;
+            }
+            if (buffHover) buffHover.Bind(actor);
+            buffStrip.gameObject.SetActive(true);
+        }
+
+        private void HideBuffStrip()
+        {
+            if (buffStrip) buffStrip.gameObject.SetActive(false);
+            if (buffHover) buffHover.Bind(null);
+            buffStripCached = null;
+        }
+
+        private void EnsureBuffStrip()
+        {
+            if (buffStrip || !Art) return;
+
+            var go = new GameObject("Status - 状态", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            buffStrip = go.GetComponent<RectTransform>();
+            buffStrip.SetParent(Art.transform, false);
+            buffStrip.anchorMin = buffStrip.anchorMax = new Vector2(0.5f, 0f);
+            buffStrip.pivot = new Vector2(0.5f, 0f);
+            buffStrip.anchoredPosition = new Vector2(0f, 2f);
+            buffStrip.sizeDelta = new Vector2(144f, 32f);
+
+            var plate = go.GetComponent<Image>();
+            plate.color = new Color32(5, 7, 8, 190);
+            plate.raycastTarget = true;
+
+            var textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            var textRect = textGo.GetComponent<RectTransform>();
+            textRect.SetParent(buffStrip, false);
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(3f, 2f);
+            textRect.offsetMax = new Vector2(-3f, -2f);
+
+            buffStripText = textGo.GetComponent<Text>();
+            buffStripText.font = Name ? Name.font : Status ? Status.font : null;
+            buffStripText.fontSize = 11;
+            buffStripText.color = new Color32(230, 224, 212, 255);
+            buffStripText.alignment = TextAnchor.MiddleCenter;
+            buffStripText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            buffStripText.verticalOverflow = VerticalWrapMode.Truncate;
+            buffStripText.raycastTarget = false;
+
+            buffHover = go.AddComponent<BattleStatusHover>();
+            buffHover.ForwardClick = Hit;
+            buffStrip.gameObject.SetActive(false);
         }
 
         // ---- multi-rank span ----
