@@ -9,6 +9,10 @@ namespace Ruin.Runtime
     {
         public ActorState Actor;
         public string ActionMessage;
+        // The skill the action event names, when it can be matched to one of the actor's skills. The
+        // cut-in uses it to pick the skill's own portrait; null means "no skill art" (a plain attack,
+        // a counter or a follow-up), which falls back to the attack frame or the base portrait.
+        public string SkillId;
         public bool Critical;
         public readonly List<BattleShowResult> Results = new List<BattleShowResult>();
     }
@@ -71,6 +75,7 @@ namespace Ruin.Runtime
                         {
                             current.Actor = actor;
                             current.ActionMessage = e.Message;
+                            current.SkillId = SkillIdFor(actor, e.Message);
                             current.Critical |= HasCritical(e.Message);
                         }
                         else
@@ -80,6 +85,7 @@ namespace Ruin.Runtime
                             {
                                 Actor = actor,
                                 ActionMessage = e.Message,
+                                SkillId = SkillIdFor(actor, e.Message),
                                 Critical = HasCritical(e.Message)
                             };
                         }
@@ -360,6 +366,38 @@ namespace Ruin.Runtime
         private static bool HasCritical(string message)
         {
             return Contains(message, "暴击");
+        }
+
+        // Action events read "<actor> · <skill name>" with optional critical / target suffixes. The
+        // engine does not carry the skill Id on the event, so the name is matched against the actor's
+        // own skill lists — those are the only skills it can be casting, and matching per actor avoids
+        // the duplicate display names two different skills may share.
+        private static string SkillIdFor(ActorState actor, string message)
+        {
+            if (actor == null || actor.Definition == null || string.IsNullOrEmpty(message)) return null;
+            int mark = message.IndexOf(" · ", StringComparison.Ordinal);
+            if (mark < 0) return null;
+            string name = message.Substring(mark + 3);
+            int crit = name.IndexOf(" 暴击", StringComparison.Ordinal);
+            if (crit >= 0) name = name.Substring(0, crit);
+            int arrow = name.IndexOf(" → ", StringComparison.Ordinal);
+            if (arrow >= 0) name = name.Substring(0, arrow);
+            name = name.Trim();
+            if (name.Length == 0) return null;
+
+            var spec = actor.Definition;
+            return MatchSkill(spec.BasicSkills, name)
+                ?? MatchSkill(spec.PrimalSkills, name)
+                ?? MatchSkill(spec.TechnicalSkills, name);
+        }
+
+        private static string MatchSkill(SkillSpec[] skills, string name)
+        {
+            if (skills == null) return null;
+            for (int i = 0; i < skills.Length; i++)
+                if (skills[i] != null && string.Equals(skills[i].Name, name, StringComparison.Ordinal))
+                    return skills[i].Id;
+            return null;
         }
 
         private static bool Contains(string message, string value)

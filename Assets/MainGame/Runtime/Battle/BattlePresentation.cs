@@ -273,7 +273,12 @@ namespace Ruin.Runtime
             actorBase = new Vector2(ActorX, SlotY);
             actorSlot.anchoredPosition = actorBase;
             actorSlot.localScale = Vector3.one;
-            ApplyArt(actorArt, group.Actor, false);
+            // Skill frames take priority. A monster action with no skill art ("X 发动攻击。") uses its
+            // attack frame; anything without either keeps the base portrait.
+            Texture2D actorShow = ActorArt.SkillPortrait(group.SkillId);
+            if (actorShow == null && !group.Actor.Player)
+                actorShow = ActorArt.AttackPortrait(group.Actor.Definition);
+            ApplyArt(actorArt, group.Actor, false, actorShow);
             actorResult.text = "";
             actorResult.gameObject.SetActive(false);
             actorStatusContent = null;
@@ -333,7 +338,12 @@ namespace Ruin.Runtime
                 targetSlots[i].localScale = Vector3.one;
                 targetBasePositions[i] = targetSlots[i].anchoredPosition;
 
-                ApplyArt(targetArts[i], r.Target, r.Died);
+                // Whoever actually took damage shows their hurt frame; guarded, healed or buffed
+                // targets keep the base portrait.
+                Texture2D targetShow = r.Damage > 0 || r.Died
+                    ? ActorArt.HurtPortrait(r.Target.Definition)
+                    : null;
+                ApplyArt(targetArts[i], r.Target, r.Died, targetShow);
                 targetBaseColors[i] = targetArts[i].color;
                 targetFlashColors[i] = FlashFor(r);
 
@@ -407,7 +417,7 @@ namespace Ruin.Runtime
             }, token);
         }
 
-        private static void ApplyArt(SilhouetteGraphic art, ActorState actor, bool dead)
+        private static void ApplyArt(SilhouetteGraphic art, ActorState actor, bool dead, Texture2D show = null)
         {
             if (!art || actor == null || actor.Definition == null) return;
             var spec = actor.Definition;
@@ -415,7 +425,7 @@ namespace Ruin.Runtime
             art.Enemy = spec.Pattern;
             art.IsEnemy = !actor.Player;
             art.Accent = actor.Player ? MenuUi.Gold : new Color32(0xB4, 0x6B, 0x5B, 0xFF);
-            var portrait = ActorArt.Portrait(spec);
+            var portrait = show != null ? show : ActorArt.Portrait(spec);
             art.SetPortrait(portrait);
             // The cut-in background is nearly black, so the vector silhouettes use a lighter body than
             // they do on the battle card; a portrait keeps its own colours and only greys out on death.

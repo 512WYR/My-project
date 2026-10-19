@@ -50,6 +50,39 @@ namespace Ruin.Runtime
             return sprite;
         }
 
+        // ---- show portraits ----
+        // The cut-in swaps the base portrait for the pose that matches the beat: a skill's own art, a
+        // monster's attack swing, or a hurt frame on whoever just took the hit. All of them live under
+        // Resources/StageOne/Show/<Kind>/<key>. Missing files fall back to the base portrait, so a
+        // character only needs the frames that were drawn for it.
+        private static readonly string SkillRoot = "StageOne/Show/Skill/";
+        private static readonly string AttackRoot = "StageOne/Show/Attack/";
+        private static readonly string HurtRoot = "StageOne/Show/Hurt/";
+        private static readonly Dictionary<string, Texture2D> showCache = new Dictionary<string, Texture2D>();
+
+        public static Texture2D SkillPortrait(string skillId)
+        {
+            return string.IsNullOrEmpty(skillId) ? null : Show(SkillRoot + skillId);
+        }
+
+        public static Texture2D AttackPortrait(ActorSpec spec)
+        {
+            return spec == null || string.IsNullOrEmpty(spec.Id) ? null : Show(AttackRoot + spec.Id);
+        }
+
+        public static Texture2D HurtPortrait(ActorSpec spec)
+        {
+            return spec == null || string.IsNullOrEmpty(spec.Id) ? null : Show(HurtRoot + spec.Id);
+        }
+
+        private static Texture2D Show(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            if (showCache.TryGetValue(path, out var cached)) return cached;
+            showCache[path] = Load(path);
+            return showCache[path];
+        }
+
         private static Texture2D Load(string path)
         {
             var texture = Resources.Load<Texture2D>(path);
