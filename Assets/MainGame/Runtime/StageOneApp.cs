@@ -74,6 +74,9 @@ namespace Ruin.Runtime
         private void Start()
         {
             Application.targetFrameRate = 60;
+            // Created here rather than authored into the scene: the game state is the only component that
+            // owns the formal entry, and preview scenes without it should not inherit the backdrop.
+            GameBackground.Ensure();
             Catalog = Catalog ? Catalog : Resources.Load<GameCatalog>("StageOne/GameCatalog");
             if (!Catalog) { Debug.LogError("StageOne catalog missing. Run GameMake/Prepare Stage One from the editor."); return; }
             NewRun();

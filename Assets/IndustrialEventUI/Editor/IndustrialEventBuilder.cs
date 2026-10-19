@@ -55,7 +55,8 @@ namespace GameMake.EventEditor
                 var view=root.GetComponent<IndustrialEventPage>();
                 var page=Group(root.transform,"Event Page",0,0,1920,1080); view.Page=page.gameObject;
                 page.anchorMin=page.anchorMax=page.pivot=new Vector2(.5f,.5f); page.anchoredPosition=Vector2.zero;
-                var background=Solid(page,"Page Background",0,0,1920,1080,new Color32(10,12,12,255)); background.raycastTarget=true;
+                // Transparent plate: the game-wide backdrop sits underneath and supplies the mood.
+                var background=Solid(page,"Page Background",0,0,1920,1080,new Color32(10,12,12,0)); background.raycastTarget=true;
                 Art(page,"Event Outer Frame",frame,20,20,1880,1040,2.5f);
                 view.Header=Label(page,"Header","事件终端",66,38,700,36,25,Cream);
                 Label(page,"Terminal Index","MORROW  /  FIELD TERMINAL",1380,42,460,27,17,Muted,TextAnchor.MiddleRight);

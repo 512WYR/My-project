@@ -80,7 +80,9 @@ namespace GameMake.ExplorationEditor
             var root=(RectTransform)go.transform; root.localScale=Vector3.one;
             var view=go.GetComponent<ExplorationMapController>();
             var page=Group(root,"Exploration Page",0,0,1920,1080); Stretch(page,Vector2.zero,Vector2.zero); view.Page=page.gameObject;
-            var background=Solid(page,"Background",0,0,1920,1080,new Color32(10,12,12,255));
+            // Transparent plate: it still blocks clicks behind the page, but the game-wide backdrop
+            // (Ruin.Runtime.GameBackground) shows through. The backdrop canvas carries its own scrim.
+            var background=Solid(page,"Background",0,0,1920,1080,new Color32(10,12,12,0));
             Stretch(background.rectTransform,Vector2.zero,Vector2.zero); background.raycastTarget=true;
             Text(page,"Terminal Title","探索终端",24,16,300,32,24,Cream);
             Text(page,"Terminal Index","EXPLORATION  /  01",24,149,380,22,16,Muted);
