@@ -38,7 +38,8 @@ namespace Ruin.Core
                 {
                     Id = "enemy_" + i, Definition = spec, Player = false,
                     Rank = spec.StartRank >= 0 ? spec.StartRank : i,
-                    Hp = spec.MaxHp, Sanity = 50
+                    // Enemies have no sanity; the field exists because ActorState is shared with heroes.
+                    Hp = spec.MaxHp, Sanity = 0
                 });
             }
             Run.Battles++;
@@ -1380,7 +1381,7 @@ namespace Ruin.Core
             var actor = new ActorState
             {
                 Id = "enemy_copy_" + (++copySerial), Definition = spec, Player = false, Rank = rank,
-                Hp = spec.MaxHp, Sanity = 50, IsCopy = true, SummonedBy = boss.Id
+                Hp = spec.MaxHp, Sanity = 0, IsCopy = true, SummonedBy = boss.Id
             };
             Enemies.Add(actor);
             Log(boss.Name + " 复制了" + source.Name + "，召唤复制体（位置 " + (rank + 1) + "，生命 " + spec.MaxHp + "）。", "summon", boss.Id, actor.Id);
@@ -1403,7 +1404,7 @@ namespace Ruin.Core
             var actor = new ActorState
             {
                 Id = "enemy_operator_" + (++operatorSerial), Definition = spec, Player = false,
-                Rank = rank, Hp = spec.MaxHp, Sanity = 50
+                Rank = rank, Hp = spec.MaxHp, Sanity = 0
             };
             Enemies.Add(actor);
             // The old corpse must not keep qualifying for a respawn on every later round.

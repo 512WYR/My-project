@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: steam_machine
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: steam_machine
   DisplayName: "\u84B8\u6C7D\u673A\u5668"
   Subtitle: "\u5360\u636E2\uFF5E3\u53F7\u4F4D\uFF0C\u7D2F\u8BA1\u64CD\u4F5C2\u6B21\u540E\u7206\u53D1"
   Silhouette: enemy
   MaxHp: 100
   Speed: 2
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 12
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 0
   Behavior: 9
   EnemySkills:
   - Id: e_steam_blast

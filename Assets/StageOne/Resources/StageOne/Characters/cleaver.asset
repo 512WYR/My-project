@@ -12,20 +12,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: cleaver
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: cleaver
   DisplayName: "\u6267\u65A7\u8005"
   Subtitle: "\u91CD\u5288\u524D\u6392\u7684\u5E9F\u589F\u5B88\u536B"
-  Role: 4
+  Silhouette: 
   MaxHp: 32
   Speed: 3
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 10
   Accuracy: 0.86
   CritChance: 0.1
   Dodge: 0
   Defense: 0
-  Primary: {fileID: 0}
-  Support: {fileID: 0}
-  Technical: {fileID: 0}
-  Primal: {fileID: 0}
+  SanityOffset: 0
+  BasicSkills: []
+  PrimalSkills: []
+  TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 0
+  Behavior: 0
+  EnemySkills: []
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

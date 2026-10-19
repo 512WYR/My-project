@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: healer
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: healer
   DisplayName: "\u56DE\u8840\u602A"
   Subtitle: "\u7CBE\u82F1\u6218\u4E13\u5C5E\u652F\u63F4\u5355\u4F4D\uFF0C\u6CA1\u6709\u653B\u51FB\u80FD\u529B"
   Silhouette: enemy
   MaxHp: 30
   Speed: 6
-  SanityOffset: 0
-  EnemyPattern: 1
   Attack: 10
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 1
   Behavior: 5
   EnemySkills:
   - Id: e_healer_heal

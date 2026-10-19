@@ -12,19 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: gunner
   m_EditorClassIdentifier: 
+  Kind: 1
   Id: gunner
   DisplayName: "\u67AA\u624B"
   Subtitle: "\u8DDD\u79BB\u3001\u51C6\u661F\u4E0E\u4E00\u6B21\u547C\u5438"
   Silhouette: gunner
   MaxHp: 30
   Speed: 7
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 10
   Accuracy: 0.9
   CritChance: 0.1
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills:
   - {fileID: 11400000, guid: 27acd50bfd83e704a91197f8d68c42b3, type: 2}
   - {fileID: 11400000, guid: 1c58d92ab197269469fbd36efdd437db, type: 2}
@@ -33,3 +33,13 @@ MonoBehaviour:
   PrimalSkills:
   - {fileID: 11400000, guid: 2f00d51530c90574eb73a56e5c7c369c, type: 2}
   TechnicalSpecial: {fileID: 11400000, guid: 588e92c15d4556b48b2f5e124a6a918f, type: 2}
+  EnemyPattern: 0
+  Behavior: 0
+  EnemySkills: []
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

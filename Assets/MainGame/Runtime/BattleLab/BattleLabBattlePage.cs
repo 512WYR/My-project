@@ -267,11 +267,13 @@ namespace Ruin.Runtime
                 GUILayout.BeginHorizontal(GUI.skin.box);
                 if (BattleLabUi.Button("查看", true, GUILayout.Width(48))) Ui.SelectedActorId = actor.Id;
                 GUILayout.Label(actor.Name, BattleLabUi.Body, GUILayout.Width(140));
+                // Sanity and form are hero-only; enemies are always constructed with Sanity = 0 and never
+                // change form, so showing them here only invites confusion.
                 GUILayout.Label("R" + (actor.Rank + 1) + (actor.Width > 1 ? "-" + (actor.Rank + actor.Width) : "")
                     + " · HP " + actor.Hp + "/" + actor.Definition.MaxHp
                     + (actor.Dead ? " · 死亡" : actor.DeathDoor ? " · 死门" : "")
-                    + " · 理智 " + actor.Sanity.ToString("0.#")
-                    + " · 形态 " + actor.Form, BattleLabUi.Body);
+                    + (actor.Player ? " · 理智 " + actor.Sanity.ToString("0.#") + " · 形态 " + actor.Form : ""),
+                    BattleLabUi.Body);
                 if (actor.BleedTurns > 0) GUILayout.Label("流血 " + actor.BleedDamage + "×" + actor.BleedTurns, BattleLabUi.Hint);
                 if (actor.Interrupted > 0) GUILayout.Label("打断 " + actor.Interrupted, BattleLabUi.Hint);
                 if (actor.Imbalance > 0) GUILayout.Label("失衡 " + actor.Imbalance, BattleLabUi.Hint);
@@ -317,9 +319,9 @@ namespace Ruin.Runtime
 
             // ---- 生命与理智 ----
             bool vitals = Ui.GroupOpen("edit-vitals", true);
-            bool vitalsNext = BattleLabUi.Foldout(vitals, "生命与理智",
-                "HP " + actor.Hp + "/" + definition.MaxHp + " · 理智 " + actor.Sanity.ToString("0.#")
-                + " · 形态 " + actor.Form);
+            bool vitalsNext = BattleLabUi.Foldout(vitals, actor.Player ? "生命与理智" : "生命",
+                "HP " + actor.Hp + "/" + definition.MaxHp
+                + (actor.Player ? " · 理智 " + actor.Sanity.ToString("0.#") + " · 形态 " + actor.Form : ""));
             Ui.SetGroupOpen("edit-vitals", vitalsNext);
             if (vitalsNext)
             {
@@ -332,17 +334,23 @@ namespace Ruin.Runtime
                 GUILayout.Label("MaxHp", GUILayout.Width(46));
                 int maxHp = BattleLabUi.IntField("edit-maxhp", definition.MaxHp, GUILayout.Width(62));
                 if (maxHp != definition.MaxHp) { Session.SetMaxHp(actor, maxHp, out string note); Note(note); }
-                GUILayout.Label("理智", GUILayout.Width(32));
-                double sanity = BattleLabUi.DoubleField("edit-sanity", actor.Sanity, GUILayout.Width(62));
-                if (Math.Abs(sanity - actor.Sanity) > 0.0001) { Session.SetSanity(actor, sanity, out string note); Note(note); }
-                if (BattleLabUi.MiniButton("理智 -5")) { Session.ChangeSanity(actor, -5, out string note); Note(note); }
-                if (BattleLabUi.MiniButton("理智 +5")) { Session.ChangeSanity(actor, 5, out string note); Note(note); }
+                if (actor.Player)
+                {
+                    GUILayout.Label("理智", GUILayout.Width(32));
+                    double sanity = BattleLabUi.DoubleField("edit-sanity", actor.Sanity, GUILayout.Width(62));
+                    if (Math.Abs(sanity - actor.Sanity) > 0.0001) { Session.SetSanity(actor, sanity, out string note); Note(note); }
+                    if (BattleLabUi.MiniButton("理智 -5")) { Session.ChangeSanity(actor, -5, out string note); Note(note); }
+                    if (BattleLabUi.MiniButton("理智 +5")) { Session.ChangeSanity(actor, 5, out string note); Note(note); }
+                }
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();
-                GUILayout.Label("形态", GUILayout.Width(32));
-                int form = BattleLabUi.ValueGrid((int)actor.Form, FormValues, FormLabels, 3);
-                if (form != (int)actor.Form) { Session.SetForm(actor, (SkillForm)form, out string note); Note(note); }
+                if (actor.Player)
+                {
+                    GUILayout.Label("形态", GUILayout.Width(32));
+                    int form = BattleLabUi.ValueGrid((int)actor.Form, FormValues, FormLabels, 3);
+                    if (form != (int)actor.Form) { Session.SetForm(actor, (SkillForm)form, out string note); Note(note); }
+                }
                 GUILayout.Label("站位", GUILayout.Width(32));
                 int rank = BattleLabUi.IntField("edit-rank", actor.Rank + 1, GUILayout.Width(42));
                 if (rank - 1 != actor.Rank) { Session.SetRank(actor, rank - 1, out string note); Note(note); }
@@ -450,13 +458,17 @@ namespace Ruin.Runtime
                 if (Math.Abs(vulnerable - actor.SelfVulnerable) > 0.0001) { actor.SelfVulnerable = vulnerable; Session.Touch(actor.Name + " 易伤 → " + vulnerable.ToString("0.###")); }
                 GUILayout.EndHorizontal();
 
-                GUILayout.BeginHorizontal();
-                BattleLabUi.Toggle("理智锁定", ref actor.SanityLocked);
-                if (GUILayout.Button("刷新锁定", GUILayout.Width(70))) Session.Touch(actor.Name + " 理智锁定 → " + actor.SanityLocked);
-                BattleLabUi.Toggle("只走理智技能", ref actor.SanitySkillsOnly);
-                if (GUILayout.Button("应用理智技能标记", GUILayout.Width(110))) Session.Touch(actor.Name + " 只走理智技能 → " + actor.SanitySkillsOnly);
-                BattleLabUi.Toggle("理智锁定待生效", ref actor.SanityLockPending);
-                GUILayout.EndHorizontal();
+                // Sanity locks only affect hero form selection; an enemy has neither.
+                if (actor.Player)
+                {
+                    GUILayout.BeginHorizontal();
+                    BattleLabUi.Toggle("理智锁定", ref actor.SanityLocked);
+                    if (GUILayout.Button("刷新锁定", GUILayout.Width(70))) Session.Touch(actor.Name + " 理智锁定 → " + actor.SanityLocked);
+                    BattleLabUi.Toggle("只走理智技能", ref actor.SanitySkillsOnly);
+                    if (GUILayout.Button("应用理智技能标记", GUILayout.Width(110))) Session.Touch(actor.Name + " 只走理智技能 → " + actor.SanitySkillsOnly);
+                    BattleLabUi.Toggle("理智锁定待生效", ref actor.SanityLockPending);
+                    GUILayout.EndHorizontal();
+                }
                 BattleLabUi.EndIndent();
             }
 

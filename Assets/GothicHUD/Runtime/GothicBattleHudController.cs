@@ -285,28 +285,83 @@ namespace GameMake.GothicHUD
                 // Keep the card body so the damage flash has something to tint; this page owns that map now.
                 if (hero != null && card.Background) cardImages[hero.Id] = card.Background;
             }
-            // One card per living enemy. Matching by rank keeps the formation readable; anything that
-            // has no free rank slot (a rank collision left by debug tools, or a rank outside 1-4) is
-            // placed in the first empty card instead of silently disappearing. Corpses own no slot.
+            if (Enemies == null || Enemies.Length == 0) return;
+            // A living enemy owns as many consecutive cards as its Width. The owner's card is stretched
+            // over them and the covered cards are switched off, so a two- or three-rank boss reads as one
+            // body on the stage. Matching by rank first keeps the formation readable; anything that does
+            // not fit (a collision left by debug tools, or a rank outside 1-4) takes the first consecutive
+            // run of free cards instead of disappearing. Corpses own no slot.
+            float step = EnemyCardStep();
             var living = battle.Enemies.Where(e => !e.Dead)
                 .OrderBy(e => e.Rank).ThenBy(e => e.Id, StringComparer.Ordinal).ToArray();
-            var slots = new ActorState[Enemies.Length];
+            var owners = new ActorState[Enemies.Length];
+            var claimed = new bool[Enemies.Length];
             foreach (var enemy in living)
             {
-                int slot = enemy.Rank >= 0 && enemy.Rank < slots.Length ? enemy.Rank : -1;
-                if (slot < 0 || slots[slot] != null)
-                    slot = Array.FindIndex(slots, s => s == null);
-                if (slot >= 0) slots[slot] = enemy;
+                int width = Mathf.Clamp(enemy.Width, 1, Enemies.Length);
+                int start = FindSpan(claimed, enemy.Rank, width);
+                // A wide monster can only fail to fit when every remaining run is split by narrower units.
+                // Falling back to one card is better than hiding the unit entirely.
+                if (start < 0 && width > 1) { width = 1; start = FindSpan(claimed, enemy.Rank, width); }
+                if (start < 0) continue;
+                owners[start] = enemy;
+                for (int i = 0; i < width; i++) claimed[start + i] = true;
             }
             for (int rank = 0; rank < Enemies.Length; rank++)
             {
                 var card = Enemies[rank];
                 if (!card) continue;
-                var enemy = slots[rank];
-                card.Render(enemy, enemy != null && battle.Current == enemy, enemy != null && possible.Contains(enemy.Id),
-                    enemy != null && app.InspectedId == enemy.Id, enemy == null ? null : battle.Intent(enemy));
-                if (enemy != null && card.Background) cardImages[enemy.Id] = card.Background;
+                card.ResetSpan();
+                var enemy = owners[rank];
+                if (enemy == null)
+                {
+                    // A card covered by a wider neighbour must be invisible; a genuinely empty rank just
+                    // renders blank. Render(null) covers both, but SetActive keeps the covered card from
+                    // ever flashing its old contents while the wide card is being rebuilt.
+                    if (claimed[rank]) card.gameObject.SetActive(false);
+                    else card.Render(null, false, false, false, null);
+                    continue;
+                }
+                card.Render(enemy, battle.Current == enemy, possible.Contains(enemy.Id),
+                    app.InspectedId == enemy.Id, battle.Intent(enemy));
+                card.SetSpan(Mathf.Clamp(enemy.Width, 1, Enemies.Length), step);
+                if (card.Background) cardImages[enemy.Id] = card.Background;
             }
+        }
+
+        // The authored layout places enemy cards one step apart. Reading that step from the cards keeps
+        // the span correct if the layout is re-tuned; 161 is ModularHudBuilder's current CardStep.
+        private float EnemyCardStep()
+        {
+            if (Enemies != null && Enemies.Length > 1 && Enemies[0] && Enemies[1])
+            {
+                var first = Enemies[0].transform as RectTransform;
+                var second = Enemies[1].transform as RectTransform;
+                if (first && second)
+                {
+                    float delta = Mathf.Abs(second.anchoredPosition.x - first.anchoredPosition.x);
+                    if (delta > 1f) return delta;
+                }
+            }
+            return 161f;
+        }
+
+        // Prefer the enemy's actual rank, then the first free consecutive run. A wide unit therefore keeps
+        // its authored position unless another unit already blocks part of its span.
+        private static int FindSpan(bool[] claimed, int preferred, int width)
+        {
+            if (preferred >= 0 && preferred + width <= claimed.Length && IsFree(claimed, preferred, width))
+                return preferred;
+            for (int start = 0; start + width <= claimed.Length; start++)
+                if (IsFree(claimed, start, width)) return start;
+            return -1;
+        }
+
+        private static bool IsFree(bool[] claimed, int start, int width)
+        {
+            for (int i = 0; i < width; i++)
+                if (claimed[start + i]) return false;
+            return true;
         }
 
         // StageOneApp asks the bound page to flash the cards between two events. The old code-generated

@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: copy_boss
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: copy_boss
   DisplayName: "\u9996\u9886\xB7\u590D\u5236\u8005"
   Subtitle: "\u590D\u5236\u6211\u65B9\u961F\u5458\uFF0C\u6B7B\u4EA1\u540E\u8865\u53EC"
   Silhouette: enemy
   MaxHp: 90
   Speed: 5
-  SanityOffset: 0
-  EnemyPattern: 1
   Attack: 10
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 1
   Behavior: 6
   EnemySkills:
   - Id: e_copy_boss_strike

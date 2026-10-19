@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: elite_sanity
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: elite_sanity
   DisplayName: "\u7CBE\u82F1\u7406\u667A\u602A"
   Subtitle: "\u7406\u667A\u4FB5\u8680\u4F1A\u6CE2\u53CA\u76F8\u90BB\u89D2\u8272"
   Silhouette: enemy
   MaxHp: 38
   Speed: 5
-  SanityOffset: 0
-  EnemyPattern: 1
   Attack: 5
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 1
   Behavior: 1
   EnemySkills:
   - Id: e_elite_sanity_drain

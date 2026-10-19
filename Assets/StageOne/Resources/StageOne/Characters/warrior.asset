@@ -12,19 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: warrior
   m_EditorClassIdentifier: 
+  Kind: 1
   Id: warrior
   DisplayName: "\u6218\u58EB"
   Subtitle: "\u4EE5\u4F24\u6362\u4F24\uFF0C\u5411\u524D\u6495\u5F00\u7F3A\u53E3"
   Silhouette: warrior
   MaxHp: 36
   Speed: 6
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 10
   Accuracy: 0.9
   CritChance: 0.1
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills:
   - {fileID: 11400000, guid: fe55a93e7205f654eb2cc5dc3a54e674, type: 2}
   - {fileID: 11400000, guid: 236aed7eaeee6274688b9c6229e39b91, type: 2}
@@ -33,3 +33,13 @@ MonoBehaviour:
   PrimalSkills:
   - {fileID: 11400000, guid: 7d829c033881830459be79f83d0c94a8, type: 2}
   TechnicalSpecial: {fileID: 11400000, guid: ad5b85c437a7ff74fbc8ea2cf437174b, type: 2}
+  EnemyPattern: 0
+  Behavior: 0
+  EnemySkills: []
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

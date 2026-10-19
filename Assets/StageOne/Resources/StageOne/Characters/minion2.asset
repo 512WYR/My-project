@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: minion2
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: minion2
   DisplayName: "\u5C0F\u602A2"
   Subtitle: "\u80FD\u78B0\u5230\u6211\u65B9\u524D\u6392\u4E0E\u4E2D\u6392\u7684\u6742\u5175"
   Silhouette: enemy
   MaxHp: 10
   Speed: 4
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 2
   Accuracy: 0.75
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 0
   Behavior: 0
   EnemySkills:
   - Id: e_minion2_strike

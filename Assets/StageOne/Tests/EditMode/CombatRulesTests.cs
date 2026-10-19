@@ -16,6 +16,15 @@ namespace Ruin.Tests
         private BattleEngine Battle(RunState run, CombatRules rules = null) { return new BattleEngine(run, catalog.Enemies.Select(x => x.ToSpec()).ToArray(), rules ?? catalog.Rules()); }
         private static WeightedOutcome[] Forms() { return new[] { new WeightedOutcome(.2, 1, SanityGate.High), new WeightedOutcome(.6, 0), new WeightedOutcome(.2, -1, SanityGate.Low) }; }
 
+        // Sanity is a hero-only resource. Enemies share ActorState, so this pins the invariant that a
+        // monster never starts a battle with a value the UI could mistake for a real resource.
+        [Test] public void EnemiesHaveNoSanity()
+        {
+            var battle = Battle(Run());
+            Assert.That(battle.Enemies, Is.Not.Empty);
+            Assert.That(battle.Enemies.All(e => e.Sanity == 0));
+        }
+
         [TestCase(30)] [TestCase(50)] [TestCase(70)]
         public void StableRangeHasOnlyBasicForm(double sanity)
         {

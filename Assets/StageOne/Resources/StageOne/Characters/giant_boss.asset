@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: giant_boss
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: giant_boss
   DisplayName: "\u9996\u9886\xB7\u5DE8\u578B\u805A\u5408\u4F53"
   Subtitle: "\u5360\u636E1\uFF5E3\u53F7\u4F4D\uFF0C\u63091\u21922\u21921\u21922\u21923\u5FAA\u73AF"
   Silhouette: enemy
   MaxHp: 180
   Speed: 4
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 16
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 0
   Behavior: 7
   EnemySkills:
   - Id: e_giant_all

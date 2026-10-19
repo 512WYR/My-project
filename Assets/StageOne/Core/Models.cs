@@ -211,6 +211,8 @@ namespace Ruin.Core
         public int Rank;
         public int Hp;
         public bool Dead;
+        // Hero-only resource. Enemies are constructed with 0 and never read or write it; the field stays
+        // on the shared state type because the battle engine does not branch on side.
         public double Sanity;
         public SkillForm Form = SkillForm.Basic;
         public int BleedDamage;

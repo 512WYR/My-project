@@ -12,20 +12,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: hunter
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: hunter
   DisplayName: "\u8FFD\u730E\u8005"
   Subtitle: "\u8FFD\u51FB\u865A\u5F31\u8005\u5E76\u9020\u6210\u6D41\u8840"
-  Role: 4
+  Silhouette: 
   MaxHp: 24
   Speed: 7
-  SanityOffset: 0
-  EnemyPattern: 2
   Attack: 10
   Accuracy: 0.86
   CritChance: 0.1
   Dodge: 0
   Defense: 0
-  Primary: {fileID: 0}
-  Support: {fileID: 0}
-  Technical: {fileID: 0}
-  Primal: {fileID: 0}
+  SanityOffset: 0
+  BasicSkills: []
+  PrimalSkills: []
+  TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 2
+  Behavior: 0
+  EnemySkills: []
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

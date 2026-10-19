@@ -39,6 +39,7 @@ namespace Ruin.Editor
             });
             Migrate(catalog);
             EnsureEnemyContent(catalog, monsters);
+            AssignKinds(catalog);
             PlayerSettings.productName = "Between the Veils - Stage One";
             PlayerSettings.companyName = "GameMake";
             PlayerSettings.defaultScreenWidth = 1600; PlayerSettings.defaultScreenHeight = 900;
@@ -205,6 +206,72 @@ namespace Ruin.Editor
             Debug.Log("STAGE_ONE_MIGRATED catalog fields backfilled");
         }
 
+        // Existing assets read Kind back as Unset (the enum's zero value). This is authoring-only state, so
+        // the migration is intentionally separate from Prepare: a designer can run it once and keep editing
+        // without rebuilding the whole stage. Prepare calls the same method so a fresh build is never Unset.
+        [MenuItem("GameMake/Assign Character Kinds")]
+        public static void AssignCharacterKinds()
+        {
+            var catalog = AssetDatabase.LoadAssetAtPath<GameCatalog>(Data + "/GameCatalog.asset");
+            if (!catalog)
+            {
+                Debug.LogWarning("GameCatalog not found at " + Data + "/GameCatalog.asset; run GameMake/Prepare Stage One first.");
+                return;
+            }
+            int changed = AssignKinds(catalog);
+            if (changed > 0) AssetDatabase.SaveAssets();
+            Debug.Log("STAGE_ONE_KINDS_ASSIGNED " + changed);
+        }
+
+        // Only writes Kind; every other field is left exactly as the designer set it. Reading the lists from
+        // the catalog covers the heroes, legacy enemies, designed monsters and every encounter slot in one
+        // pass. Summon pools are walked too because a summon could otherwise stay Unset until it spawns.
+        private static int AssignKinds(GameCatalog catalog)
+        {
+            int changed = 0;
+            if (catalog.Heroes != null)
+                foreach (var hero in catalog.Heroes) changed += SetKind(hero, ActorKind.Hero);
+            changed += AssignMonsters(catalog.Enemies);
+            changed += AssignMonsters(catalog.Monsters);
+            changed += AssignMonsterSlots(catalog.NormalEncounters);
+            changed += AssignMonsterSlots(catalog.EliteEncounters);
+            changed += AssignMonsterSlots(catalog.BossEncounters);
+            return changed;
+        }
+
+        private static int AssignMonsters(CharacterDefinition[] monsters)
+        {
+            int changed = 0;
+            if (monsters == null) return changed;
+            foreach (var monster in monsters)
+            {
+                changed += SetKind(monster, ActorKind.Monster);
+                if (monster != null && monster.SummonPool != null)
+                    foreach (var summon in monster.SummonPool) changed += SetKind(summon, ActorKind.Monster);
+            }
+            return changed;
+        }
+
+        private static int AssignMonsterSlots(EnemyLineup[] lineups)
+        {
+            int changed = 0;
+            if (lineups == null) return changed;
+            foreach (var lineup in lineups)
+            {
+                if (lineup == null || lineup.Slots == null) continue;
+                foreach (var monster in lineup.Slots) changed += SetKind(monster, ActorKind.Monster);
+            }
+            return changed;
+        }
+
+        private static int SetKind(CharacterDefinition definition, ActorKind kind)
+        {
+            if (!definition || definition.Kind == kind) return 0;
+            definition.Kind = kind;
+            EditorUtility.SetDirty(definition);
+            return 1;
+        }
+
         // ---------------- designed monsters ----------------
         //
         // Damage is carried by Attack × Multiplier so the existing resolver (defense, guard, block,
@@ -314,6 +381,7 @@ namespace Ruin.Editor
         {
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x =>
             {
+                x.Kind = ActorKind.Monster;
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = "enemy";
                 x.MaxHp = hp; x.Speed = speed; x.Attack = attack; x.Accuracy = accuracy;
                 x.CritChance = 0; x.Dodge = 0; x.Defense = 0;
@@ -414,6 +482,7 @@ namespace Ruin.Editor
             SkillDefinition[] basic, SkillDefinition[] primal, SkillDefinition technicalSpecial)
         {
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x => {
+                x.Kind = ActorKind.Hero;
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = silhouette;
                 x.MaxHp = hp; x.Speed = speed; x.SanityOffset = sanity;
                 x.Attack = 10; x.Accuracy = 0.9; x.CritChance = 0.1; x.Dodge = 0; x.Defense = 0;
@@ -424,6 +493,7 @@ namespace Ruin.Editor
         private static CharacterDefinition Enemy(string id, string name, string subtitle, int hp, int speed, EnemyPattern pattern)
         {
             return Asset<CharacterDefinition>(Data + "/Characters/" + id + ".asset", x => {
+                x.Kind = ActorKind.Monster;
                 x.Id = id; x.DisplayName = name; x.Subtitle = subtitle; x.Silhouette = "enemy"; x.MaxHp = hp; x.Speed = speed; x.EnemyPattern = pattern;
                 x.Attack = 10; x.Accuracy = 0.86; x.CritChance = 0.1; x.Dodge = 0; x.Defense = 0;
             });

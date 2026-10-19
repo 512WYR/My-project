@@ -12,19 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: shield
   m_EditorClassIdentifier: 
+  Kind: 1
   Id: shield
   DisplayName: "\u76FE\u536B"
   Subtitle: "\u7AD9\u7A33\uFF0C\u7136\u540E\u8BA9\u522B\u4EBA\u7AD9\u5F97\u4E5F\u7A33"
   Silhouette: shield
   MaxHp: 44
   Speed: 4
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 10
   Accuracy: 0.9
   CritChance: 0.1
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills:
   - {fileID: 11400000, guid: ece19f1c733605c4180fa82ca4dc3c23, type: 2}
   - {fileID: 11400000, guid: 857e56231993a864ba817fd7fe1a38b2, type: 2}
@@ -33,3 +33,13 @@ MonoBehaviour:
   PrimalSkills:
   - {fileID: 11400000, guid: cfd7144bd004ae443afb77a7874ba0e8, type: 2}
   TechnicalSpecial: {fileID: 11400000, guid: 702608dced3fb8c42850fbc79374b05f, type: 2}
+  EnemyPattern: 0
+  Behavior: 0
+  EnemySkills: []
+  RankWidth: 1
+  Immobile: 0
+  ActionInterval: 1
+  ActionPhase: 0
+  BossHealOnHeroDeath: 0
+  GuardReduction: 0
+  SummonPool: []

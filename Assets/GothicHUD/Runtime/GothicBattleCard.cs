@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Ruin.Core;
 using Ruin.Runtime;
 using UnityEngine;
@@ -80,10 +81,22 @@ namespace GameMake.GothicHUD
                     : actor.Hp + " / " + actor.Definition.MaxHp;
 
             // Sanity sits directly under the health bar so a hero's other vital is visible on the stage,
-            // not only on the selected-character panel.
-            if (SanityFill) SanityFill.fillAmount = Mathf.Clamp01((float)actor.Sanity / 100f);
-            if (SanityValue)
-                SanityValue.text = Mathf.Clamp((float)actor.Sanity, 0f, 100f).ToString("0") + " / 100";
+            // not only on the selected-character panel. Monsters have no sanity at all, so their bar is
+            // hidden instead of showing a meaningless 0 / 100.
+            bool showSanity = actor.Player;
+            if (SanityFill)
+            {
+                var sanityRoot = SanityFill.transform.parent;
+                if (sanityRoot && sanityRoot != transform) sanityRoot.gameObject.SetActive(showSanity);
+                else SanityFill.gameObject.SetActive(showSanity);
+            }
+            if (SanityValue) SanityValue.gameObject.SetActive(showSanity);
+            if (showSanity)
+            {
+                if (SanityFill) SanityFill.fillAmount = Mathf.Clamp01((float)actor.Sanity / 100f);
+                if (SanityValue)
+                    SanityValue.text = Mathf.Clamp((float)actor.Sanity, 0f, 100f).ToString("0") + " / 100";
+            }
 
             // A card carries one status line: the intent for enemies, the limb/state summary for allies.
             // They share a slot because a position card only has room for one.
@@ -93,6 +106,114 @@ namespace GameMake.GothicHUD
             if (ActiveBadge) ActiveBadge.SetActive(active);
             if (TargetBadge) TargetBadge.SetActive(possible);
             if (DeadCross) DeadCross.SetActive(actor.Dead);
+        }
+
+        // ---- multi-rank span ----
+        // A monster with RankWidth > 1 covers several positions. The stage still has one card per rank,
+        // so the owner's card is widened over the neighbours and the covered cards are hidden. The base
+        // layout is recorded once because the controller resets the span on every refresh: without that,
+        // a card that stopped spanning would keep the wider size and the shifted contents.
+        private struct ChildLayout
+        {
+            public RectTransform Rect;
+            public Vector2 Position;
+            public Vector2 Size;
+        }
+
+        private readonly List<ChildLayout> children = new List<ChildLayout>();
+        private RectTransform cardRect;
+        private RectTransform backgroundRect;
+        private Vector2 cardBaseSize;
+        private Vector2 backgroundBaseSize;
+        // The health group is widened with the card instead of being centred: a multi-rank card with a
+        // 148px bar floating in the middle reads as a mismatched width. The track/fill/value children
+        // are widened too so the filled portion still covers the whole bar.
+        private RectTransform healthRect;
+        private Vector2 healthBaseSize;
+        private readonly List<ChildLayout> healthChildren = new List<ChildLayout>();
+        private bool layoutCached;
+
+        /// <summary>
+        /// Stretch this card across <paramref name="units"/> positions. <paramref name="step"/> is the
+        /// distance between two adjacent cards, so units=1 collapses back to the authored layout.
+        /// </summary>
+        public void SetSpan(int units, float step)
+        {
+            if (units <= 1 || step <= 0f) { ResetSpan(); return; }
+            CacheLayout();
+            float extra = (units - 1) * step;
+            if (cardRect) cardRect.sizeDelta = new Vector2(cardBaseSize.x + extra, cardBaseSize.y);
+            // The body is also the click target, so widening it makes the whole span selectable.
+            if (backgroundRect) backgroundRect.sizeDelta = new Vector2(backgroundBaseSize.x + extra, backgroundBaseSize.y);
+            // Keep the same 6px inset on both sides: the bar starts where it did and gains the span width.
+            if (healthRect)
+            {
+                healthRect.sizeDelta = new Vector2(healthBaseSize.x + extra, healthBaseSize.y);
+                foreach (var child in healthChildren)
+                    if (child.Rect) child.Rect.sizeDelta = new Vector2(child.Size.x + extra, child.Size.y);
+            }
+            foreach (var child in children)
+            {
+                var rect = child.Rect;
+                if (!rect) continue;
+                var position = child.Position;
+                // Badges are corner-anchored labels: keep "行动" on the left edge and push "可选" to the
+                // new right edge. Everything else slides to the middle of the widened card.
+                if (ActiveBadge && rect.gameObject == ActiveBadge) position.x = child.Position.x;
+                else if (TargetBadge && rect.gameObject == TargetBadge) position.x += extra;
+                else position.x += extra * 0.5f;
+                rect.anchoredPosition = position;
+            }
+        }
+
+        /// <summary>Restore the authored layout. Safe to call on cards that never spanned.</summary>
+        public void ResetSpan()
+        {
+            CacheLayout();
+            if (cardRect) cardRect.sizeDelta = cardBaseSize;
+            if (backgroundRect) backgroundRect.sizeDelta = backgroundBaseSize;
+            if (healthRect) healthRect.sizeDelta = healthBaseSize;
+            foreach (var child in healthChildren)
+            {
+                if (!child.Rect) continue;
+                child.Rect.anchoredPosition = child.Position;
+                child.Rect.sizeDelta = child.Size;
+            }
+            foreach (var child in children)
+            {
+                if (!child.Rect) continue;
+                child.Rect.anchoredPosition = child.Position;
+                child.Rect.sizeDelta = child.Size;
+            }
+        }
+
+        private void CacheLayout()
+        {
+            if (layoutCached) return;
+            layoutCached = true;
+            cardRect = transform as RectTransform;
+            if (cardRect) cardBaseSize = cardRect.sizeDelta;
+            backgroundRect = Background ? Background.transform as RectTransform : null;
+            if (backgroundRect) backgroundBaseSize = backgroundRect.sizeDelta;
+            healthRect = HealthFill ? HealthFill.transform.parent as RectTransform : null;
+            if (healthRect == transform) healthRect = null;
+            if (healthRect)
+            {
+                healthBaseSize = healthRect.sizeDelta;
+                for (int i = 0; i < healthRect.childCount; i++)
+                {
+                    var rect = healthRect.GetChild(i) as RectTransform;
+                    if (rect)
+                        healthChildren.Add(new ChildLayout { Rect = rect, Position = rect.anchoredPosition, Size = rect.sizeDelta });
+                }
+            }
+            children.Clear();
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                var rect = transform.GetChild(i) as RectTransform;
+                if (!rect || rect == backgroundRect || rect == healthRect) continue;
+                children.Add(new ChildLayout { Rect = rect, Position = rect.anchoredPosition, Size = rect.sizeDelta });
+            }
         }
 
         // Only allies reach this; an enemy card shows its intent in the same slot instead. The wording

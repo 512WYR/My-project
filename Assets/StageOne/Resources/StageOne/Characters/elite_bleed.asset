@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: elite_bleed
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: elite_bleed
   DisplayName: "\u7CBE\u82F1\u6D41\u8840\u602A"
   Subtitle: "\u66F4\u91CD\u7684\u6D41\u8840\u538B\u529B"
   Silhouette: enemy
   MaxHp: 40
   Speed: 5
-  SanityOffset: 0
-  EnemyPattern: 2
   Attack: 5
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 2
   Behavior: 2
   EnemySkills:
   - Id: e_elite_bleed_strike

@@ -12,22 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6d3ccfc4c53573448b090d6019d6b28, type: 3}
   m_Name: elite_high
   m_EditorClassIdentifier: 
+  Kind: 2
   Id: elite_high
   DisplayName: "\u7CBE\u82F1\u9AD8\u4F24\u602A"
   Subtitle: "\u524D\u6392\u4E00\u51FB\u8DB3\u4EE5\u81F4\u547D"
   Silhouette: enemy
   MaxHp: 46
   Speed: 4
-  SanityOffset: 0
-  EnemyPattern: 0
   Attack: 20
   Accuracy: 0.9
   CritChance: 0
   Dodge: 0
   Defense: 0
+  SanityOffset: 0
   BasicSkills: []
   PrimalSkills: []
   TechnicalSpecial: {fileID: 0}
+  EnemyPattern: 0
   Behavior: 3
   EnemySkills:
   - Id: e_elite_high_close
