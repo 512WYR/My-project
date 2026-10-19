@@ -274,6 +274,18 @@ namespace Ruin.Core
             return Resolve(rules).Prosthetics.FirstOrDefault(p => p != null && p.Id == id);
         }
 
+        // Display-only lookup for per-frame callers such as the battle status hover. The table is
+        // authored in code, so scanning the defaults avoids cloning the whole rule set on every frame.
+        // Catalogs do not carry their own prosthetic table, so this is the same set Resolve returns.
+        public static ProstheticSpec FindProsthetic(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            for (int i = 0; i < DefaultProsthetics.Length; i++)
+                if (DefaultProsthetics[i] != null && DefaultProsthetics[i].Id == id)
+                    return DefaultProsthetics[i];
+            return null;
+        }
+
         // Copies an item before it enters a run inventory. Kind and RestrictSilhouette have to survive the
         // copy: a clone built through the four-argument constructor would read as a conventional piece.
         public static ProstheticSpec Clone(ProstheticSpec item)

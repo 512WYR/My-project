@@ -135,6 +135,52 @@ namespace Ruin.Tests
         }
 
         [Test]
+        public void FittedProstheticKeepsItsEffectAvailableOnHover()
+        {
+            var hero = Hero();
+            LimbSystem.Damage(hero, LimbPart.Arm, 999);
+            var prosthetic = LimbSystem.Prosthetic("siege_hydraulic_arm", new CombatRules().Limbs);
+            Assert.IsTrue(LimbSystem.Install(hero, prosthetic));
+
+            var entry = Entries(hero).First(e => e.Id == "prosthetic:" + LimbPart.Arm);
+            Assert.That(entry.Name, Is.EqualTo("义体·手臂"));
+            Assert.That(entry.Tone, Is.EqualTo(BattleStatusTone.Meta));
+            Assert.That(entry.Detail, Does.Contain("攻城液压臂"));
+            Assert.That(entry.Detail, Does.Contain("断肢"));
+        }
+
+        [Test]
+        public void InstalledProstheticIsVisibleEvenWhileThePartIsIntact()
+        {
+            var hero = Hero();
+            LimbSystem.Damage(hero, LimbPart.Leg, 999);
+            Assert.IsTrue(LimbSystem.Install(hero, LimbSystem.Prosthetic("prosthetic_leg",
+                new CombatRules().Limbs)));
+
+            var entries = Entries(hero);
+            Assert.That(entries.Count(e => e.Id == "prosthetic:" + LimbPart.Leg), Is.EqualTo(1));
+            Assert.That(entries.Any(e => e.Id == "limb:" + LimbPart.Leg), Is.False);
+        }
+
+        [Test]
+        public void EquippedAccessoryKeepsItsDescriptionAvailableOnHover()
+        {
+            var hero = Hero();
+            hero.EquippedAccessories.Add(new AccessorySpec
+            {
+                Id = "acc_gutter",
+                Name = "穿肠弹",
+                Kind = AccessoryKind.Gutter,
+                Description = "攻击必定暴击。"
+            });
+
+            var entry = Entries(hero).First(e => e.Id == "accessory:acc_gutter");
+            Assert.That(entry.Name, Is.EqualTo("饰品·穿肠弹"));
+            Assert.That(entry.Detail, Is.EqualTo("攻击必定暴击。"));
+            Assert.That(entry.Tone, Is.EqualTo(BattleStatusTone.Meta));
+        }
+
+        [Test]
         public void CompactTruncatesWithARemainder()
         {
             var hero = Hero();

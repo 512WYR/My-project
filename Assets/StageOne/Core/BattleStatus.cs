@@ -84,6 +84,8 @@ namespace Ruin.Core
                     "理智锁定药剂：本场战斗内理智不会变化。", BattleStatusTone.Meta);
 
             AddLimbs(actor, into);
+            AddProsthetics(actor, into);
+            AddAccessoryHints(actor, into);
         }
 
         private static void AddAccessories(ActorState actor, List<BattleStatusEntry> into)
@@ -131,17 +133,11 @@ namespace Ruin.Core
             {
                 var part = LimbOrder[i];
                 var limb = LimbSystem.Get(actor, part);
-                if (limb == null || LimbSystem.ConditionOf(limb) == LimbCondition.Intact) continue;
+                // A fitted part is reported by AddProsthetics instead, including its remaining HP.
+                if (limb == null || limb.ProstheticFitted) continue;
+                if (LimbSystem.ConditionOf(limb) == LimbCondition.Intact) continue;
 
                 string partName = LimbSystem.PartName(part);
-                if (limb.ProstheticFitted)
-                {
-                    Add(into, "limb:" + part, "义肢·" + partName, null,
-                        "已安装义肢，该部位对应的" + AttributeName(part) + "不再受损伤影响。",
-                        BattleStatusTone.Meta);
-                    continue;
-                }
-
                 bool severed = limb.Hp <= 0;
                 string detail = "部位生命 " + Math.Max(0, limb.Hp) + " / " + Math.Max(1, limb.MaxHp) + "。"
                     + AttributeName(part) + (severed
@@ -149,6 +145,49 @@ namespace Ruin.Core
                         : "下降；修复该部位后恢复。");
                 Add(into, "limb:" + part, (severed ? "断肢·" : "受伤·") + partName, null, detail,
                     BattleStatusTone.Injury);
+            }
+        }
+
+        // Fitted prosthetics are permanent until the part is severed again, so each one gets a passive
+        // entry of its own. It is a hint only: the detail quotes the authored description, and the
+        // remaining part HP is shown so a piece about to be wrecked is still readable.
+        private static void AddProsthetics(ActorState actor, List<BattleStatusEntry> into)
+        {
+            if (actor.Limbs == null) return;
+            for (int i = 0; i < LimbOrder.Length; i++)
+            {
+                var part = LimbOrder[i];
+                var limb = LimbSystem.Get(actor, part);
+                if (limb == null || !limb.ProstheticFitted) continue;
+
+                var spec = LimbSystem.FindProsthetic(limb.Prosthetic);
+                string piece = spec != null && !string.IsNullOrEmpty(spec.Name) ? spec.Name : "义体";
+                string effect = spec != null && !string.IsNullOrEmpty(spec.Description)
+                    ? spec.Description
+                    : "恢复该部位的基础功能。";
+                string partName = LimbSystem.PartName(part);
+                Add(into, "prosthetic:" + part, "义体·" + partName, null,
+                    "「" + piece + "」" + effect
+                    + " 部位：" + partName + "，部位生命 " + Math.Max(0, limb.Hp)
+                    + " / " + Math.Max(1, limb.MaxHp) + "。义体会随该部位再次断肢而销毁。",
+                    BattleStatusTone.Meta);
+            }
+        }
+
+        // Equipped accessories keep their authored description on hover. Live numbers stay in the
+        // entries above; these hints are the only readout for pieces whose effect has no live state,
+        // and they also keep a consumed or not-yet-triggered piece visible.
+        private static void AddAccessoryHints(ActorState actor, List<BattleStatusEntry> into)
+        {
+            var items = actor.EquippedAccessories;
+            if (items == null) return;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || string.IsNullOrEmpty(item.Name)) continue;
+                Add(into, "accessory:" + (item.Id ?? item.Name), "饰品·" + item.Name, null,
+                    string.IsNullOrEmpty(item.Description) ? "已装备。" : item.Description,
+                    BattleStatusTone.Meta);
             }
         }
 
