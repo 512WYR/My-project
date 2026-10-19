@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using Ruin.Core;
 using UnityEngine;
 
@@ -78,7 +78,7 @@ namespace Ruin.Runtime
             if (Run == null) return;
             var hero = Run.Heroes.FirstOrDefault(h => h.Id == heroId);
             if (hero == null) return;
-            int max = hero.Definition == null ? hero.Hp : hero.Definition.MaxHp;
+            int max = hero.Definition == null ? hero.Hp : hero.MaxHp;
             hero.Hp = Mathf.Clamp(hp, 0, Mathf.Max(1, max));
             if (hero.Hp > 0 && hero.Dead)
             {
@@ -196,6 +196,13 @@ namespace Ruin.Runtime
             if (hero == null || item == null)
             {
                 Hint = "没有可安装的义肢。";
+                Refresh();
+                return;
+            }
+            string blocked = LimbSystem.InstallBlockedReason(hero, item);
+            if (blocked != null)
+            {
+                Hint = blocked;
                 Refresh();
                 return;
             }

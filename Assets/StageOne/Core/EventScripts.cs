@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -116,7 +116,7 @@ namespace Ruin.Core
         public int DamageHero(ActorState hero, int percent)
         {
             if (hero == null || hero.Dead || percent <= 0) return 0;
-            int amount = Math.Max(1, (int)Math.Ceiling(hero.Definition.MaxHp * percent / 100.0 - 1e-9));
+            int amount = Math.Max(1, (int)Math.Ceiling(hero.MaxHp * percent / 100.0 - 1e-9));
             int before = hero.Hp;
             hero.Hp = Math.Max(1, hero.Hp - amount);
             return before - hero.Hp;
@@ -473,7 +473,7 @@ namespace Ruin.Core
                 var hero = run.Heroes[i];
                 if (hero == null || hero.Dead) continue;
                 var picked = hero;
-                page.Choices.Add(new EventChoice(picked.Name, "生命 " + picked.Hp + "/" + picked.Definition.MaxHp
+                page.Choices.Add(new EventChoice(picked.Name, "生命 " + picked.Hp + "/" + picked.MaxHp
                     + " · 理智 " + picked.Sanity.ToString("0.0"), s => Drink(s, picked)));
             }
         }
@@ -520,7 +520,7 @@ namespace Ruin.Core
                     var hero = run.Heroes[i];
                     if (hero == null || hero.Dead) continue;
                     var picked = hero;
-                    page.Choices.Add(new EventChoice(picked.Name, "生命 " + picked.Hp + "/" + picked.Definition.MaxHp, s =>
+                    page.Choices.Add(new EventChoice(picked.Name, "生命 " + picked.Hp + "/" + picked.MaxHp, s =>
                     {
                         int healed = s.HealHero(picked, 40);
                         s.GoTo(1, picked.Name + " 恢复了 " + healed + " 点生命。");
@@ -681,7 +681,7 @@ namespace Ruin.Core
                     int floor = int.MaxValue;
                     for (int i = 0; i < heroes.Count; i++)
                     {
-                        maxHpSum += heroes[i].Definition.MaxHp;
+                        maxHpSum += heroes[i].MaxHp;
                         floor = Math.Min(floor, heroes[i].Hp - 1);
                     }
                     int wanted = (int)Math.Ceiling(maxHpSum / (double)heroes.Count * Range(run.Random, 10, 25) / 100.0 - 1e-9);
@@ -692,7 +692,7 @@ namespace Ruin.Core
                 case AltarResource.Prosthetic:
                 {
                     var item = stock[PickIndex(stock, run.Random)];
-                    offer.Prosthetic = new ProstheticSpec(item.Id, item.Name, item.Part, item.Description);
+                    offer.Prosthetic = LimbSystem.Clone(item);
                     offer.ResourceAmount = 1;
                     offer.SanityAmount = AltarSanityPerProsthetic;
                     break;
@@ -714,7 +714,7 @@ namespace Ruin.Core
             var kinds = new List<AltarResource>();
             if (maxSanity >= AltarSanityPerSupply * 2) kinds.Add(AltarResource.Supplies);
             if (maxSanity >= AltarSanityPerProsthetic) kinds.Add(AltarResource.Prosthetic);
-            var wounded = heroes.Where(h => h.Hp < h.Definition.MaxHp).ToList();
+            var wounded = heroes.Where(h => h.Hp < h.MaxHp).ToList();
             if (wounded.Count > 0 && maxSanity >= AltarSanityPerHealth) kinds.Add(AltarResource.Health);
             if (kinds.Count == 0)
                 return new AltarOffer { Valid = false, Refusal = "你们的理智不足以支付任何东西。" };
@@ -735,8 +735,8 @@ namespace Ruin.Core
                     int floor = int.MaxValue;
                     for (int i = 0; i < wounded.Count; i++)
                     {
-                        maxHpSum += wounded[i].Definition.MaxHp;
-                        floor = Math.Min(floor, wounded[i].Definition.MaxHp - wounded[i].Hp);
+                        maxHpSum += wounded[i].MaxHp;
+                        floor = Math.Min(floor, wounded[i].MaxHp - wounded[i].Hp);
                     }
                     int wanted = (int)Math.Ceiling(maxHpSum / (double)wounded.Count * Range(run.Random, 10, 25) / 100.0 - 1e-9);
                     // Every wounded hero is healed by the same amount, so the smallest gap caps the quote.
@@ -917,9 +917,7 @@ namespace Ruin.Core
                     int healed = 0;
                     for (int i = 0; i < heroes.Count; i++)
                     {
-                        int gain = Math.Min(amount, heroes[i].Definition.MaxHp - heroes[i].Hp);
-                        heroes[i].Hp += gain;
-                        healed += gain;
+                        healed += ProstheticSystem.RestoreHp(heroes[i], amount);
                     }
                     bought = "全队共 " + healed + " 点生命";
                     break;
@@ -927,8 +925,7 @@ namespace Ruin.Core
                 default:
                 {
                     if (offer.Prosthetic != null)
-                        run.Prosthetics.Add(new ProstheticSpec(offer.Prosthetic.Id, offer.Prosthetic.Name,
-                            offer.Prosthetic.Part, offer.Prosthetic.Description));
+                        run.Prosthetics.Add(LimbSystem.Clone(offer.Prosthetic));
                     bought = "「" + (offer.Prosthetic == null ? "义体" : offer.Prosthetic.Name) + "」";
                     break;
                 }

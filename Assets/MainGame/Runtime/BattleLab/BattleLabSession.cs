@@ -317,7 +317,7 @@ namespace Ruin.Runtime
         public bool SetHp(ActorState actor, int hp, out string note)
         {
             if (actor == null || actor.Definition == null) { note = "没有选中角色。"; return false; }
-            actor.Hp = Math.Max(0, Math.Min(actor.Definition.MaxHp, hp));
+            actor.Hp = Math.Max(0, Math.Min(actor.MaxHp, hp));
             if (!actor.Player && actor.Hp == 0) actor.Dead = true;
             MarkMutation();
             CheckEndAfterMutation();
@@ -330,11 +330,13 @@ namespace Ruin.Runtime
         public bool SetMaxHp(ActorState actor, int maxHp, out string note)
         {
             if (actor == null || actor.Definition == null) { note = "没有选中角色。"; return false; }
+            // This edits the authored base. Prosthetics then scale it into the effective ceiling.
             actor.Definition.MaxHp = Math.Max(1, maxHp);
-            if (actor.Hp > actor.Definition.MaxHp) actor.Hp = actor.Definition.MaxHp;
+            if (actor.Hp > actor.MaxHp) actor.Hp = actor.MaxHp;
             MarkMutation();
             SyncLog();
-            note = actor.Name + " 的 MaxHp → " + actor.Definition.MaxHp + "（部位上限未自动重建）";
+            note = actor.Name + " 的基础 MaxHp → " + actor.Definition.MaxHp
+                + "（当前上限 " + actor.MaxHp + "；部位上限未自动重建）";
             SetNote(note);
             return true;
         }
@@ -415,7 +417,7 @@ namespace Ruin.Runtime
         public bool HealFull(ActorState actor, out string note)
         {
             if (actor == null || actor.Definition == null) { note = "没有选中角色。"; return false; }
-            actor.Hp = actor.Definition.MaxHp;
+            actor.Hp = actor.MaxHp;
             MarkMutation();
             SyncLog();
             note = actor.Name + " 已回满生命。";
@@ -504,16 +506,21 @@ namespace Ruin.Runtime
                 case LabLimbState.Severed:
                     limb.Hp = 0;
                     limb.Prosthetic = null;
+                    limb.ProstheticKind = ProstheticKind.Conventional;
                     break;
                 case LabLimbState.Injured:
                     limb.Hp = Math.Max(1, limb.MaxHp / 2);
                     limb.Prosthetic = null;
+                    limb.ProstheticKind = ProstheticKind.Conventional;
                     break;
                 default:
                     limb.Hp = limb.MaxHp;
                     limb.Prosthetic = null;
+                    limb.ProstheticKind = ProstheticKind.Conventional;
                     break;
             }
+            // Destroying a +MaxHp prosthetic lowers the ceiling; the current HP has to follow it down.
+            if (actor.Hp > actor.MaxHp) actor.Hp = actor.MaxHp;
             MarkMutation();
             SyncLog();
             note = actor.Name + " 的" + LimbSystem.PartName(part) + " → " + state;
@@ -526,7 +533,8 @@ namespace Ruin.Runtime
             if (actor == null || Battle == null) { note = "没有战斗或角色。"; return false; }
             var item = LimbSystem.Prosthetic(prostheticId, Battle.Rules == null ? null : Battle.Rules.Limbs);
             if (item == null) { note = "义肢 " + prostheticId + " 不存在。"; return false; }
-            if (!LimbSystem.Install(actor, item)) { note = "该部位未断肢，无法安装「" + item.Name + "」。"; return false; }
+            string blocked = LimbSystem.InstallBlockedReason(actor, item);
+            if (blocked != null) { note = "无法安装「" + item.Name + "」：" + blocked; return false; }
             MarkMutation();
             SyncLog();
             note = actor.Name + " 安装了「" + item.Name + "」。";

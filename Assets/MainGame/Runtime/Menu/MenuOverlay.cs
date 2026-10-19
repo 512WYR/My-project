@@ -22,6 +22,8 @@ namespace Ruin.Runtime
         private RectTransform startSettings;
         private Slider volumeSlider;
         private Text volumeValue;
+        private Slider sfxSlider;
+        private Text sfxValue;
         private bool built;
 
         // Gameplay pages hidden by the title screen. Their previous active flags are recorded so a
@@ -111,9 +113,14 @@ namespace Ruin.Runtime
             volumeSlider = MenuUi.SliderBar(startSettings, "MusicVolume", 34, 420, 14);
             volumeValue = MenuUi.CenterLabel(startSettings, "VolumeValue", "", 0, -12, 200, 32, 22, MenuUi.Muted);
 
-            MenuUi.MenuButton(startSettings, "Back", "返回", -110, 300, 60, out _).onClick.AddListener(ShowMain);
+            MenuUi.CenterLabel(startSettings, "SfxLabel", "音效音量", 0, -78, 500, 40, 28, MenuUi.Ink);
+            sfxSlider = MenuUi.SliderBar(startSettings, "SfxVolume", -134, 420, 14);
+            sfxValue = MenuUi.CenterLabel(startSettings, "SfxValue", "", 0, -180, 200, 32, 22, MenuUi.Muted);
+
+            MenuUi.MenuButton(startSettings, "Back", "返回", -270, 300, 60, out _).onClick.AddListener(ShowMain);
 
             volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
+            sfxSlider.onValueChanged.AddListener(OnSfxChanged);
             RefreshVolume();
         }
 
@@ -182,18 +189,35 @@ namespace Ruin.Runtime
             if (volumeValue) volumeValue.text = Percent(value);
         }
 
+        private void OnSfxChanged(float value)
+        {
+            SfxDirector.SetMasterVolume(value);
+            if (sfxValue) sfxValue.text = Percent(value);
+        }
+
         private void RefreshVolume()
         {
-            if (!volumeSlider) return;
-            volumeSlider.SetValueWithoutNotify(MusicDirector.MasterVolume);
-            if (volumeValue) volumeValue.text = Percent(MusicDirector.MasterVolume);
+            if (volumeSlider)
+            {
+                volumeSlider.SetValueWithoutNotify(MusicDirector.MasterVolume);
+                if (volumeValue) volumeValue.text = Percent(MusicDirector.MasterVolume);
+            }
+            if (sfxSlider)
+            {
+                sfxSlider.SetValueWithoutNotify(SfxDirector.MasterVolume);
+                if (sfxValue) sfxValue.text = Percent(SfxDirector.MasterVolume);
+            }
         }
 
         private static string Percent(float value) { return Mathf.RoundToInt(value * 100f) + "%"; }
 
         // PlayerPrefs writes are cheap but flushing to disk on every drag frame is not; the title
         // screen persists when the settings page closes and when the menu is dismissed.
-        private static void SaveVolume() { MusicDirector.SaveMasterVolume(); }
+        private static void SaveVolume()
+        {
+            MusicDirector.SaveMasterVolume();
+            SfxDirector.SaveMasterVolume();
+        }
 
         // ---- pause box ----
 

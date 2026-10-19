@@ -205,6 +205,7 @@ namespace Ruin.Runtime
             if (token != generation) yield break;
 
             bool support = !HasOffence(group);
+            bool sanityAttack = !support && IsSanityAttack(group);
             Vector2 fadeFrom = actorBase;
             if (support)
             {
@@ -218,15 +219,21 @@ namespace Ruin.Runtime
                         targetArts[i].color = Color.Lerp(targetFlashColors[i], targetBaseColors[i], t);
                 }, token);
                 ShowResults();
+                PlaySupportCue(group);
                 yield return RevealResults(token);
             }
             else
             {
+                // The attack is split around the dash: the windup plays while the actor lines up, the
+                // hit lands with the numbers. The sanity attack is one continuous take, so it only
+                // fires on impact.
+                if (!sanityAttack) SfxDirector.Play(SfxCue.AttackWindup);
                 Vector2 wind = actorBase + new Vector2(-36f, 0f);
                 yield return Tween(0.18f, t => actorSlot.anchoredPosition = Vector2.Lerp(actorBase, wind, EaseOut(t)), token);
                 yield return Tween(0.16f, t => actorSlot.anchoredPosition = Vector2.Lerp(wind, actorHit, EaseIn(t)), token);
 
                 ShowResults();
+                PlayOffenceCue(group, sanityAttack);
                 yield return Tween(0.18f, t =>
                 {
                     float punch = EaseOut(t);
@@ -438,6 +445,70 @@ namespace Ruin.Runtime
                 if (r.SanityDelta < -0.0001 || r.LimbWorn) return true;
             }
             return false;
+        }
+
+        // Heal wins over guard; either one replaces the generic click the beat would otherwise have.
+        // A fully blocked attack has no damage, so it also lands in the support branch: the show plan
+        // labels the blocker "格挡", while a protect skill labels its target "守护".
+        private static void PlaySupportCue(BattleShowGroup group)
+        {
+            bool heal = false, block = false, guard = false;
+            for (int i = 0; i < group.Results.Count; i++)
+            {
+                var r = group.Results[i];
+                if (r == null) continue;
+                if (r.Heal > 0) heal = true;
+                if (r.Guarded)
+                {
+                    if (r.Label == "格挡") block = true;
+                    else guard = true;
+                }
+                if (r.Buffed && Contains(r.BuffText, "防御")) guard = true;
+            }
+            if (heal) SfxDirector.Play(SfxCue.Heal);
+            else if (block) SfxDirector.Play(SfxCue.Block);
+            else if (guard) SfxDirector.Play(SfxCue.DefendUp);
+        }
+
+        // A miss has no impact sound. An interception puts damage on the guardian, while a plain block
+        // leaves the guarded target at zero damage, so the same result flags distinguish the two.
+        private static void PlayOffenceCue(BattleShowGroup group, bool sanityAttack)
+        {
+            bool missed = false, guarded = false, intercepted = false, hit = false;
+            for (int i = 0; i < group.Results.Count; i++)
+            {
+                var r = group.Results[i];
+                if (r == null) continue;
+                if (r.Missed || r.Dodged) missed = true;
+                if (r.Damage > 0) hit = true;
+                if (!r.Guarded) continue;
+                guarded = true;
+                if (r.Damage > 0) intercepted = true;
+            }
+
+            if (missed) SfxDirector.Play(SfxCue.AttackMiss);
+            else if (intercepted) SfxDirector.Play(SfxCue.GuardHit);
+            // A fully blocked beat has no number anywhere; if any target still took damage the normal
+            // impact sound is the honest one.
+            else if (guarded && !hit) SfxDirector.Play(SfxCue.Block);
+            else SfxDirector.Play(sanityAttack ? SfxCue.SanityAttack : SfxCue.AttackHit);
+        }
+
+        // The whisperer is the sanity enemy; any enemy hit that actually drains sanity gets its take
+        // even if a future variant is added under another pattern.
+        private static bool IsSanityAttack(BattleShowGroup group)
+        {
+            if (group.Actor == null || group.Actor.Player) return false;
+            var definition = group.Actor.Definition;
+            if (definition != null && definition.Pattern == EnemyPattern.Whisperer) return true;
+            for (int i = 0; i < group.Results.Count; i++)
+                if (group.Results[i] != null && group.Results[i].SanityDelta < -0.0001) return true;
+            return false;
+        }
+
+        private static bool Contains(string text, string part)
+        {
+            return !string.IsNullOrEmpty(text) && text.IndexOf(part, StringComparison.Ordinal) >= 0;
         }
 
         private static bool HasMiss(BattleShowGroup group)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Ruin.Core;
 using Ruin.Runtime;
 using UnityEngine;
@@ -97,7 +97,7 @@ namespace GameMake.GothicHUD
                 // Fill the authored portrait slot from Resources/StageOne/HeroArt/<Id> when the slot has
                 // not been given custom art by hand.
                 if (!target.Portrait) target.Portrait = ActorArt.PortraitSprite(source.Definition);
-                target.Health = source.Hp; target.MaxHealth = source.Definition.MaxHp; target.Sanity = (float)source.Sanity;
+                target.Health = source.Hp; target.MaxHealth = source.MaxHp; target.Sanity = (float)source.Sanity;
                 if (source.Id == BattleSource.InspectedId) SelectedCharacter = i;
             }
             RefreshView();
@@ -114,7 +114,7 @@ namespace GameMake.GothicHUD
 
         public void RequestDisplacement()
         {
-            if (FollowStageOneBattle && BattleSource) BattleSource.SelectSwap();
+            if (FollowStageOneBattle && BattleSource) BattleSource.RequestConfirmOrSwap();
             OnDisplacementRequested.Invoke();
         }
 

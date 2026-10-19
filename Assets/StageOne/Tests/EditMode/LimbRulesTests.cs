@@ -347,7 +347,7 @@ namespace Ruin.Tests
         {
             var broken = LimbSystem.Resolve(new LimbRules { HitRatio = 0, Parts = new LimbPartRule[0], Prosthetics = new ProstheticSpec[0] });
             Assert.AreEqual(4, broken.Parts.Length, "旧资产缺字段时回落到默认部位表");
-            Assert.AreEqual(4, broken.Prosthetics.Length, "义肢表回落到四件默认义肢");
+            Assert.AreEqual(28, broken.Prosthetics.Length, "义肢表回落到 28 件默认义肢");
             Assert.That(broken.HitRatio, Is.EqualTo(LimbSystem.DefaultHitRatio).Within(1e-12));
             Assert.That(broken.DamageRatio, Is.EqualTo(LimbSystem.DefaultDamageRatio).Within(1e-12),
                 "旧资产缺字段时回落默认磨损比例");

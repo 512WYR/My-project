@@ -321,21 +321,25 @@ namespace Ruin.Runtime
             Ui.SetGroupOpen("hero-limbs-" + i, next);
             if (!next) return;
             BattleLabUi.BeginIndent();
-            var prostheticLabels = new[] { "无" }.Concat(LimbSystem.DefaultProsthetics.Select(p => p.Name)).ToArray();
-            var prostheticIds = new[] { "" }.Concat(LimbSystem.DefaultProsthetics.Select(p => p.Id)).ToArray();
             for (int part = 0; part < 4; part++)
             {
+                // Only pieces for this limb are offered, so a slot can never point at a wrong-part item.
+                var options = LimbSystem.DefaultProsthetics
+                    .Where(p => p != null && p.Part == (LimbPart)part).ToArray();
+                var prostheticLabels = new[] { "无" }.Concat(options.Select(p => p.Name)).ToArray();
+                var prostheticIds = new[] { "" }.Concat(options.Select(p => p.Id)).ToArray();
                 GUILayout.BeginHorizontal();
                 GUILayout.Label(LimbSystem.PartName((LimbPart)part), GUILayout.Width(46));
                 slot.Limbs[part] = (LabLimbState)BattleLabUi.ValueGrid((int)slot.Limbs[part], LimbValues, LimbLabels, 3);
                 GUILayout.Label("义肢", GUILayout.Width(32));
-                int selectedProsthetic = Array.IndexOf(prostheticIds, slot.ProstheticIds[part] ?? "");
-                int chosen = GUILayout.SelectionGrid(selectedProsthetic, prostheticLabels, prostheticLabels.Length);
+                int selectedProsthetic = Math.Max(0, Array.IndexOf(prostheticIds, slot.ProstheticIds[part] ?? ""));
+                int chosen = GUILayout.SelectionGrid(selectedProsthetic, prostheticLabels,
+                    Math.Min(4, prostheticLabels.Length));
                 if (chosen >= 0 && chosen < prostheticIds.Length)
                     slot.ProstheticIds[part] = prostheticIds[chosen];
                 GUILayout.EndHorizontal();
             }
-            BattleLabUi.Small("未断肢却选择义肢会在校验时报错。");
+            BattleLabUi.Small("未断肢却选择义肢会在校验时报错；专属义体只能由对应角色装备。");
             BattleLabUi.EndIndent();
         }
 

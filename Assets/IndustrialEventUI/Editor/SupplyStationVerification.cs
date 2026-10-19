@@ -90,7 +90,7 @@ namespace GameMake.EventEditor
         {
             var view=UnityEngine.Object.FindObjectOfType<IndustrialEventPage>(); var app=view.Source; var supply=view.SupplyView;
             app.DebugForceRoom(NodeType.Supply);
-            var hero=app.Run.Heroes[0]; hero.Hp=Math.Max(1,hero.Definition.MaxHp/4); app.Run.PlayerSanity=20; app.Refresh();
+            var hero=app.Run.Heroes[0]; hero.Hp=Math.Max(1,hero.MaxHp/4); app.Run.PlayerSanity=20; app.Refresh();
             int before=hero.Hp; view.UseSupply(false); Check(hero.Hp==before,"Recovery accepted before entrance completed");
             var wait=Ready(view); while(wait.MoveNext()) yield return wait.Current;
             Check(supply.Layout.activeInHierarchy && !supply.OriginalMonitor.activeSelf && !supply.OriginalStory.activeSelf,"Original narrative still visible");
@@ -129,7 +129,7 @@ namespace GameMake.EventEditor
             CheckStationStable(view,"open shop");
             yield return .6f;
             Check(shop.Page.activeInHierarchy && shop.EntranceComplete && shop.Tabs.Length==5,"Shop modal did not open");
-            Check(shop.Cards.Count==4,"Missing prosthetics in shop");
+            Check(shop.Cards.Count==LimbSystem.DefaultProsthetics.Length,"Missing prosthetics in shop");
             Capture(view,"Supply-Shop-Prosthetics"); yield return .2f;
             int stock=app.Run.Prosthetics.Count, money=app.Map.Supplies;
             Click(shop.Cards[0].Buy);

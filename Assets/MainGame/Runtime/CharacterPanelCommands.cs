@@ -47,6 +47,8 @@ namespace Ruin.Runtime
             else
             {
                 ConsumableSystem.Use(Run, hero, index, false, out string note);
+                // Out of battle there is no cut-in to carry the cue, so the potion plays it directly.
+                if (kind == ConsumableKind.HpRestore) SfxDirector.Play(SfxCue.Heal);
                 Hint = note; Refresh();
             }
         }
@@ -55,6 +57,8 @@ namespace Ruin.Runtime
             if (!CanManageCharacter || CharacterHero == null || CharacterHero.Dead) return;
             var item = Run.Prosthetics.FirstOrDefault(p => p != null && p.Id == itemId);
             if (item == null) { Hint = "没有对应部位的义体库存。"; Refresh(); return; }
+            string blocked = LimbSystem.InstallBlockedReason(CharacterHero, item);
+            if (blocked != null) { Hint = blocked; Refresh(); return; }
             if (!LimbSystem.Install(CharacterHero, item)) { Hint = "只有断肢才能安装义体。"; Refresh(); return; }
             Run.Prosthetics.Remove(item); Hint = CharacterHero.Name + " 装上了" + item.Name + "。";
             Refresh();

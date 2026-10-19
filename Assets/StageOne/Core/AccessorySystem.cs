@@ -162,7 +162,7 @@ namespace Ruin.Core
             if (item.Kind == AccessoryKind.GoldenApple && actor.Definition != null)
             {
                 actor.Definition.MaxHp = Math.Max(1, actor.Definition.MaxHp - AppleMaxHpBonus);
-                if (actor.Hp > actor.Definition.MaxHp) actor.Hp = actor.Definition.MaxHp;
+                if (actor.Hp > actor.MaxHp) actor.Hp = actor.MaxHp;
             }
             return true;
         }

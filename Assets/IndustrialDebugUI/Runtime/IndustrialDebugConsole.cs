@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -341,9 +341,11 @@ namespace GameMake.IndustrialDebugUI
                 var part = (LimbPart)i;
                 Wire(InstallButtons[i], () =>
                 {
-                    if (!Source) return;
-                    var item = Source.Run == null ? null
-                        : Source.Run.Prosthetics.FirstOrDefault(p => p != null && p.Part == part);
+                    if (!Source || Source.Run == null) return;
+                    var hero = SelectedHero();
+                    var stocked = Source.Run.Prosthetics.Where(p => p != null && p.Part == part).ToList();
+                    var item = stocked.FirstOrDefault(p => LimbSystem.InstallBlockedReason(hero, p) == null)
+                        ?? stocked.FirstOrDefault();
                     if (item != null) WithHero(id => Source.DebugInstallProsthetic(id, item.Id));
                 });
             }
@@ -506,7 +508,7 @@ namespace GameMake.IndustrialDebugUI
         {
             if (Source == null || Source.Run == null) return 1;
             var hero = Source.Run.Heroes.FirstOrDefault(h => h.Id == id);
-            return hero == null || hero.Definition == null ? 1 : hero.Definition.MaxHp;
+            return hero == null || hero.Definition == null ? 1 : hero.MaxHp;
         }
 
         private ActorState SelectedHero()
@@ -998,12 +1000,21 @@ namespace GameMake.IndustrialDebugUI
             for (int i = 0; i < InstallButtons.Length; i++)
             {
                 var part = (LimbPart)i;
-                var item = hasHero ? app.Run.Prosthetics.FirstOrDefault(p => p != null && p.Part == part) : null;
-                SetInteractable(InstallButtons[i], hasHero && item != null && LimbSystem.CanInstall(hero, item));
+                // One button per part: prefer a piece this hero may actually wear, then report why the
+                // first stocked piece cannot be installed.
+                var stocked = hasHero
+                    ? app.Run.Prosthetics.Where(p => p != null && p.Part == part).ToList()
+                    : new System.Collections.Generic.List<ProstheticSpec>();
+                var item = stocked.FirstOrDefault(p => LimbSystem.InstallBlockedReason(hero, p) == null)
+                    ?? stocked.FirstOrDefault();
+                string reason = item == null ? null : LimbSystem.InstallBlockedReason(hero, item);
+                SetInteractable(InstallButtons[i], hasHero && item != null && reason == null);
                 var label = InstallButtons[i] ? InstallButtons[i].GetComponentInChildren<Text>(true) : null;
                 if (label) label.text = item == null
                     ? "安装·" + LimbSystem.PartName(part) + "（无义肢）"
-                    : "安装·" + LimbSystem.PartName(part) + " · " + item.Name;
+                    : reason == null
+                        ? "安装·" + LimbSystem.PartName(part) + " · " + item.Name
+                        : "安装·" + LimbSystem.PartName(part) + "（" + reason + "）";
             }
         }
 
@@ -1019,6 +1030,8 @@ namespace GameMake.IndustrialDebugUI
                 foreach (var item in run.Prosthetics)
                     if (item != null)
                         text.AppendLine("  " + item.Name + "  ·  " + LimbSystem.PartName(item.Part)
+                            + (string.IsNullOrEmpty(ProstheticSystem.RestrictionText(item))
+                                ? "" : "  ·  " + ProstheticSystem.RestrictionText(item))
                             + "  ·  " + item.Description);
                 text.AppendLine();
                 text.AppendLine("饰品库存 " + run.AccessoryStock.Count);
@@ -1169,6 +1182,8 @@ namespace GameMake.IndustrialDebugUI
             foreach (var item in limbs.Prosthetics ?? new ProstheticSpec[0])
                 if (item != null)
                     text.AppendLine("  " + item.Name + "  ·  " + LimbSystem.PartName(item.Part)
+                        + (string.IsNullOrEmpty(ProstheticSystem.RestrictionText(item))
+                            ? "" : "  ·  " + ProstheticSystem.RestrictionText(item))
                         + "  ·  " + item.Description);
             RulesBody.text = text.ToString();
         }
@@ -1221,7 +1236,7 @@ namespace GameMake.IndustrialDebugUI
 
         private static int MaxHp(ActorState actor)
         {
-            return actor == null || actor.Definition == null ? 0 : actor.Definition.MaxHp;
+            return actor == null || actor.Definition == null ? 0 : actor.MaxHp;
         }
 
         private static string FormName(SkillForm form)

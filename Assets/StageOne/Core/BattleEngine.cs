@@ -62,6 +62,7 @@ namespace Ruin.Core
             actor.IsCopy = false; actor.SummonedBy = null;
             actor.Uses.Clear();
             actor.AccessoryBattle = new AccessoryBattleState();
+            actor.ProstheticBattle = new ProstheticBattleState();
             // 理智锁定药剂 used outside battle primes this fight. A lock bought during the previous fight
             // was already cleared when it settled, so this is the only place a pending lock matures.
             actor.SanityLocked = actor.SanityLockPending;
@@ -93,7 +94,7 @@ namespace Ruin.Core
 
                 if (AccessorySystem.Has(hero, AccessoryKind.RustMedal))
                 {
-                    int loss = Math.Max(1, (int)Math.Ceiling(hero.Definition.MaxHp * AccessorySystem.RustEntryLoss - 1e-9));
+                    int loss = Math.Max(1, (int)Math.Ceiling(hero.MaxHp * AccessorySystem.RustEntryLoss - 1e-9));
                     Log(hero.Name + " 的锈血勋章索取 " + loss + " 点生命作为入场代价。", "system", hero.Id);
                     Damage(hero, loss, hero.Id, false, true, true);
                     if (AccessorySystem.AddSkillUse(hero, AccessorySystem.RustSkillId, 1) && !hero.Dead)
@@ -165,6 +166,7 @@ namespace Ruin.Core
                 next.Defending = false;
                 // A guard lasts until the protector's own next turn begins, for either side.
                 foreach (var ward in All) if (ward.ProtectorId == next.Id) ward.ProtectorId = null;
+                if (next.Player) OnProstheticTurnStart(next);
                 // A monster on a two-round action interval simply passes on its off round.
                 if (!next.Player && !next.Definition.ActsOn(Round))
                 {
@@ -217,11 +219,11 @@ namespace Ruin.Core
             if (actor.SanitySkillsOnly && actor.Form == SkillForm.Basic)
             {
                 var list = actor.Sanity >= 50 ? actor.Definition.TechnicalSkills : actor.Definition.PrimalSkills;
-                if (list != null && list.Length > 0) return list;
+                if (list != null && list.Length > 0) return ProstheticSystem.DecorateSkills(actor, list);
                 var other = actor.Sanity >= 50 ? actor.Definition.PrimalSkills : actor.Definition.TechnicalSkills;
-                if (other != null && other.Length > 0) return other;
+                if (other != null && other.Length > 0) return ProstheticSystem.DecorateSkills(actor, other);
             }
-            return actor.Definition.SkillsFor(actor.Form);
+            return ProstheticSystem.DecorateSkills(actor, actor.Definition.SkillsFor(actor.Form));
         }
 
         public SkillSpec SkillFor(ActorState actor, int index)
@@ -243,6 +245,8 @@ namespace Ruin.Core
             if (skill == null) return "本回合没有这个技能";
             if ((skill.ActorRanks & (1 << Current.Rank)) == 0) return "当前站位无法使用，尝试换位";
             if (Current.UsesLeft(skill) <= 0) return "本场技能次数已用尽";
+            if (skill.OreCost > 0 && (Run.Map == null || Run.Map.Supplies < skill.OreCost))
+                return "矿石不足：需要 " + skill.OreCost + " 矿石";
             if (NeedsTarget(skill) && !Targets(index).Any()) return "没有合法目标";
             return null;
         }
@@ -251,7 +255,24 @@ namespace Ruin.Core
         {
             if (Outcome != BattleOutcome.Active) return "本场战斗已结束";
             if (Current == null || !Current.Player) return "等待敌方行动";
+            if (ProstheticSystem.BlocksActiveMovement(Current))
+                return "桩锚支撑足无法主动移动，只能由队友换位。";
             return SwapTargets().Any() ? null : "没有相邻的存活队员";
+        }
+
+        // Free swaps come from Steam Jet / Steel Wire legs and cost no action. A pile-anchor hero can
+        // still be the target of a teammate's free swap; only initiating is blocked.
+        public IEnumerable<ActorState> FreeSwapTargets()
+        {
+            if (Current == null) return Enumerable.Empty<ActorState>();
+            return ProstheticSystem.FreeSwapTargets(this, Current);
+        }
+
+        public string FreeSwapDisabledReason()
+        {
+            if (Outcome != BattleOutcome.Active) return "本场战斗已结束";
+            if (Current == null || !Current.Player) return "等待敌方行动";
+            return ProstheticSystem.FreeSwapDisabledReason(this, Current);
         }
 
         // Choose skills expose the actors the player may pick as the main target. All skills take no main
@@ -264,16 +285,23 @@ namespace Ruin.Core
             var skill = SkillFor(Current, skillIndex);
             if (skill == null) return Enumerable.Empty<ActorState>();
             var side = skill.Target == TargetSide.Ally ? (IEnumerable<ActorState>)Run.Heroes : Enemies;
-            if (skill.Targeting == SkillTargeting.All) return side.Where(a => !a.Dead).ToList();
+            if (skill.Targeting == SkillTargeting.All)
+            {
+                var sweep = side.Where(a => !a.Dead);
+                if (skill.AllWithinTargetRanks) sweep = sweep.Where(a => a.OccupiesAnyRank(skill.TargetRanks));
+                return sweep.ToList();
+            }
             if (!NeedsTarget(skill)) return Enumerable.Empty<ActorState>();
             return side.Where(a => !a.Dead && a.OccupiesAnyRank(skill.TargetRanks)
-                && (skill.Effect != SkillEffect.Heal || a.Hp < a.Definition.MaxHp || (skill.Cleanse && a.BleedTurns > 0))
+                && (skill.Effect != SkillEffect.Heal || a.Hp < a.MaxHp || (skill.Cleanse && a.BleedTurns > 0))
                 && (skill.Effect != SkillEffect.Protect || a != Current));
         }
 
         public IEnumerable<ActorState> SwapTargets()
         {
             if (Current == null) return Enumerable.Empty<ActorState>();
+            if (ProstheticSystem.BlocksActiveMovement(Current)) return Enumerable.Empty<ActorState>();
+            // The anchor is included here for a teammate who initiates the swap.
             return Run.Heroes.Where(a => !a.Dead && a != Current && Math.Abs(a.Rank - Current.Rank) == 1);
         }
 
@@ -307,6 +335,7 @@ namespace Ruin.Core
                 bool lockedNow = !lockedBefore && target.SanityLocked;
                 Log(note, "sanity", Current.Id, target.Id, 0, 0, lockedNow ? "locked" : null);
             }
+            OnProstheticActionEnd(Current);
             if (!CheckEnd()) Advance();
             return true;
         }
@@ -318,9 +347,43 @@ namespace Ruin.Core
             var actor = Current;
             var target = SwapTargets().FirstOrDefault(a => a.Id == request.TargetId);
             if (target == null) { error = "请选择相邻的高亮队员"; return false; }
-            int rank = actor.Rank; actor.Rank = target.Rank; target.Rank = rank;
+            SwapRanks(actor, target, actor);
             Log(actor.Name + " 与 " + target.Name + " 交换站位。", "move", actor.Id, target.Id);
+            OnProstheticActionEnd(actor);
             if (!CheckEnd()) Advance();
+            return true;
+        }
+
+        // A prosthetic free swap costs no action: the current hero keeps their turn.
+        public bool ExecuteFreeSwap(string targetId, out string error)
+        {
+            error = FreeSwapDisabledReason();
+            if (error != null) return false;
+            var actor = Current;
+            var target = FreeSwapTargets().FirstOrDefault(a => a.Id == targetId);
+            if (target == null) { error = "请选择高亮队友"; return false; }
+            SwapRanks(actor, target, actor);
+            var state = actor.ProstheticBattle;
+            if (state != null)
+            {
+                state.FreeSwapUsed = true;
+                if (ProstheticSystem.Has(actor, ProstheticKind.SteamJetLeg))
+                {
+                    state.SteamSwapAttackBonus = true;
+                    state.SteamSwapVulnerable = true;
+                }
+                if (ProstheticSystem.Has(actor, ProstheticKind.SteelWireLeg))
+                {
+                    state.SteelWireVulnerable = true;
+                    state.SteelWireSourceId = actor.Id;
+                    if (target.ProstheticBattle != null)
+                    {
+                        target.ProstheticBattle.SteelWireVulnerable = true;
+                        target.ProstheticBattle.SteelWireSourceId = actor.Id;
+                    }
+                }
+            }
+            Log(actor.Name + " 借助义体与 " + target.Name + " 换位，不消耗行动。", "move", actor.Id, target.Id);
             return true;
         }
 
@@ -331,17 +394,53 @@ namespace Ruin.Core
             var actor = Current;
             var skill = SkillFor(actor, request.SkillIndex);
             ActorState primary = null;
+            List<ActorState> chosen = null;
             if (NeedsTarget(skill))
             {
-                primary = skill.RandomTarget
-                    ? DrawRandom(Targets(request.SkillIndex).ToArray())
-                    : Targets(request.SkillIndex).FirstOrDefault(a => a.Id == request.TargetId);
-                if (primary == null) { error = "请选择高亮的合法目标"; return false; }
+                if (skill.MaxTargets > 1)
+                {
+                    chosen = ChosenSupportTargets(request, request.SkillIndex, skill);
+                    if (chosen.Count == 0) { error = "请选择至少 1 名合法队友"; return false; }
+                    primary = chosen[0];
+                }
+                else
+                {
+                    primary = skill.RandomTarget
+                        ? DrawRandom(Targets(request.SkillIndex).ToArray())
+                        : Targets(request.SkillIndex).FirstOrDefault(a => a.Id == request.TargetId);
+                    if (primary == null) { error = "请选择高亮的合法目标"; return false; }
+                }
             }
             actor.SpendUse(skill);
-            ResolveSkill(actor, primary, skill);
+            // Ore is spent once the action is committed. A miss does not refund it.
+            if (skill.OreCost > 0 && Run.Map != null)
+                Run.Map.Supplies = Math.Max(0, Run.Map.Supplies - skill.OreCost);
+            ResolveSkill(actor, primary, skill, chosen);
+            OnProstheticActionEnd(actor);
             if (!CheckEnd()) Advance();
             return true;
+        }
+
+        // Double Guard takes up to two allies. The request carries the picks in TargetIds; duplicates and
+        // illegal picks are dropped, and the order the player clicked is kept.
+        private List<ActorState> ChosenSupportTargets(ActionRequest request, int skillIndex, SkillSpec skill)
+        {
+            var legal = Targets(skillIndex).ToList();
+            var result = new List<ActorState>();
+            if (request.TargetIds != null)
+            {
+                for (int i = 0; i < request.TargetIds.Length && result.Count < skill.MaxTargets; i++)
+                {
+                    var target = legal.FirstOrDefault(a => a.Id == request.TargetIds[i]);
+                    if (target != null && !result.Contains(target)) result.Add(target);
+                }
+            }
+            if (result.Count == 0)
+            {
+                var first = legal.FirstOrDefault(a => a.Id == request.TargetId);
+                if (first != null) result.Add(first);
+            }
+            return result;
         }
 
         private ActorState DrawRandom(ActorState[] pool)
@@ -351,28 +450,42 @@ namespace Ruin.Core
             return pool[index];
         }
 
-        private void ResolveSkill(ActorState actor, ActorState primary, SkillSpec skill)
+        private void ResolveSkill(ActorState actor, ActorState primary, SkillSpec skill,
+            IList<ActorState> chosen = null)
         {
             if (skill.SelfMove != 0) MoveSelf(actor, skill.SelfMove);
             ApplyBuffs(actor, actor, skill.SelfGrant, skill);
             if (skill.Effect == SkillEffect.Attack)
             {
-                bool hit = ResolveAttack(actor, primary, skill);
+                int actualDealt;
+                bool hit = ResolveAttack(actor, primary, skill, out actualDealt);
                 ApplyAttackAccessories(actor, skill, hit);
+                AfterProstheticAttack(actor, skill, actualDealt);
+                ApplyPostSelfMove(actor, skill);
                 return;
             }
-            // Healing, guarding and buffs land on the whole sweep without a hit roll.
-            foreach (var target in BuildArea(actor, primary, skill))
-                ApplySupport(actor, target, skill);
+            // Healing, guarding and buffs land on the whole sweep without a hit roll. A multi-pick guard
+            // uses the exact allies the player chose instead of a sweep.
+            if (chosen != null)
+            {
+                foreach (var target in chosen) ApplySupport(actor, target, skill);
+            }
+            else
+            {
+                foreach (var target in BuildArea(actor, primary, skill))
+                    ApplySupport(actor, target, skill);
+            }
             if (skill.Effect == SkillEffect.Heal) ApplyHealAccessories(actor);
             ApplyRider(actor, primary, skill, 0);
         }
 
-        private bool ResolveAttack(ActorState actor, ActorState primary, SkillSpec skill)
+        private bool ResolveAttack(ActorState actor, ActorState primary, SkillSpec skill, out int actualDealt)
         {
+            actualDealt = 0;
             var set = BuildArea(actor, primary, skill);
             var main = primary ?? set.FirstOrDefault();
             if (main == null) return false;
+            if (skill.PerTargetAccuracy) return ResolvePerTargetAttack(actor, primary, set, main, skill, out actualDealt);
 
             // A displaced enemy in the imbalance window cannot dodge the displacement. The window is
             // independent of the skipped action, so it survives the enemy's consumed turn.
@@ -401,7 +514,7 @@ namespace Ruin.Core
                     amount = ReduceForGuard(amount, victim);
                     Log(victim.Name + " 为 " + target.Name + " 挡下攻击。", "guard", victim.Id, target.Id);
                 }
-                Damage(victim, amount, actor.Id);
+                actualDealt += Damage(victim, amount, actor.Id);
                 dealt += amount;
                 if (!victim.Dead) ApplyOnHit(actor, victim, skill, target == main);
                 // A guard only intercepts damage. Position effects still belong to the target the player
@@ -411,6 +524,52 @@ namespace Ruin.Core
             ApplyRider(actor, primary, skill, dealt);
             TryFollowups(actor, main, false);
             return true;
+        }
+
+        // Boiler Shock rolls accuracy and dodge separately per victim. Critical is still one shared roll.
+        // A victim that misses or dodges is skipped; the action counts as a hit if any victim was struck.
+        private bool ResolvePerTargetAttack(ActorState actor, ActorState primary, IList<ActorState> set,
+            ActorState main, SkillSpec skill, out int actualDealt)
+        {
+            actualDealt = 0;
+            bool critical = AccessorySystem.AlwaysCrit(actor) || Roll(actor.Definition.CritChance);
+            Log(actor.Name + " · " + skill.Name + (critical ? " 暴击！" : ""), "action", actor.Id, main.Id);
+            bool anyHit = false;
+            int dealt = 0;
+            foreach (var target in set)
+            {
+                if (target.Dead) continue;
+                bool autoHit = skill.PullToFront && target.ImbalanceAutoHitUntilRound >= Round;
+                if (!autoHit)
+                {
+                    if (!Roll(EffectiveAccuracy(actor, skill)))
+                    {
+                        Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 未命中。", "miss", actor.Id, target.Id);
+                        continue;
+                    }
+                    if (target.Definition.Dodge > 0 && Roll(target.Definition.Dodge))
+                    {
+                        Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 被闪避。", "dodge", actor.Id, target.Id);
+                        continue;
+                    }
+                }
+                int amount = DamageFor(actor, target, skill, main, critical);
+                var victim = GuardedTarget(target);
+                if (victim != target)
+                {
+                    amount = ReduceForGuard(amount, victim);
+                    Log(victim.Name + " 为 " + target.Name + " 挡下攻击。", "guard", victim.Id, target.Id);
+                }
+                actualDealt += Damage(victim, amount, actor.Id);
+                dealt += amount;
+                bool isMain = target == main || skill.AllWithinTargetRanks;
+                if (!victim.Dead) ApplyOnHit(actor, victim, skill, isMain);
+                if (target == main && skill.PullToFront && !target.Dead) TryPull(actor, target, skill);
+                anyHit = true;
+            }
+            ApplyRider(actor, primary, skill, anyHit ? dealt : 0);
+            if (anyHit) TryFollowups(actor, main, false);
+            return anyHit;
         }
 
         // 穿肠弹和成瘾物 both ride on the attack action. The gutter's backlash only lands on a hit; the
@@ -463,7 +622,7 @@ namespace Ruin.Core
             if (actor == null || !actor.Player || actor.Dead || !AccessorySystem.Has(actor, AccessoryKind.Syringe)) return;
             var victim = AccessorySystem.RandomLivingHero(Run, Run.Random);
             if (victim == null) return;
-            int amount = Math.Max(1, (int)Math.Ceiling(victim.Definition.MaxHp * AccessorySystem.SyringeSelfCost - 1e-9));
+            int amount = Math.Max(1, (int)Math.Ceiling(victim.MaxHp * AccessorySystem.SyringeSelfCost - 1e-9));
             Log(actor.Name + " 的献血针筒索取 " + victim.Name + " 的最大生命 " + amount + " 点。", "damage", actor.Id, victim.Id, amount);
             Damage(victim, amount, actor.Id, false, true);
         }
@@ -473,6 +632,9 @@ namespace Ruin.Core
         private IList<ActorState> BuildArea(ActorState actor, ActorState primary, SkillSpec skill)
         {
             var side = skill.Target == TargetSide.Ally ? (IEnumerable<ActorState>)Run.Heroes : Enemies;
+            // A rank-bounded sweep is narrower than a whole-side sweep and takes precedence over it.
+            if (skill.AllWithinTargetRanks)
+                return side.Where(a => !a.Dead && a.OccupiesAnyRank(skill.TargetRanks)).ToList();
             if (skill.Targeting == SkillTargeting.All || skill.Area == SkillArea.Party)
                 return side.Where(a => !a.Dead).ToList();
             var result = new List<ActorState>();
@@ -532,7 +694,9 @@ namespace Ruin.Core
         private int DamageFor(ActorState actor, ActorState target, SkillSpec skill, ActorState main, bool critical)
         {
             double multiplier = skill.Multiplier;
-            if (target != main)
+            // A rank-bounded sweep hits every selected target for the full value; only a real splash
+            // around a single main target decays.
+            if (target != main && !skill.AllWithinTargetRanks)
             {
                 int step = Math.Max(1, Math.Abs(target.Rank - main.Rank));
                 if (skill.Area == SkillArea.Pierce) multiplier = Math.Max(0.1, multiplier - skill.AreaDecay * step);
@@ -542,8 +706,10 @@ namespace Ruin.Core
             double attack = skill.IgnoreLimbPenalty ? actor.Definition.Attack
                 : actor.Definition.Attack * LimbSystem.AttackFactor(actor, Rules.Limbs);
             attack *= AccessorySystem.AttackMultiplier(actor);
-            if (skill.HpMissingDamageScale > 0 && actor.Definition.MaxHp > 0)
-                multiplier += skill.HpMissingDamageScale * Math.Max(0, actor.Definition.MaxHp - actor.Hp) / actor.Definition.MaxHp;
+            if (skill.HpMissingDamageScale > 0 && actor.MaxHp > 0)
+                multiplier += skill.HpMissingDamageScale * Math.Max(0, actor.MaxHp - actor.Hp) / actor.MaxHp;
+            multiplier *= 1 + ProstheticSystem.OutgoingDamageBonus(actor, skill,
+                target == main || skill.AllWithinTargetRanks);
             int value = attack <= 0 || multiplier <= 0 ? 0 : (int)Math.Ceiling(attack * multiplier - 1e-9);
             if (skill.LimbBonusPerStack > 0)
             {
@@ -588,6 +754,17 @@ namespace Ruin.Core
             }
         }
 
+        // Prosthetic bleeds stack without ever weakening what is already there: take the higher damage
+        // value and the longer duration.
+        private void ApplyLingeringBleed(ActorState target, int damage, int turns, string sourceId)
+        {
+            if (target == null || target.Dead || damage <= 0) return;
+            target.BleedDamage = Math.Max(target.BleedDamage, damage);
+            target.BleedTurns = Math.Max(target.BleedTurns, Math.Max(1, turns));
+            Log(target.Name + " 流血 " + target.BleedDamage + " × " + target.BleedTurns + " 次行动。", "bleed",
+                sourceId, target.Id, 0, 0, "流血 " + target.BleedDamage + "×" + target.BleedTurns);
+        }
+
         // The pull roll lives outside ApplyOnHit so a guarded hit cannot move the guard instead of the
         // selected target, and so a failed roll leaves a readable log line.
         private void TryPull(ActorState actor, ActorState target, SkillSpec skill)
@@ -606,16 +783,22 @@ namespace Ruin.Core
         {
             if (skill.Effect == SkillEffect.Heal)
             {
-                int restored = Math.Max(0, Math.Min(SkillValue(actor, skill), target.Definition.MaxHp - target.Hp));
-                target.Hp += restored;
+                int restored = ProstheticSystem.RestoreHp(target, SkillValue(actor, skill));
                 if (skill.Cleanse) target.BleedTurns = 0;
                 Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 恢复 " + restored + (skill.Cleanse ? "，清除流血。" : "。"), "heal", actor.Id, target.Id, restored);
                 if (skill.Bleed > 0 && (skill.BleedChance <= 0 || Roll(skill.BleedChance)))
                 {
-                    target.BleedDamage = skill.Bleed;
-                    target.BleedTurns = Math.Max(1, skill.BleedTurns);
-                    Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed",
-                        actor.Id, target.Id, 0, 0, "流血 " + target.BleedDamage + "×" + target.BleedTurns);
+                    // Boiling Mist's bleed is deliberately weaker than the medic's usual 3/4, so it must
+                    // never replace a stronger bleed already on the target.
+                    if (skill.Id == "m_boiling_mist")
+                        ApplyLingeringBleed(target, skill.Bleed, skill.BleedTurns, actor.Id);
+                    else
+                    {
+                        target.BleedDamage = skill.Bleed;
+                        target.BleedTurns = Math.Max(1, skill.BleedTurns);
+                        Log(target.Name + " 流血 " + skill.Bleed + " × " + target.BleedTurns + " 次行动。", "bleed",
+                            actor.Id, target.Id, 0, 0, "流血 " + target.BleedDamage + "×" + target.BleedTurns);
+                    }
                 }
                 return;
             }
@@ -625,6 +808,8 @@ namespace Ruin.Core
                 // The reduction belongs to the guarding actor, not the ward, and only ever applies to a
                 // hit it intercepts. The elite tank keeps 25%; everyone else keeps zero.
                 actor.GuardReduction = Math.Max(0, skill.GuardReduction);
+                if (skill.MultiGuard && actor.ProstheticBattle != null)
+                    actor.ProstheticBattle.DoubleGuardActive = true;
                 Log(actor.Name + " 守护 " + target.Name + "，持续到自身下次行动。", "guard", actor.Id, target.Id);
             }
             else if (skill.Cleanse)
@@ -699,8 +884,7 @@ namespace Ruin.Core
                 var target = targets[i];
                 if (target.Dead) continue;
                 int amount = i == 0 ? main : (int)Math.Ceiling(main * rider.SpreadRatio - 1e-9);
-                int restored = Math.Max(0, Math.Min(amount, target.Definition.MaxHp - target.Hp));
-                target.Hp += restored;
+                int restored = ProstheticSystem.RestoreHp(target, amount);
                 Log(actor.Name + " · " + skill.Name + " → " + target.Name + " 恢复 " + restored + "。", "heal", actor.Id, target.Id, restored);
             }
         }
@@ -736,8 +920,15 @@ namespace Ruin.Core
             // 殉道锁链 adds another 50% to whatever share the guard already absorbs.
             if (AccessorySystem.Has(guard, AccessoryKind.MartyrChain))
                 reduction = 1 - (1 - reduction) * (1 - AccessorySystem.MartyrGuardReduction);
-            if (reduction <= 0) return amount;
-            return Math.Max(1, (int)Math.Ceiling(amount * (1 - reduction) - 1e-9));
+            // Double Guard raises the share the shield actually absorbs by 25%. This is a multiplier on
+            // the intercepted damage, separate from the guard's own reduction.
+            double intercept = ProstheticSystem.GuardInterceptMultiplier(guard);
+            if (intercept == 1.0)
+            {
+                if (reduction <= 0) return amount;
+                return Math.Max(1, (int)Math.Ceiling(amount * (1 - reduction) - 1e-9));
+            }
+            return Math.Max(1, (int)Math.Ceiling(amount * Math.Max(0, 1 - reduction) * intercept - 1e-9));
         }
 
         private bool ConsumeBlock(ActorState target)
@@ -751,20 +942,166 @@ namespace Ruin.Core
         {
             if (bearer == null || attacker == null || bearer.Dead || attacker.Dead || !bearer.Counter) return;
             bearer.Counter = false;
-            int amount = (int)Math.Ceiling(bearer.Definition.Attack * Rules.CounterRatio - 1e-9);
+            int amount = (int)Math.Ceiling(bearer.Definition.Attack * Rules.CounterRatio
+                * ProstheticSystem.CounterMultiplier(bearer) - 1e-9);
             Log(bearer.Name + " 反击 " + attacker.Name + "。", "action", bearer.Id, attacker.Id);
             Damage(attacker, amount, bearer.Id);
+            // The flywheel only doubles the counter; every actual counter then takes 8% of max life.
+            if (ProstheticSystem.Has(bearer, ProstheticKind.VengeanceFlywheelArm))
+                PayLife(bearer, Math.Max(1, (int)Math.Ceiling(bearer.MaxHp * 0.08 - 1e-9)), "复仇飞轮臂");
             TryFollowups(bearer, attacker, false);
+        }
+
+        // ---------------- prosthetic lifecycle ----------------
+
+        // Round-scoped prosthetic flags expire when the wearer's own turn begins. The steel-wire
+        // vulnerability belongs to the caster's turn, so it clears on every actor the caster marked.
+        private void OnProstheticTurnStart(ActorState actor)
+        {
+            if (actor == null) return;
+            var state = actor.ProstheticBattle;
+            if (state == null) return;
+            state.FreeSwapUsed = false;
+            state.SteamSwapAttackBonus = false;
+            state.RankChangedThisAction = false;
+            state.SteamSwapVulnerable = false;
+            state.BoilerVulnerable = false;
+            state.DoubleGuardActive = false;
+
+            foreach (var hero in Run.Heroes)
+            {
+                var other = hero.ProstheticBattle;
+                if (other == null) continue;
+                if (other.SteelWireVulnerable && other.SteelWireSourceId == actor.Id)
+                    other.SteelWireVulnerable = false;
+                // Defensive cleanup: a wire whose user died must not leave a permanent vulnerability.
+                if (other.SteelWireVulnerable && !string.IsNullOrEmpty(other.SteelWireSourceId)
+                    && !Run.Heroes.Any(h => h.Id == other.SteelWireSourceId && !h.Dead))
+                    other.SteelWireVulnerable = false;
+            }
+        }
+
+        // Runs once after the hero's action resolves, before the turn advances.
+        private void OnProstheticActionEnd(ActorState actor)
+        {
+            if (actor == null || actor.Dead) return;
+            if (ProstheticSystem.Has(actor, ProstheticKind.CondensationHead))
+                ChangeSanity(actor, 8, "冷凝镇静颅");
+            var state = actor.ProstheticBattle;
+            if (ProstheticSystem.Has(actor, ProstheticKind.BedframeLeg)
+                && state != null && !state.RankChangedThisAction)
+            {
+                int restored = ProstheticSystem.RestoreHp(actor,
+                    Math.Max(1, (int)Math.Ceiling(actor.MaxHp * 0.05 - 1e-9)));
+                if (restored > 0)
+                    Log(actor.Name + " 的驻床支撑架恢复 " + restored + " 点生命。", "heal", actor.Id, actor.Id, restored);
+            }
+        }
+
+        // Self-costs and on-hit prosthetic effects ride on an active attack skill only.
+        private void AfterProstheticAttack(ActorState actor, SkillSpec skill, int actualDealt)
+        {
+            if (actor == null || actor.Dead || skill == null || skill.Effect != SkillEffect.Attack) return;
+            // Detonation Stroke pays whether the attack hit or missed, and always leaves at least 1 HP.
+            if (ProstheticSystem.Has(actor, ProstheticKind.DetonationStrokeArm))
+                PayLife(actor, Math.Max(1, (int)Math.Ceiling(actor.MaxHp * 0.15 - 1e-9)), "爆燃冲程臂");
+
+            var state = actor.ProstheticBattle;
+            if (state != null)
+            {
+                if (state.GyroCharged) state.GyroCharged = false;
+                if (skill.Id == "w_boiler_shock" && ProstheticSystem.Has(actor, ProstheticKind.SteamCityHammerArm))
+                    state.BoilerVulnerable = true;
+            }
+            if (actualDealt <= 0) return;
+            if (ProstheticSystem.Has(actor, ProstheticKind.RedlineSteamHeart))
+            {
+                int restored = ProstheticSystem.RestoreHp(actor,
+                    Math.Max(1, (int)Math.Ceiling(actor.MaxHp * 0.10 - 1e-9)));
+                if (restored > 0)
+                    Log(actor.Name + " 的红线蒸汽心恢复 " + restored + " 点生命。", "heal", actor.Id, actor.Id, restored);
+                ChangeSanity(actor, -8, "红线蒸汽心");
+            }
+            if (ProstheticSystem.Has(actor, ProstheticKind.LeechReturnArm))
+            {
+                int restored = ProstheticSystem.RestoreHp(actor,
+                    Math.Max(1, (int)Math.Ceiling(actor.MaxHp * 0.15 - 1e-9)));
+                if (restored > 0)
+                    Log(actor.Name + " 的刺吸回流臂恢复 " + restored + " 点生命。", "heal", actor.Id, actor.Id, restored);
+                ApplyLingeringBleed(actor, ProstheticSystem.SelfBleedDamage, ProstheticSystem.SelfBleedTurns, actor.Id);
+            }
+        }
+
+        // Direct, self-inflicted health cost. Bypasses defence, guard and vulnerability; leaves 1 HP.
+        private void PayLife(ActorState actor, int amount, string reason)
+        {
+            if (actor == null || actor.Dead || amount <= 0) return;
+            int paid = Math.Min(amount, Math.Max(0, actor.Hp - 1));
+            if (paid <= 0) return;
+            Damage(actor, paid, actor.Id, false, true, true);
+            Log(actor.Name + " 的" + reason + "索取 " + paid + " 点生命。", "damage", actor.Id, actor.Id, paid);
+        }
+
+        private void NoteRankChanged(ActorState actor, bool ownAction)
+        {
+            if (actor == null || actor.Dead) return;
+            var state = actor.ProstheticBattle;
+            if (ProstheticSystem.Has(actor, ProstheticKind.GyroChargeArm) && state != null)
+                state.GyroCharged = true;
+            if (ProstheticSystem.Has(actor, ProstheticKind.BedframeLeg))
+                ChangeSanity(actor, -5, "驻床支撑架");
+            if (ownAction && state != null) state.RankChangedThisAction = true;
+        }
+
+        // Single place for every rank exchange so gyro charging and the bedframe sanity cost always fire.
+        private void SwapRanks(ActorState a, ActorState b, ActorState initiator)
+        {
+            if (a == null || b == null) return;
+            int rank = a.Rank; a.Rank = b.Rank; b.Rank = rank;
+            NoteRankChanged(a, a == initiator);
+            NoteRankChanged(b, b == initiator);
         }
 
         private void MoveSelf(ActorState actor, int delta)
         {
-            int destination = actor.Rank + delta;
+            if (actor == null || actor.Dead || delta == 0) return;
+            // A pile anchor refuses every active move; attacks that move the caster resolve in place.
+            if (ProstheticSystem.BlocksActiveMovement(actor))
+            {
+                Log(actor.Name + " 的桩锚支撑足钉住原地，移动未执行。", "move", actor.Id);
+                return;
+            }
+            int step = Math.Sign(delta);
+            int remaining = Math.Abs(delta);
+            bool moved = false;
+            while (remaining-- > 0)
+            {
+                int destination = actor.Rank + step;
+                if (destination < 0 || destination > 3) break;
+                var occupant = Run.Heroes.FirstOrDefault(h => !h.Dead && h != actor && h.Rank == destination);
+                if (occupant != null) SwapRanks(actor, occupant, actor);
+                else { actor.Rank = destination; NoteRankChanged(actor, true); }
+                moved = true;
+            }
+            if (moved) Log(actor.Name + " 移动到 " + (actor.Rank + 1) + " 号位。", "move", actor.Id);
+        }
+
+        // Whaling Anchor's forward step. It is independent of whether the shot hit or the pull worked.
+        private void ApplyPostSelfMove(ActorState actor, SkillSpec skill)
+        {
+            if (actor == null || actor.Dead || skill == null || skill.PostSelfMove == 0) return;
+            if (ProstheticSystem.BlocksActiveMovement(actor)) return;
+            int destination = actor.Rank + skill.PostSelfMove;
             if (destination < 0 || destination > 3) return;
             var occupant = Run.Heroes.FirstOrDefault(h => !h.Dead && h != actor && h.Rank == destination);
-            if (occupant != null) occupant.Rank = actor.Rank;
-            actor.Rank = destination;
-            Log(actor.Name + " 移动到 " + (destination + 1) + " 号位。", "move", actor.Id);
+            if (occupant == null)
+            {
+                if (skill.PostSelfMoveRequiresAlly) return;
+                actor.Rank = destination;
+                NoteRankChanged(actor, true);
+            }
+            else SwapRanks(actor, occupant, actor);
+            Log(actor.Name + " 用后移动到 " + (actor.Rank + 1) + " 号位。", "move", actor.Id);
         }
 
         private void PullToFront(ActorState enemy)
@@ -795,7 +1132,9 @@ namespace Ruin.Core
             if (actor == null || skill == null) return 0;
             double value = SanityProbability.Clamp(actor.Definition.Accuracy * LimbSystem.AccuracyFactor(actor, Rules.Limbs)
                 + (skill.Accuracy - Rules.SkillAccuracyBaseline)
-                + actor.AccuracyBuff, 0, 1);
+                + actor.AccuracyBuff
+                // Prosthetic accuracy is authored in percentage points.
+                + ProstheticSystem.AccuracyOffset(actor), 0, 1);
             // 穿肠弹 raises accuracy to a floor, not to a fixed value.
             return Math.Max(value, AccessorySystem.AccuracyFloor(actor));
         }
@@ -832,8 +1171,12 @@ namespace Ruin.Core
         public int SkillValue(ActorState actor, SkillSpec skill)
         {
             double multiplier = skill.Multiplier;
-            if (skill.Effect == SkillEffect.Attack) multiplier *= AccessorySystem.AttackMultiplier(actor);
-            else if (skill.Effect == SkillEffect.Heal) multiplier *= AccessorySystem.HealMultiplier(actor);
+            if (skill.Effect == SkillEffect.Attack)
+                multiplier *= AccessorySystem.AttackMultiplier(actor)
+                    * (1 + ProstheticSystem.OutgoingDamageBonus(actor, skill, true));
+            else if (skill.Effect == SkillEffect.Heal)
+                multiplier *= AccessorySystem.HealMultiplier(actor)
+                    * (1 + ProstheticSystem.CasterHealBonus(actor, skill));
             return Scale(actor.Definition.Attack, multiplier * LimbSystem.AttackFactor(actor, Rules.Limbs));
         }
 
@@ -1173,10 +1516,10 @@ namespace Ruin.Core
             }
             var heal = FirstUsableSkill(enemy, SkillEffect.Heal);
             if (heal == null) { Wait(enemy); return; }
-            var candidates = Enemies.Where(e => e != enemy && !e.Dead && e.Hp < e.Definition.MaxHp).ToArray();
+            var candidates = Enemies.Where(e => e != enemy && !e.Dead && e.Hp < e.MaxHp).ToArray();
             if (candidates.Length == 0) { Wait(enemy); return; }
-            int most = candidates.Max(e => e.Definition.MaxHp - e.Hp);
-            var tied = candidates.Where(e => e.Definition.MaxHp - e.Hp == most).ToArray();
+            int most = candidates.Max(e => e.MaxHp - e.Hp);
+            var tied = candidates.Where(e => e.MaxHp - e.Hp == most).ToArray();
             var target = DrawRandom(tied);
             Log(enemy.Name + " · " + heal.Name, "action", enemy.Id, target.Id);
             ApplySupport(enemy, target, heal);
@@ -1272,10 +1615,10 @@ namespace Ruin.Core
 
         private void UseEnemyHeal(ActorState enemy, SkillSpec skill)
         {
-            var candidates = Enemies.Where(e => e != enemy && !e.Dead && e.Hp < e.Definition.MaxHp).ToArray();
+            var candidates = Enemies.Where(e => e != enemy && !e.Dead && e.Hp < e.MaxHp).ToArray();
             if (candidates.Length == 0) { Wait(enemy); return; }
-            int most = candidates.Max(e => e.Definition.MaxHp - e.Hp);
-            var tied = candidates.Where(e => e.Definition.MaxHp - e.Hp == most).ToArray();
+            int most = candidates.Max(e => e.MaxHp - e.Hp);
+            var tied = candidates.Where(e => e.MaxHp - e.Hp == most).ToArray();
             var target = DrawRandom(tied);
             Log(enemy.Name + " · " + skill.Name, "action", enemy.Id, target.Id);
             ApplySupport(enemy, target, skill);
@@ -1366,8 +1709,8 @@ namespace Ruin.Core
             }
             if (count == 1 && skill.TargetRule == EnemyTargetRule.LowestHp)
             {
-                double lowest = pool.Min(a => (double)a.Hp / Math.Max(1, a.Definition.MaxHp));
-                var tied = pool.Where(a => (double)a.Hp / Math.Max(1, a.Definition.MaxHp) == lowest).ToArray();
+                double lowest = pool.Min(a => (double)a.Hp / Math.Max(1, a.MaxHp));
+                var tied = pool.Where(a => (double)a.Hp / Math.Max(1, a.MaxHp) == lowest).ToArray();
                 return new[] { DrawRandom(tied) };
             }
             if (count >= pool.Length) return pool.OrderBy(a => a.Rank).ToArray();
@@ -1650,7 +1993,15 @@ namespace Ruin.Core
                 if (actor.Defending) reduced *= 0.5;
                 if (actor.SelfVulnerable > 0) reduced *= 1 + actor.SelfVulnerable;
                 reduced *= AccessorySystem.DamageTakenFactor(actor);
+                // Prosthetic and accessory factors are separate multipliers, while prosthetic shares add
+                // up among themselves inside DamageTakenFactor.
+                reduced *= ProstheticSystem.DamageTakenFactor(actor);
                 actual = Math.Max(1, (int)Math.Ceiling(reduced - 1e-9));
+            }
+            else if (bleeding)
+            {
+                // Bleed bypasses defence and accessories, but Double Pump deliberately doubles it.
+                actual = Math.Max(1, (int)Math.Ceiling(amount * ProstheticSystem.BleedTakenFactor(actor) - 1e-9));
             }
             bool alreadyDying = actor.DeathDoor;
 
@@ -1696,7 +2047,7 @@ namespace Ruin.Core
                 var part = AccessorySystem.RandomPart(Run.Random, actor, true);
                 var limb = LimbSystem.Get(actor, part);
                 if (limb != null) LimbSystem.Damage(actor, part, limb.Hp);
-                actor.Hp = Math.Max(1, (int)Math.Ceiling(actor.Definition.MaxHp * AccessorySystem.MartyrRestore - 1e-9));
+                actor.Hp = Math.Max(1, (int)Math.Ceiling(actor.MaxHp * AccessorySystem.MartyrRestore - 1e-9));
                 Log(actor.Name + " 的殉道锁链消耗" + LimbSystem.PartName(part) + "，恢复 " + actor.Hp + " 点生命。",
                     "heal", null, actor.Id, actor.Hp);
                 ChangeSanity(actor, -AccessorySystem.MartyrSanityLoss, "殉道锁链");
@@ -1739,7 +2090,7 @@ namespace Ruin.Core
             var state = actor.AccessoryBattle;
             if (state == null) return;
             state.RustDamageAccum += actual;
-            int threshold = Math.Max(1, (int)Math.Ceiling(actor.Definition.MaxHp * AccessorySystem.RustThreshold - 1e-9));
+            int threshold = Math.Max(1, (int)Math.Ceiling(actor.MaxHp * AccessorySystem.RustThreshold - 1e-9));
             while (state.RustDamageAccum >= threshold)
             {
                 state.RustDamageAccum -= threshold;
@@ -1790,7 +2141,7 @@ namespace Ruin.Core
         {
             foreach (var boss in Enemies.Where(e => !e.Dead && e.Definition.BossHealOnHeroDeath > 0).ToArray())
             {
-                int restored = Math.Min(boss.Definition.BossHealOnHeroDeath, boss.Definition.MaxHp - boss.Hp);
+                int restored = Math.Min(boss.Definition.BossHealOnHeroDeath, boss.MaxHp - boss.Hp);
                 if (restored <= 0) continue;
                 boss.Hp += restored;
                 Log(boss.Name + " 吸收死亡，恢复 " + restored + " 点生命。", "heal", null, boss.Id, restored);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -159,7 +159,7 @@ namespace Ruin.Runtime
             {
                 if (actor == null) continue;
                 sb.AppendLine("[" + (actor.Player ? "英雄" : "敌人") + "] " + actor.Name + " (" + actor.Id + ")");
-                sb.AppendLine("  HP " + actor.Hp + "/" + (actor.Definition == null ? 0 : actor.Definition.MaxHp)
+                sb.AppendLine("  HP " + actor.Hp + "/" + actor.MaxHp
                     + (actor.Dead ? " 已死亡" : actor.DeathDoor ? " 濒死" : "")
                     + "  理智 " + actor.Sanity.ToString("0.#") + "  形态 " + actor.Form
                     + "  站位 " + (actor.Rank + 1) + "×" + actor.Width);

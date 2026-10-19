@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Ruin.Core;
@@ -141,7 +141,11 @@ namespace Ruin.Runtime
                 else
                 {
                     GUILayout.Label("倍率 " + skill.Multiplier.ToString("0.##") + " · 命中 " + skill.Accuracy.ToString("0.##")
-                        + " · 范围 " + skill.Area + (skill.Targeting == SkillTargeting.All ? " · 全体" : ""), BattleLabUi.Hint);
+                        + " · 范围 " + skill.Area + (skill.Targeting == SkillTargeting.All ? " · 全体" : "")
+                        + (skill.OreCost > 0
+                            ? " · 耗 " + skill.OreCost + " 矿石（当前 "
+                                + (battle.Run.Map == null ? 0 : battle.Run.Map.Supplies) + "）"
+                            : ""), BattleLabUi.Hint);
                 }
                 GUILayout.EndHorizontal();
                 if (!string.IsNullOrEmpty(skill.Description))
@@ -164,7 +168,7 @@ namespace Ruin.Runtime
                     }
                     else
                     {
-                        var labels = targets.Select(a => a.Name + " [" + a.Hp + "/" + a.Definition.MaxHp + "] " + (a.Player ? "我" : "敌")).ToArray();
+                        var labels = targets.Select(a => a.Name + " [" + a.Hp + "/" + a.MaxHp + "] " + (a.Player ? "我" : "敌")).ToArray();
                         int selected = targets.FindIndex(a => a.Id == Ui.SelectedTargetId);
                         int next = BattleLabUi.SelectionGrid(selected, labels, Mathf.Min(4, labels.Length));
                         if (next >= 0 && next < targets.Count) Ui.SelectedTargetId = targets[next].Id;
@@ -214,7 +218,7 @@ namespace Ruin.Runtime
                 if (Ui.ConsumableTargetId == null && livingHeroes.Count > 0) Ui.ConsumableTargetId = current.Id;
                 if (livingHeroes.Count > 0)
                 {
-                    var heroLabels = livingHeroes.Select(a => a.Name + " [" + a.Hp + "/" + a.Definition.MaxHp + " 理智 " + a.Sanity.ToString("0.#") + "]").ToArray();
+                    var heroLabels = livingHeroes.Select(a => a.Name + " [" + a.Hp + "/" + a.MaxHp + " 理智 " + a.Sanity.ToString("0.#") + "]").ToArray();
                     int selected = livingHeroes.FindIndex(a => a.Id == Ui.ConsumableTargetId);
                     int next = BattleLabUi.SelectionGrid(selected, heroLabels, Mathf.Min(4, heroLabels.Length));
                     if (next >= 0 && next < livingHeroes.Count) Ui.ConsumableTargetId = livingHeroes[next].Id;
@@ -270,7 +274,7 @@ namespace Ruin.Runtime
                 // Sanity and form are hero-only; enemies are always constructed with Sanity = 0 and never
                 // change form, so showing them here only invites confusion.
                 GUILayout.Label("R" + (actor.Rank + 1) + (actor.Width > 1 ? "-" + (actor.Rank + actor.Width) : "")
-                    + " · HP " + actor.Hp + "/" + actor.Definition.MaxHp
+                    + " · HP " + actor.Hp + "/" + actor.MaxHp
                     + (actor.Dead ? " · 死亡" : actor.DeathDoor ? " · 死门" : "")
                     + (actor.Player ? " · 理智 " + actor.Sanity.ToString("0.#") + " · 形态 " + actor.Form : ""),
                     BattleLabUi.Body);

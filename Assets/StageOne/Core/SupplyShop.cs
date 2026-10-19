@@ -29,7 +29,9 @@ namespace Ruin.Core
         {
             var products=new List<ShopProduct>();
             foreach(var item in LimbSystem.Resolve(rules).Prosthetics)
-                products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+" 仅断肢可安装；在补给站安装另需 "+InstallPrice+" 矿石。",Category=ShopCategory.Prosthetic,Price=ProstheticPrice,Prosthetic=item});
+                products.Add(new ShopProduct {Id=item.Id,Name=item.Name,
+                    Description=item.Description+Restriction(item)+" 仅断肢可安装；在补给站安装另需 "+InstallPrice+" 矿石。",
+                    Category=ShopCategory.Prosthetic,Price=ProstheticPrice,Prosthetic=item});
             foreach(var item in AccessorySystem.Defaults)
                 products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+Restriction(item),Category=ShopCategory.Accessory,Price=AccessoryPrice,Accessory=item});
             foreach(var item in ConsumableSystem.Defaults)
@@ -51,6 +53,12 @@ namespace Ruin.Core
                 default: return "";
             }
         }
+        // Shared wording with LimbSystem.InstallBlockedReason, so the shop and the install button agree.
+        static string Restriction(ProstheticSpec item)
+        {
+            var text=ProstheticSystem.RestrictionText(item);
+            return string.IsNullOrEmpty(text)?"":" "+text;
+        }
         public static int Owned(RunState run, ShopProduct product)
         {
             if(product.Prosthetic!=null) return run.Prosthetics.Count(p=>p.Id==product.Id);
@@ -66,8 +74,7 @@ namespace Ruin.Core
             if(run.Map.Supplies<product.Price) { note="矿石不足。"; return false; }
             if(product.Prosthetic!=null)
             {
-                var p=product.Prosthetic;
-                run.Prosthetics.Add(new ProstheticSpec(p.Id,p.Name,p.Part,p.Description));
+                run.Prosthetics.Add(LimbSystem.Clone(product.Prosthetic));
             }
             else if(product.Accessory!=null) run.AccessoryStock.Add(AccessorySystem.Clone(product.Accessory));
             else run.Consumables.Add(ConsumableSystem.Clone(product.Consumable));

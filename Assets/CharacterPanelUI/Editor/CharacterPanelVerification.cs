@@ -95,7 +95,7 @@ namespace GameMake.CharacterEditor
             Capture("Map-Character-Empty");
             Pass("four map portraits open matching hero; map anchored left; battle portraits reduced 12%; modal blocks map input and empty inventory");
 
-            app.Run.Prosthetics.AddRange(LimbSystem.DefaultProsthetics);
+            foreach(var p in LimbSystem.DefaultProsthetics) app.Run.Prosthetics.Add(LimbSystem.Clone(p));
             for(int i=0;i<4;i++)
             {
                 var limb=LimbSystem.Get(hero,(LimbPart)i); limb.Hp=0;
@@ -106,8 +106,9 @@ namespace GameMake.CharacterEditor
             Check(hover.Plus.activeSelf,"Hover does not show install plus");
             RaycastClick(view.LimbButtons[2]); Capture("Map-Character-Limb-Hover");
             ExecuteEvents.Execute(hover.gameObject,new PointerEventData(EventSystem.current),ExecuteEvents.pointerExitHandler);
+            int beforeInstall=app.Run.Prosthetics.Count;
             RaycastClick(ActiveButton(view.PickerItems,"装载"));
-            Check(LimbSystem.Get(hero,LimbPart.Arm).ProstheticFitted && app.Run.Prosthetics.Count==3 && view.LimbImages[2].sprite==view.Healthy[2],"Prosthetic does not consume stock or restore arm/icon");
+            Check(LimbSystem.Get(hero,LimbPart.Arm).ProstheticFitted && app.Run.Prosthetics.Count==beforeInstall-1 && view.LimbImages[2].sprite==view.Healthy[2],"Prosthetic does not consume stock or restore arm/icon");
             int stock=app.Run.Prosthetics.Count; app.CharacterInstallProsthetic("prosthetic_arm"); Check(stock==app.Run.Prosthetics.Count,"Repeated installation consumes another item");
             var leg=LimbSystem.Get(hero,LimbPart.Leg); leg.Hp=Mathf.Max(1,leg.MaxHp/2); app.Refresh();
             app.CharacterInstallProsthetic("prosthetic_leg"); Check(app.Run.Prosthetics.Count==stock && !leg.ProstheticFitted,"Injured flesh accepted prosthetic");

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using Ruin.Core;
 using Ruin.Runtime;
@@ -72,7 +72,7 @@ namespace GameMake.CharacterUI
             FullBodyImage.enabled=FullBodyImage.sprite; FullBodyPlaceholder.gameObject.SetActive(!FullBodyImage.sprite);
             FullBodyName.text=hero.Name;
             if(opening) BeginEntrance();
-            Vitals.text="生命  "+hero.Hp+" / "+hero.Definition.MaxHp+"       理智  "+hero.Sanity.ToString("0")+" / 100"+(hero.Dead?"       已阵亡":"");
+            Vitals.text="生命  "+hero.Hp+" / "+hero.MaxHp+"       理智  "+hero.Sanity.ToString("0")+" / 100"+(hero.Dead?"       已阵亡":"");
             Notice.text=Source.CanManageCharacter ? (Source.AwaitingNode?"选择部位安装义体 · 点击药品使用 · 点击空框装备饰品":"我方行动中 · 使用药品消耗本次行动") : "当前仅可查看，等待我方行动后可操作";
             for(int i=0;i<4;i++)
             {
@@ -163,8 +163,10 @@ namespace GameMake.CharacterUI
                 foreach(var item in Source.Run.Prosthetics.Where(p=>p!=null && p.Part==part).GroupBy(p=>p.Id).Select(g=>g.First()))
                 {
                     string id=item.Id;
-                    string blocked=hero.Dead?"角色已阵亡":!Source.CanManageCharacter?"等待我方行动":!LimbSystem.CanInstall(hero,item)?"仅断肢可安装":null;
-                    PickerRow(rows++,item.Name,item.Description,blocked??"装载",blocked==null,()=>Source.CharacterInstallProsthetic(id));
+                    string restriction=ProstheticSystem.RestrictionText(item);
+                    string description=item.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction);
+                    string blocked=hero.Dead?"角色已阵亡":!Source.CanManageCharacter?"等待我方行动":LimbSystem.InstallBlockedReason(hero,item);
+                    PickerRow(rows++,item.Name,description,blocked??"装载",blocked==null,()=>Source.CharacterInstallProsthetic(id));
                 }
                 if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n只有断肢可安装义体。");
             }

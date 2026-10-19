@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -132,7 +132,7 @@ namespace GameMake.GothicHUD
 
         // ---- input, routed straight into the existing app commands ----
         private void SelectSkill(int index) { if (BattleSource) BattleSource.SelectSkill(index); }
-        private void SelectSwap() { if (BattleSource) BattleSource.SelectSwap(); }
+        private void SelectSwap() { if (BattleSource) BattleSource.RequestConfirmOrSwap(); }
         private void SelectCard(GothicBattleCard card)
         {
             if (BattleSource && card && !string.IsNullOrEmpty(card.ActorId)) BattleSource.SelectActor(card.ActorId);
@@ -178,7 +178,7 @@ namespace GameMake.GothicHUD
                 target.Name = source.Name;
                 target.Subtitle = source.Definition.Subtitle;
                 target.Health = source.Hp;
-                target.MaxHealth = Mathf.Max(1, source.Definition.MaxHp);
+                target.MaxHealth = Mathf.Max(1, source.MaxHp);
                 target.Sanity = (float)source.Sanity;
                 if (target.Limbs == null) continue;
                 for (int p = 0; p < target.Limbs.Length && p < 4; p++)
@@ -249,7 +249,14 @@ namespace GameMake.GothicHUD
             }
 
             var swap = Presentation ? Presentation.DisplacementButton : null;
-            if (swap) swap.interactable = battle.SwapDisabledReason() == null && !app.Busy;
+            if (swap)
+            {
+                // The same button confirms an armed multi-pick skill, so it stays live in that state too.
+                bool confirmReady = app.PendingSkill.HasValue && app.PendingTargets.Count > 0;
+                swap.interactable = !app.Busy && (confirmReady
+                    || battle.FreeSwapDisabledReason() == null
+                    || battle.SwapDisabledReason() == null);
+            }
 
             if (!Panel.DescriptionTitle || !Panel.DescriptionBody) return;
             if (app.InspectedSkill.HasValue && app.InspectedSkill.Value < skills.Length)
@@ -257,6 +264,11 @@ namespace GameMake.GothicHUD
                 var skill = skills[app.InspectedSkill.Value];
                 Panel.DescriptionTitle.text = skill.Name;
                 Panel.DescriptionBody.text = Detail(app, battle, battle.Current, skill) + "\n\n" + (app.Hint ?? "");
+            }
+            else if (app.PendingFreeSwap)
+            {
+                Panel.DescriptionTitle.text = "义体换位";
+                Panel.DescriptionBody.text = "借助喷汽突进腿或钢索巡游腿与队友换位，不消耗本次行动。\n\n" + (app.Hint ?? "");
             }
             else if (app.PendingSwap)
             {
@@ -288,8 +300,12 @@ namespace GameMake.GothicHUD
         private static string Detail(StageOneApp app, BattleEngine battle, ActorState actor, SkillSpec skill)
         {
             string count = skill.Uses > 0 ? " · 剩" + actor.UsesLeft(skill) + "次" : "";
+            string ore = skill.OreCost > 0
+                ? "耗" + skill.OreCost + "矿石（当前" + (battle.Run.Map == null ? 0 : battle.Run.Map.Supplies) + "）"
+                : "";
             string value = skill.Effect == SkillEffect.Attack ? "伤害 " + battle.SkillValue(actor, skill) + " · "
                 : skill.Effect == SkillEffect.Heal ? "恢复 " + battle.SkillValue(actor, skill) + " · " : "";
+            value += ore;
             // The first description line holds the position/target symbols and has to stay alone.
             // Put the live value and remaining uses on the effect line instead.
             int split = skill.Description.IndexOf('\n');
@@ -301,7 +317,8 @@ namespace GameMake.GothicHUD
         private void SyncStage(StageOneApp app, BattleEngine battle)
         {
             var possible = new HashSet<string>();
-            if (app.PendingSwap) foreach (var target in battle.SwapTargets()) possible.Add(target.Id);
+            if (app.PendingFreeSwap) foreach (var target in battle.FreeSwapTargets()) possible.Add(target.Id);
+            else if (app.PendingSwap) foreach (var target in battle.SwapTargets()) possible.Add(target.Id);
             else if (app.PendingSkill.HasValue) foreach (var target in battle.Targets(app.PendingSkill.Value)) possible.Add(target.Id);
 
             for (int rank = 0; rank < Allies.Length; rank++)

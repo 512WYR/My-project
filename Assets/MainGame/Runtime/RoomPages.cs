@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Ruin.Core;
@@ -12,7 +12,9 @@ namespace Ruin.Runtime
     {
         public int Section;
         public int Hero = -1;
-        public void Reset() { Section = 0; Hero = -1; }
+        // Which severed limb the prosthetic list is open for. Only meaningful in section 3.
+        public LimbPart? Part;
+        public void Reset() { Section = 0; Hero = -1; Part = null; }
     }
 
     public sealed class RoomPageChoice
@@ -132,6 +134,7 @@ namespace Ruin.Runtime
             {
                 case 1: return SupplyHeroes(app, context);
                 case 2: return SupplyLimbs(app, context);
+                case 3: return SupplyLimbItems(app, context);
                 default: return SupplyMain(app, context);
             }
         }
@@ -152,7 +155,7 @@ namespace Ruin.Runtime
                 + "   ·   静养 " + (app.Map.SupplyCalmed ? "已使用" : "可用")
                 + "\n" + StockText(app);
 
-            bool anyWounded = app.Run.Heroes.Any(h => h != null && !h.Dead && h.Hp < h.Definition.MaxHp);
+            bool anyWounded = app.Run.Heroes.Any(h => h != null && !h.Dead && h.Hp < h.MaxHp);
             bool canHeal = !app.Map.SupplyHealed && anyWounded && app.Map.Supplies >= healPrice;
             bool canCalm = !app.Map.SupplyCalmed && app.Run.PlayerSanity < 100 && app.Map.Supplies >= calmPrice;
             view.Choices.Add(new RoomPageChoice(
@@ -233,7 +236,7 @@ namespace Ruin.Runtime
             view.Body = "重伤部位可以修复（本座补给站第一次免费，之后 " + SupplyShop.RepairPrice + " 矿石）；"
                 + "断肢安装义肢需要 " + SupplyShop.InstallPrice + " 矿石。\n"
                 + "修复与安装都会立刻生效，返回后可以继续处理其他队员。";
-            view.Hint = "生命 " + hero.Hp + " / " + hero.Definition.MaxHp
+            view.Hint = "生命 " + hero.Hp + " / " + hero.MaxHp
                 + "   ·   修复 " + CostLabel(repairPrice, canRepair)
                 + "   ·   安装 " + CostLabel(SupplyShop.InstallPrice, canInstall)
                 + "\n" + StockText(app);
@@ -267,11 +270,17 @@ namespace Ruin.Runtime
                 }
                 if (condition == LimbCondition.Severed)
                 {
-                    var item = app.Run.Prosthetics.FirstOrDefault(p => p != null && p.Part == part);
-                    view.Choices.Add(item == null
-                        ? new RoomPageChoice(name + " · 断肢", "缺少该部位的义肢", false)
-                        : new RoomPageChoice(name + " · 安装 " + item.Name,
-                            item.Description + " · " + CostLabel(SupplyShop.InstallPrice, canInstall), canInstall));
+                    var stock = app.Run.Prosthetics.Where(p => p != null && p.Part == part).ToList();
+                    if (stock.Count == 0)
+                    {
+                        view.Choices.Add(new RoomPageChoice(name + " · 断肢", "缺少该部位的义肢", false));
+                        continue;
+                    }
+                    string names = string.Join("、", stock.Select(p => p.Name).Distinct());
+                    view.Choices.Add(new RoomPageChoice(name + " · 断肢",
+                        "可选 " + stock.Count + " 件：" + names + " · 安装 "
+                            + CostLabel(SupplyShop.InstallPrice, canInstall),
+                        canInstall));
                     continue;
                 }
                 view.Choices.Add(new RoomPageChoice(name + " · 完好", limb.Hp + "/" + limb.MaxHp, false));
@@ -289,8 +298,67 @@ namespace Ruin.Runtime
                     app.RepairLimb(hero.Id, part);
                     return;
                 }
-                var item = app.Run.Prosthetics.FirstOrDefault(p => p != null && p.Part == part);
-                if (item != null) app.InstallProsthetic(hero.Id, item.Id);
+                // The limb page only carries a summary; the actual piece is picked on its own page now
+                // that one part can stock up to eight different prosthetics.
+                if (LimbSystem.ConditionOf(hero, part) == LimbCondition.Severed)
+                {
+                    context.Section = 3; context.Part = part;
+                }
+            };
+            view.CanLeave = true;
+            view.AdvanceLabel = "离开补给站  →";
+            view.Advance = () => app.LeaveRoom();
+            return view;
+        }
+
+        // One severed limb, every stocked prosthetic for that part. The shop and the character panel show
+        // the same restriction text, so a gunner-only piece explains itself identically everywhere.
+        static RoomPageView SupplyLimbItems(StageOneApp app, RoomPageContext context)
+        {
+            int heroIndex = context.Hero;
+            if (heroIndex < 0 || heroIndex >= app.Run.Heroes.Count || !context.Part.HasValue)
+            { context.Section = 1; return SupplyHeroes(app, context); }
+            var hero = app.Run.Heroes[heroIndex];
+            var part = context.Part.Value;
+            if (LimbSystem.ConditionOf(hero, part) != LimbCondition.Severed)
+            { context.Section = 2; context.Part = null; return SupplyLimbs(app, context); }
+
+            bool canInstall = app.Map.Supplies >= SupplyShop.InstallPrice;
+            var view = Base(app, "补给终端", hero.Name + " · " + LimbSystem.PartName(part) + " 义体",
+                "SUPPLY / 选择义体");
+            view.Body = "为该断肢选择一件义体。专属义体只能由对应角色装备。\n"
+                + "安装立刻恢复部位并使义体生效；每次安装消耗 " + SupplyShop.InstallPrice + " 矿石。";
+            view.Hint = "生命 " + hero.Hp + " / " + hero.MaxHp
+                + "   ·   安装 " + CostLabel(SupplyShop.InstallPrice, canInstall)
+                + "\n" + StockText(app);
+
+            var groups = app.Run.Prosthetics.Where(p => p != null && p.Part == part)
+                .GroupBy(p => p.Id).OrderBy(g => g.Key, StringComparer.Ordinal).ToList();
+            foreach (var group in groups)
+            {
+                var item = group.First();
+                string restriction = ProstheticSystem.RestrictionText(item);
+                string blocked = LimbSystem.InstallBlockedReason(hero, item);
+                if (blocked == null && !canInstall)
+                    blocked = "矿石不足，安装需要 " + SupplyShop.InstallPrice + " 矿石。";
+                string detail = item.Description
+                    + (string.IsNullOrEmpty(restriction) ? "" : "\n" + restriction)
+                    + "\n库存 " + group.Count() + " · 安装 " + CostLabel(SupplyShop.InstallPrice, canInstall);
+                view.Choices.Add(new RoomPageChoice(item.Name, detail, blocked == null));
+            }
+            if (groups.Count == 0)
+                view.Choices.Add(new RoomPageChoice("（没有库存）", "该部位没有义体库存。", false));
+
+            int back = view.Choices.Count;
+            view.Choices.Add(new RoomPageChoice("返回", "回到部位列表"));
+            view.Choose = index =>
+            {
+                if (index == back) { context.Section = 2; context.Part = null; return; }
+                if (index < 0 || index >= groups.Count) return;
+                var item = groups[index].First();
+                app.InstallProsthetic(hero.Id, item.Id);
+                if (LimbSystem.ConditionOf(hero, part) != LimbCondition.Severed)
+                { context.Section = 2; context.Part = null; }
             };
             view.CanLeave = true;
             view.AdvanceLabel = "离开补给站  →";
@@ -308,7 +376,7 @@ namespace Ruin.Runtime
                 + string.Join("\n", app.Run.Heroes.Select(h =>
                 {
                     string limbs = LimbSystem.Summary(h);
-                    return h.Name + (h.Dead ? "   阵亡" : "   生命 " + h.Hp + " / " + h.Definition.MaxHp)
+                    return h.Name + (h.Dead ? "   阵亡" : "   生命 " + h.Hp + " / " + h.MaxHp)
                         + "   " + (limbs.Length == 0 ? "部位全部完好" : "最严重 " + limbs);
                 }));
             view.Hint = StockText(app) + "\n矿石 " + app.Map.Supplies
@@ -416,7 +484,7 @@ namespace Ruin.Runtime
                 + "到达第 " + app.Map.Floor + " 层   ·   通过 " + app.Map.ResolvedSteps + " 个位置"
                 + "   ·   玩家理智 " + app.Run.PlayerSanity.ToString("0.0") + "\n"
                 + string.Join("   ·   ", app.Run.Heroes.Select(h =>
-                    h.Name + (h.Dead ? " 阵亡" : " " + h.Hp + "/" + h.Definition.MaxHp)));
+                    h.Name + (h.Dead ? " 阵亡" : " " + h.Hp + "/" + h.MaxHp)));
             view.Hint = StockText(app);
             view.CanLeave = true;
             view.AdvanceLabel = "新开一局  →";

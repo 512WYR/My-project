@@ -72,10 +72,10 @@ namespace Ruin.Runtime
             if (actor == null) return;
             string who = string.IsNullOrEmpty(actor.Id) ? "(无 Id)" : actor.Id;
             if (actor.Definition == null) { issues.Add(who + " 没有 Definition。"); return; }
-            if (actor.Definition.MaxHp < 1) issues.Add(who + " 的 MaxHp 小于 1。");
+            if (actor.MaxHp < 1) issues.Add(who + " 的 MaxHp 小于 1。");
             if (actor.Hp < 0) issues.Add(who + " 的 Hp 为负数：" + actor.Hp);
-            if (actor.Hp > actor.Definition.MaxHp)
-                issues.Add(who + " 的 Hp(" + actor.Hp + ") 超过 MaxHp(" + actor.Definition.MaxHp + ")。");
+            if (actor.Hp > actor.MaxHp)
+                issues.Add(who + " 的 Hp(" + actor.Hp + ") 超过 MaxHp(" + actor.MaxHp + ")。");
             if (actor.Sanity < 0 || actor.Sanity > 100)
                 issues.Add(who + " 的理智越界：" + actor.Sanity.ToString("0.##"));
             if (double.IsNaN(actor.Sanity)) issues.Add(who + " 的理智是 NaN。");
@@ -174,6 +174,8 @@ namespace Ruin.Runtime
                     }
                     battle.SwapDisabledReason();
                     battle.SwapTargets().ToArray();
+                    battle.FreeSwapDisabledReason();
+                    battle.FreeSwapTargets().ToArray();
                 }
                 battle.Find("__missing__");
                 AccessorySystem.Summary(active);

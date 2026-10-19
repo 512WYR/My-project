@@ -30,6 +30,10 @@ namespace Ruin.Core
         public int Hp;
         public int MaxHp;
         public string Prosthetic; // Installed prosthetic id, null while the part is still flesh.
+        // What kind of prosthetic is fitted. Conventional carries no combat effect; every other value is
+        // read by ProstheticSystem. Kept next to the id so an item can be destroyed and the limb can fall
+        // back to flesh without looking anything up.
+        public ProstheticKind ProstheticKind;
         public bool ProstheticFitted { get { return !string.IsNullOrEmpty(Prosthetic); } }
     }
 
@@ -40,9 +44,17 @@ namespace Ruin.Core
         public string Name;
         public LimbPart Part;
         public string Description;
+        public ProstheticKind Kind;
+        public string RestrictSilhouette; // "gunner"/"shield"/"warrior"/"medic", or null for everyone.
         public ProstheticSpec() { }
         public ProstheticSpec(string id, string name, LimbPart part, string description)
         { Id = id; Name = name; Part = part; Description = description; }
+        public ProstheticSpec(string id, string name, LimbPart part, string description,
+            ProstheticKind kind, string restrictSilhouette = null)
+        {
+            Id = id; Name = name; Part = part; Description = description;
+            Kind = kind; RestrictSilhouette = restrictSilhouette;
+        }
     }
 
     [Serializable]

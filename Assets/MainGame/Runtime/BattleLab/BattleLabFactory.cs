@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Ruin.Core;
@@ -373,6 +373,10 @@ namespace Ruin.Runtime
                     if (prosthetic == null) { errors.Add(name + " 的义肢 " + prostheticId + " 不存在。"); continue; }
                     if (prosthetic.Part != (LimbPart)part)
                         errors.Add(name + " 的「" + prosthetic.Name + "」只能装在" + LimbSystem.PartName(prosthetic.Part) + "。");
+                    if (!hero.ForceAccessories && !string.IsNullOrEmpty(prosthetic.RestrictSilhouette)
+                        && prosthetic.RestrictSilhouette != hero.Spec.Silhouette)
+                        errors.Add(name + " 不能装备「" + prosthetic.Name + "」（"
+                            + ProstheticSystem.RestrictionText(prosthetic) + "）。");
                     if (hero.Limbs[part] != LabLimbState.Severed)
                         errors.Add(name + " 的" + LimbSystem.PartName((LimbPart)part) + "未断肢，不能安装「" + prosthetic.Name + "」。");
                 }
@@ -408,6 +412,9 @@ namespace Ruin.Runtime
             var heroSpecs = BuildHeroSpecs(cfg);
             run = RunState.Create(heroSpecs.ToArray(), seed, cfg.PlayerSanity, rules);
             run.PlayerSanity = SanityProbability.Clamp(cfg.PlayerSanity, 0, 100);
+            // Prosthetic replacement skills charge ore. A lab run has no economy, so stock enough to
+            // exercise every ore-cost skill without the shop ever entering the picture.
+            run.Map.Supplies = Math.Max(run.Map.Supplies, 99);
 
             ApplyHeroRanks(run, cfg);
             ApplyHeroSetup(run, cfg, rules, errors);
@@ -513,7 +520,7 @@ namespace Ruin.Runtime
                 ApplyAccessories(run, hero, heroCfg, errors);
                 AddConsumables(run, heroCfg);
 
-                if (cfg.FullHealOnStart) hero.Hp = hero.Definition.MaxHp;
+                if (cfg.FullHealOnStart) hero.Hp = hero.MaxHp;
             }
         }
 
@@ -528,14 +535,17 @@ namespace Ruin.Runtime
                     case LabLimbState.Severed:
                         limb.Hp = 0;
                         limb.Prosthetic = null;
+                        limb.ProstheticKind = ProstheticKind.Conventional;
                         break;
                     case LabLimbState.Injured:
                         limb.Hp = Math.Max(1, limb.MaxHp / 2);
                         limb.Prosthetic = null;
+                        limb.ProstheticKind = ProstheticKind.Conventional;
                         break;
                     default:
                         limb.Hp = limb.MaxHp;
                         limb.Prosthetic = null;
+                        limb.ProstheticKind = ProstheticKind.Conventional;
                         break;
                 }
                 string prostheticId = cfg.ProstheticIds[part];
@@ -551,7 +561,10 @@ namespace Ruin.Runtime
                     errors.Add(hero.Name + " 的义肢 " + prostheticId + " 不存在。");
                     continue;
                 }
-                if (!LimbSystem.Install(hero, item))
+                string blocked = LimbSystem.InstallBlockedReason(hero, item);
+                if (blocked != null)
+                    errors.Add(hero.Name + " 无法安装「" + item.Name + "」：" + blocked);
+                else if (!LimbSystem.Install(hero, item))
                     errors.Add(hero.Name + " 无法安装「" + item.Name + "」。");
             }
         }

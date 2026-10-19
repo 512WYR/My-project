@@ -86,7 +86,7 @@ namespace Ruin.Core
                     if (hero.SanityLocked || hero.SanityLockPending) return "理智已经被锁定。";
                     break;
                 case ConsumableKind.HpRestore:
-                    if (hero.Definition == null || hero.Hp >= hero.Definition.MaxHp) return "生命已满。";
+                    if (hero.Definition == null || hero.Hp >= hero.MaxHp) return "生命已满。";
                     break;
             }
             return null;

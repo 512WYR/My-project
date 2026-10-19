@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 using Ruin.Core;
 using Ruin.Runtime;
@@ -100,11 +100,11 @@ namespace GameMake.GothicHUD
             // intent, and a suffix after the name cannot push the name itself out of the card.
             if (Name) Name.text = heartTarget ? actor.Name + " <color=#D05A5A>⊕</color>" : actor.Name;
 
-            if (HealthFill) HealthFill.fillAmount = Mathf.Clamp01((float)actor.Hp / Mathf.Max(1, actor.Definition.MaxHp));
+            if (HealthFill) HealthFill.fillAmount = Mathf.Clamp01((float)actor.Hp / Mathf.Max(1, actor.MaxHp));
             if (HealthValue)
                 HealthValue.text = actor.Dead ? "已死亡"
                     : actor.DeathDoor ? "濒死 · 需要治疗"
-                    : actor.Hp + " / " + actor.Definition.MaxHp;
+                    : actor.Hp + " / " + actor.MaxHp;
 
             // Sanity sits directly under the health bar so a hero's other vital is visible on the stage,
             // not only on the selected-character panel. Monsters have no sanity at all, so their bar is

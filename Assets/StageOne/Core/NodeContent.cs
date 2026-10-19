@@ -42,8 +42,9 @@ namespace Ruin.Core
                 if (buff == GrowthBuff.Toughness)
                 {
                     hero.Definition.MaxHp = Math.Max(1, hero.Definition.MaxHp + ToughnessHealth);
-                    if (!hero.Dead) hero.Hp = Math.Min(hero.Definition.MaxHp, hero.Hp + ToughnessHealth);
-                    hero.Limbs = LimbSystem.CreateLimbs(hero.Definition.MaxHp, limbs);
+                    // Resize in place: CreateLimbs would drop every prosthetic the hero is wearing.
+                    LimbSystem.ResizeLimbs(hero, hero.Definition.MaxHp, limbs);
+                    if (!hero.Dead) hero.Hp = Math.Min(hero.MaxHp, hero.Hp + ToughnessHealth);
                 }
                 else if (buff == GrowthBuff.Sharpness) hero.Definition.Attack = Math.Max(0, hero.Definition.Attack + SharpnessAttack);
                 else if (buff == GrowthBuff.Clarity) hero.Sanity = SanityProbability.Clamp(hero.Sanity + ClaritySanity, 0, 100);
@@ -93,10 +94,8 @@ namespace Ruin.Core
         public static int Heal(ActorState hero, int percent)
         {
             if (hero == null || hero.Dead || percent <= 0) return 0;
-            int amount = Math.Max(1, (int)Math.Ceiling(hero.Definition.MaxHp * percent / 100.0 - 1e-9));
-            int before = hero.Hp;
-            hero.Hp = Math.Min(hero.Definition.MaxHp, hero.Hp + amount);
-            return hero.Hp - before;
+            int amount = Math.Max(1, (int)Math.Ceiling(hero.MaxHp * percent / 100.0 - 1e-9));
+            return ProstheticSystem.RestoreHp(hero, amount);
         }
 
         // One supply heal for a single hero. Returns how much health it actually restored.
@@ -104,10 +103,8 @@ namespace Ruin.Core
         {
             if (hero == null || hero.Dead) return 0;
             double ratio = MapGenerator.Resolve(rules).SupplyHealRatio;
-            int amount = Math.Max(1, (int)Math.Ceiling(hero.Definition.MaxHp * ratio - 1e-9));
-            int before = hero.Hp;
-            hero.Hp = Math.Min(hero.Definition.MaxHp, hero.Hp + amount);
-            return hero.Hp - before;
+            int amount = Math.Max(1, (int)Math.Ceiling(hero.MaxHp * ratio - 1e-9));
+            return ProstheticSystem.RestoreHp(hero, amount);
         }
 
         public static int SupplyHealParty(MapRules rules, RunState run)
@@ -196,8 +193,7 @@ namespace Ruin.Core
             if (pool == null || pool.Length == 0) return null;
             int index = (int)(random.NextUnit() * pool.Length);
             if (index >= pool.Length) index = pool.Length - 1;
-            var pick = pool[index];
-            return new ProstheticSpec(pick.Id, pick.Name, pick.Part, pick.Description);
+            return LimbSystem.Clone(pool[index]);
         }
 
         // Chest rooms and the "饰品" event rewards draw from the code table. A fresh copy is returned so

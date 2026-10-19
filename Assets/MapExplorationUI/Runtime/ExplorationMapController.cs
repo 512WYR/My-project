@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -220,9 +220,9 @@ namespace GameMake.ExplorationUI
                 if (!Source || Source.Run == null || i >= Source.Run.Heroes.Count) continue;
                 var actor = Source.Run.Heroes[i];
                 slot.Name.text = actor.Name;
-                slot.Health.fillAmount = Mathf.Clamp01((float)actor.Hp / Mathf.Max(1, actor.Definition.MaxHp));
+                slot.Health.fillAmount = Mathf.Clamp01((float)actor.Hp / Mathf.Max(1, actor.MaxHp));
                 slot.Sanity.fillAmount = Mathf.Clamp01((float)actor.Sanity / 100);
-                slot.Vitals.text = "生命 " + actor.Hp + "/" + actor.Definition.MaxHp + "   理智 " + actor.Sanity.ToString("0");
+                slot.Vitals.text = "生命 " + actor.Hp + "/" + actor.MaxHp + "   理智 " + actor.Sanity.ToString("0");
                 slot.Placeholder.Silhouette = actor.Definition.Silhouette;
                 slot.Placeholder.enabled = !slot.Portrait.sprite;
                 slot.Portrait.enabled = slot.Portrait.sprite;

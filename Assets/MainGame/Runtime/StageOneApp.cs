@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,10 +19,17 @@ namespace Ruin.Runtime
         // 本回合已经点开、正等着点目标的技能下标。换位走一个单独的开关，因为它没有下标。
         public int? PendingSkill { get; private set; }
         public bool PendingSwap { get; private set; }
+        // A prosthetic swap costs no action, so it is armed separately from the action-consuming swap.
+        public bool PendingFreeSwap { get; private set; }
+        // Double Guard picks its targets one by one. The ids are kept in click order for the HUD.
+        private readonly List<string> pendingTargets = new List<string>();
+        // Acceptance tooling: each press of a part's grant button cycles the pieces stocked for that part.
+        private readonly Dictionary<LimbPart, int> debugProstheticCursor = new Dictionary<LimbPart, int>();
+        public IReadOnlyList<string> PendingTargets { get { return pendingTargets; } }
         // 正在说明区查看的技能下标。不可用的技能也能点开，所以它可以和 PendingSkill 不同。
         public int? InspectedSkill { get; private set; }
         // 任意一种「已选好行动、等待点目标」的状态。
-        public bool Choosing { get { return PendingSkill.HasValue || PendingSwap; } }
+        public bool Choosing { get { return PendingSkill.HasValue || PendingSwap || PendingFreeSwap; } }
         public string InspectedId { get; private set; }
         public bool Busy { get; private set; }
         public string Hint { get; private set; }
@@ -77,6 +84,7 @@ namespace Ruin.Runtime
             // Created here rather than authored into the scene: the game state is the only component that
             // owns the formal entry, and preview scenes without it should not inherit the backdrop.
             GameBackground.Ensure();
+            SfxDirector.Ensure();
             MusicDirector.Ensure().Bind(this);
             Catalog = Catalog ? Catalog : Resources.Load<GameCatalog>("StageOne/GameCatalog");
             if (!Catalog) { Debug.LogError("StageOne catalog missing. Run GameMake/Prepare Stage One from the editor."); return; }
@@ -325,7 +333,7 @@ namespace Ruin.Runtime
         {
             if (SupplyShopOpen) return;
             if (Run == null || Room != RoomView.Supply || Run.Map.SupplyHealed) return;
-            if (!Run.Heroes.Any(h => h != null && !h.Dead && h.Hp < h.Definition.MaxHp))
+            if (!Run.Heroes.Any(h => h != null && !h.Dead && h.Hp < h.MaxHp))
             {
                 Hint = "全队生命已满，不需要治疗。";
                 Refresh(); return;
@@ -384,7 +392,8 @@ namespace Ruin.Runtime
             var hero = Run.Heroes.FirstOrDefault(a => a.Id == heroId);
             var item = Run.Prosthetics.FirstOrDefault(p => p != null && p.Id == itemId);
             if (hero == null || item == null) return;
-            if (!LimbSystem.CanInstall(hero, item)) { Hint = "只有断肢才能安装义肢。"; Refresh(); return; }
+            string blocked = LimbSystem.InstallBlockedReason(hero, item);
+            if (blocked != null) { Hint = blocked; Refresh(); return; }
             if (Run.Map.Supplies < SupplyShop.InstallPrice)
             {
                 Hint = "矿石不足，安装义肢需要 " + SupplyShop.InstallPrice + " 矿石。";
@@ -626,22 +635,32 @@ namespace Ruin.Runtime
             if (Busy || AwaitingNode || Battle == null) return;
             var skill = Battle.SkillFor(Battle.Current, index);
             if (skill == null) return;
+            // Clicking the armed multi-pick skill a second time confirms the current selection.
+            if (PendingSkill == index && skill.MaxTargets > 1 && pendingTargets.Count > 0)
+            {
+                ConfirmPendingSkill();
+                return;
+            }
             // Every slot the player clicks owns the description panel, usable or not. A blocked skill only
             // explains itself; it never arms a cast.
             InspectedSkill = index;
             string reason = Battle.SkillDisabledReason(index);
             if (reason != null)
             {
-                PendingSkill = null; PendingSwap = false;
+                PendingSkill = null; PendingSwap = false; PendingFreeSwap = false;
+                pendingTargets.Clear();
                 Hint = reason;
                 Refresh();
                 return;
             }
-            PendingSwap = false;
+            PendingSwap = false; PendingFreeSwap = false;
             PendingSkill = index;
+            pendingTargets.Clear();
+            if (skill.MaxTargets > 1)
+                Hint = MultiPickHint(skill);
             // A group skill has no single main target, but every living actor on its side is a valid
             // confirmation, so the page highlights them all and any one of them releases the skill.
-            Hint = skill.Targeting == SkillTargeting.All
+            else Hint = skill.Targeting == SkillTargeting.All
                 ? "点击任意高亮目标释放「" + skill.Name + "」。Esc取消选择。"
                 : "点击高亮目标以执行「" + skill.Name + "」。Esc取消选择。";
             Refresh();
@@ -651,14 +670,55 @@ namespace Ruin.Runtime
         {
             if (CharacterPanelOpen) return;
             if (Busy || AwaitingNode || Battle == null) return;
+            // A free prosthetic swap is strictly better than the action-consuming one, so it wins whenever
+            // it is available. Only when both are unavailable does the player see a refusal.
+            string freeReason = Battle.FreeSwapDisabledReason();
+            if (freeReason == null)
+            {
+                PendingSkill = null; PendingSwap = false; PendingFreeSwap = true; InspectedSkill = null;
+                Hint = "点击高亮队友，借助义体换位（不消耗行动）。Esc取消选择。";
+                Refresh();
+                return;
+            }
             string reason = Battle.SwapDisabledReason();
-            if (reason != null) { Hint = reason; Refresh(); return; }
-            PendingSkill = null; PendingSwap = true; InspectedSkill = null;
+            if (reason != null) { Hint = freeReason; Refresh(); return; }
+            PendingSkill = null; PendingSwap = true; PendingFreeSwap = false; InspectedSkill = null;
             Hint = "点击相邻的高亮队员，交换站位并消耗本次行动。Esc取消选择。";
             Refresh();
         }
 
-        private void ClearPending() { PendingSkill = null; PendingSwap = false; InspectedSkill = null; }
+        // The HUD has one swap button. While a multi-pick skill is waiting for confirmation the same click
+        // confirms it; otherwise the button starts a free or ordinary swap.
+        public void RequestConfirmOrSwap()
+        {
+            if (PendingSkill.HasValue && ConfirmPendingSkill()) return;
+            SelectSwap();
+        }
+
+        private void ClearPending()
+        {
+            PendingSkill = null; PendingSwap = false; PendingFreeSwap = false; InspectedSkill = null;
+            pendingTargets.Clear();
+        }
+
+        private string MultiPickHint(SkillSpec skill)
+        {
+            return "点击队友选择「" + skill.Name + "」的目标（已选择 " + pendingTargets.Count + "/"
+                + skill.MaxTargets + "）。选满自动释放；只选 1 人时再次点击技能按钮确认。Esc取消选择。";
+        }
+
+        // Confirms a multi-pick support skill with 1..MaxTargets allies. Normal skills still release on
+        // the target click and never come through here.
+        public bool ConfirmPendingSkill()
+        {
+            if (Busy || AwaitingNode || Battle == null || !PendingSkill.HasValue) return false;
+            var skill = Battle.SkillFor(Battle.Current, PendingSkill.Value);
+            if (skill == null || skill.MaxTargets <= 1 || pendingTargets.Count == 0) return false;
+            var request = new ActionRequest(ActionKind.Skill, pendingTargets[0], PendingSkill.Value)
+            { TargetIds = pendingTargets.ToArray() };
+            Submit(request);
+            return true;
+        }
 
         public void SelectActor(string id)
         {
@@ -666,7 +726,26 @@ namespace Ruin.Runtime
             if (AwaitingNode || Battle == null) return;
             InspectedId = id;
             if (!Busy && PendingSkill.HasValue && Battle.Targets(PendingSkill.Value).Any(a => a.Id == id))
-            { Submit(new ActionRequest(ActionKind.Skill, id, PendingSkill.Value)); return; }
+            {
+                var skill = Battle.SkillFor(Battle.Current, PendingSkill.Value);
+                if (skill != null && skill.MaxTargets > 1)
+                {
+                    // Toggle this ally in or out; a full selection releases the skill immediately.
+                    if (pendingTargets.Contains(id)) pendingTargets.Remove(id);
+                    else if (pendingTargets.Count < skill.MaxTargets) pendingTargets.Add(id);
+                    if (pendingTargets.Count >= skill.MaxTargets)
+                        ConfirmPendingSkill();
+                    else
+                    {
+                        Hint = MultiPickHint(skill);
+                        Refresh();
+                    }
+                    return;
+                }
+                Submit(new ActionRequest(ActionKind.Skill, id, PendingSkill.Value)); return;
+            }
+            if (!Busy && PendingFreeSwap && Battle.FreeSwapTargets().Any(a => a.Id == id))
+            { SubmitFreeSwap(id); return; }
             if (!Busy && PendingSwap && Battle.SwapTargets().Any(a => a.Id == id))
             { Submit(new ActionRequest(ActionKind.Swap, id)); return; }
             Refresh();
@@ -679,6 +758,17 @@ namespace Ruin.Runtime
             if (!Battle.Execute(request, out error)) { Hint = error; Refresh(); return; }
             ClearPending();
             StartCoroutine(ContinueEnemies(from));
+        }
+
+        // Free swaps do not consume the action, so the turn stays with the same hero and the enemy loop does
+        // not start. The battle state still has to be redrawn for the new ranks and the vulnerability marks.
+        private void SubmitFreeSwap(string targetId)
+        {
+            string error;
+            if (!Battle.ExecuteFreeSwap(targetId, out error)) { Hint = error; Refresh(); return; }
+            ClearPending();
+            Hint = "换位完成，本次行动没有消耗。";
+            Refresh();
         }
 
         private IEnumerator ContinueEnemies(int from)
@@ -714,6 +804,15 @@ namespace Ruin.Runtime
         public Func<BattleEvent[], bool, IEnumerator> BattleEventAnimation;
         private IEnumerator AnimateEvents(BattleEvent[] events, bool fast)
         {
+            // A round marker belongs to no cut-in beat, so the turn sound is keyed off the event batch
+            // itself. Fast runs (automation, batch playmode) stay silent.
+            if (!fast && events != null)
+            {
+                for (int i = 0; i < events.Length; i++)
+                    if (events[i] != null && events[i].Kind == "round")
+                    { SfxDirector.Play(SfxCue.Turn); break; }
+            }
+
             if (BattleEventAnimation != null) { yield return BattleEventAnimation(events, fast); yield break; }
             if (fast || Application.isBatchMode) { yield return null; yield break; }
 
@@ -796,7 +895,7 @@ namespace Ruin.Runtime
         public void DebugRestParty()
         {
             if (Battle == null) return;
-            foreach (var hero in Run.Heroes.Where(a => !a.Dead)) hero.Hp = hero.Definition.MaxHp;
+            foreach (var hero in Run.Heroes.Where(a => !a.Dead)) hero.Hp = hero.MaxHp;
             Hint = "验收工具已整备全队生命；部位、个人理智和死亡记录沿用。";
             Refresh();
         }
@@ -807,10 +906,16 @@ namespace Ruin.Runtime
         public void DebugGrantProsthetic(LimbPart part)
         {
             if (Run == null) return;
-            var item = LimbSystem.Resolve(Catalog.Rules().Limbs).Prosthetics.FirstOrDefault(p => p.Part == part);
-            if (item == null) return;
-            Run.Prosthetics.Add(item);
-            Hint = "验收工具已发放" + item.Name + "。";
+            var list = LimbSystem.Resolve(Catalog.Rules().Limbs).Prosthetics
+                .Where(p => p != null && p.Part == part).ToArray();
+            if (list.Length == 0) return;
+            int cursor;
+            debugProstheticCursor.TryGetValue(part, out cursor);
+            cursor %= list.Length;
+            var item = list[cursor];
+            debugProstheticCursor[part] = (cursor + 1) % list.Length;
+            Run.Prosthetics.Add(LimbSystem.Clone(item));
+            Hint = "验收工具已发放" + item.Name + "（该部位 " + (cursor + 1) + "/" + list.Length + "）。";
             Refresh();
         }
 
@@ -842,7 +947,7 @@ namespace Ruin.Runtime
         {
             if (Run == null) return;
             foreach (var item in LimbSystem.Resolve(Catalog.Rules().Limbs).Prosthetics)
-                if (!Run.Prosthetics.Any(p => p != null && p.Id == item.Id)) Run.Prosthetics.Add(item);
+                if (!Run.Prosthetics.Any(p => p != null && p.Id == item.Id)) Run.Prosthetics.Add(LimbSystem.Clone(item));
             Hint = "验收工具已发放全部义肢。";
             Refresh();
         }

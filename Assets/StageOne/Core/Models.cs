@@ -118,7 +118,27 @@ namespace Ruin.Core
         public bool RandomTarget;        // The target is drawn instead of picked.
         public double FriendlyFireChance; // When the sweep finds no second enemy, this may hit a neighbour.
 
+        // ---- prosthetic replacement skills ----
+        // Ore is the run-wide Map.Supplies currency. Zero keeps the old free skills.
+        public int OreCost;
+        // > 1 turns the skill into a multi-pick support skill (Double Guard picks up to two allies).
+        public int MaxTargets;
+        // Targeting.All normally sweeps the whole side; this makes it keep only ranks in TargetRanks.
+        public bool AllWithinTargetRanks;
+        // Roll accuracy and dodge separately for every victim (Boiler Shock) instead of once for the sweep.
+        public bool PerTargetAccuracy;
+        // Marks the guard skill whose interception costs the shield an extra 25%.
+        public bool MultiGuard;
+        // After the attack resolves, move this many ranks (negative = towards the enemy). Used by Whaling
+        // Anchor; it runs even on a miss or a failed pull.
+        public int PostSelfMove;
+        public bool PostSelfMoveRequiresAlly;
+
         public SkillRider Rider;
+
+        // Shallow copy is enough: skill specs are immutable after creation, and decorations only change
+        // scalar fields. The Rider reference is shared and never mutated.
+        public SkillSpec Clone() { return (SkillSpec)MemberwiseClone(); }
     }
 
     [Serializable]
@@ -290,6 +310,8 @@ namespace Ruin.Core
         public List<AccessorySpec> EquippedAccessories = new List<AccessorySpec>();
         // Per-battle accessory flags and stacks, reset at the start of every battle.
         public AccessoryBattleState AccessoryBattle = new AccessoryBattleState();
+        // Per-battle prosthetic flags. Reset alongside the accessory state, never by installing a piece.
+        public ProstheticBattleState ProstheticBattle = new ProstheticBattleState();
         // 理智锁定药剂. SanityLocked is the live battle lock; SanityLockPending is a lock bought outside
         // battle that activates when the next one starts. Both are cleared when a battle settles.
         public bool SanityLocked;
@@ -299,6 +321,26 @@ namespace Ruin.Core
         public int SpeedRoll;
         public int Speed { get { return Definition.Speed; } }
         public string Name { get { return Definition.Name; } }
+        // Effective maximum life. Definition.MaxHp is the authored base and is still what the golden apple
+        // and the opening toughness buff change; fitted prosthetics apply their additive percentage on
+        // top. The property is a pure read and is safe inside query-purity checks.
+        public int MaxHp
+        {
+            get
+            {
+                int baseMax = Definition == null ? 1 : Math.Max(1, Definition.MaxHp);
+                if (Limbs == null) return baseMax;
+                double percent = 0;
+                for (int i = 0; i < Limbs.Count; i++)
+                {
+                    var limb = Limbs[i];
+                    if (limb != null && limb.ProstheticFitted)
+                        percent += ProstheticSystem.MaxHpPercent(limb.ProstheticKind);
+                }
+                if (percent == 0) return baseMax;
+                return Math.Max(1, (int)Math.Ceiling(baseMax * (1.0 + percent) - 1e-9));
+            }
+        }
         public bool DeathDoor { get { return Player && !Dead && Hp <= 0; } }
         public int Width { get { return Definition == null ? 1 : Definition.Width; } }
         public bool OccupiesRank(int rank) { return rank >= Rank && rank < Rank + Width; }
@@ -399,6 +441,9 @@ namespace Ruin.Core
         public ActionKind Kind;
         public int SkillIndex;
         public string TargetId;
+        // Multi-pick support skills (Double Guard) send their whole selection here. Single-target skills
+        // keep using TargetId and leave this null.
+        public string[] TargetIds;
         public ActionRequest(ActionKind kind, string targetId = null, int skillIndex = 0)
         { Kind = kind; TargetId = targetId; SkillIndex = skillIndex; }
     }
