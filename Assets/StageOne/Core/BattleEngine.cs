@@ -1251,6 +1251,10 @@ namespace Ruin.Core
                 if (guarded) amount = ReduceForGuard(amount, target);
                 Damage(target, amount, enemy.Id);
                 if (!target.Dead) ApplyOnHit(enemy, target, skill, true);
+                // Designed monsters use the same limb track as the legacy pattern enemies. Without this
+                // call only the three scripted dummies could ever cripple a hero, so every normal fight
+                // left all four parts at full health. Misses, dodges and blocks above never reach here.
+                if (!target.Dead) TryLimbDamage(enemy, target);
                 TryCounter(target, enemy);
             }
         }

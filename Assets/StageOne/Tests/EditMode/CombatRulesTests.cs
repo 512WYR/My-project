@@ -25,6 +25,28 @@ namespace Ruin.Tests
             Assert.That(battle.Enemies.All(e => e.Sanity == 0));
         }
 
+        // The limb track is hero-only. Enemies are created without parts, and this pins the construction
+        // half of "a monster can never be dismembered".
+        [Test] public void EnemiesHaveNoLimbs()
+        {
+            var battle = Battle(Run());
+            Assert.That(battle.Enemies, Is.Not.Empty);
+            Assert.That(battle.Enemies.All(e => e.Limbs == null || e.Limbs.Count == 0));
+        }
+
+        // The other half: even if a debug tool attaches parts to a monster, LimbSystem.Damage refuses the
+        // enemy side, so a hit can neither injure nor sever them.
+        [Test] public void LimbDamageNeverAppliesToMonsters()
+        {
+            var battle = Battle(Run());
+            var enemy = battle.Enemies[0];
+            enemy.Limbs = LimbSystem.CreateLimbs(enemy.Definition.MaxHp, catalog.Rules().Limbs);
+            int before = enemy.Limbs.Sum(l => l.Hp);
+            Assert.IsFalse(LimbSystem.Damage(enemy, LimbPart.Arm, 9999));
+            Assert.That(enemy.Limbs.Sum(l => l.Hp), Is.EqualTo(before));
+            Assert.That(LimbSystem.ConditionOf(enemy, LimbPart.Arm), Is.EqualTo(LimbCondition.Intact));
+        }
+
         [TestCase(30)] [TestCase(50)] [TestCase(70)]
         public void StableRangeHasOnlyBasicForm(double sanity)
         {

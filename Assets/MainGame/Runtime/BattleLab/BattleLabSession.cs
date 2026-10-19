@@ -496,6 +496,7 @@ namespace Ruin.Runtime
         public bool SetLimb(ActorState actor, LimbPart part, LabLimbState state, out string note)
         {
             if (actor == null) { note = "没有选中角色。"; return false; }
+            if (!actor.Player) { note = actor.Name + " 是怪物，没有部位。"; return false; }
             var limb = LimbSystem.Get(actor, part);
             if (limb == null) { note = actor.Name + " 没有" + LimbSystem.PartName(part) + "。"; return false; }
             switch (state)
@@ -547,6 +548,9 @@ namespace Ruin.Runtime
         public bool RebuildLimbs(ActorState actor, out string note)
         {
             if (actor == null || actor.Definition == null) { note = "没有选中角色。"; return false; }
+            // The limb track is hero-only. Without this guard the lab's rebuild shortcut would be the one
+            // place able to give a monster parts, contradicting the battle rule.
+            if (!actor.Player) { note = actor.Name + " 是怪物，没有部位，也不会断肢。"; return false; }
             actor.Limbs = LimbSystem.CreateLimbs(actor.Definition.MaxHp, Battle == null || Battle.Rules == null ? null : Battle.Rules.Limbs);
             MarkMutation();
             SyncLog();

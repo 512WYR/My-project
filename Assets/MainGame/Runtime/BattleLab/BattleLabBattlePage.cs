@@ -488,7 +488,8 @@ namespace Ruin.Runtime
                 GUILayout.BeginHorizontal();
                 if (BattleLabUi.Button("重置技能次数")) { Session.ResetSkillUses(actor, out string note); Note(note); }
                 if (BattleLabUi.Button("重置饰品战斗状态")) { Session.ResetAccessoryBattle(actor, out string note); Note(note); }
-                if (BattleLabUi.Button("按当前 MaxHp 重建部位")) { Session.RebuildLimbs(actor, out string note); Note(note); }
+                // Monsters have no limb track, so the rebuild shortcut is a hero-only action.
+                if (actor.Player && BattleLabUi.Button("按当前 MaxHp 重建部位")) { Session.RebuildLimbs(actor, out string note); Note(note); }
                 GUILayout.EndHorizontal();
                 BattleLabUi.EndIndent();
             }

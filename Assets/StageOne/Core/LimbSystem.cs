@@ -6,7 +6,8 @@ namespace Ruin.Core
 {
     // The single entry point for limb state and limb damage. Limb health is a second track next to HP:
     // it only ever goes down, it never regenerates on its own, and a part at zero stays severed until a
-    // prosthetic replaces it.
+    // prosthetic replaces it. The track belongs to heroes only: monsters have no parts at all, and Damage
+    // refuses every actor on the enemy side so no caller can sever one even if a debug tool attached limbs.
     public static class LimbSystem
     {
         public const double DefaultHitRatio = 0.5;
@@ -98,6 +99,9 @@ namespace Ruin.Core
         // prosthetic rather than leaving a broken fitting that still reports full function.
         public static bool Damage(ActorState actor, LimbPart part, int amount)
         {
+            // The limb track is hero-only. Enemies are created without Limbs, but this guard makes the
+            // rule independent of that construction detail: no monster can ever be dismembered.
+            if (actor == null || !actor.Player) return false;
             var limb = Get(actor, part);
             if (limb == null || amount <= 0 || limb.Hp <= 0) return false;
             limb.Hp = Math.Max(0, limb.Hp - amount);

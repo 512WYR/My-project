@@ -38,6 +38,9 @@ namespace Ruin.Runtime
         public SkillDefinition TechnicalSpecial;
 
         [Header("Monster only / 怪物专用")]
+        // Monsters have no sanity and no limb track. There are deliberately no limb fields here: the
+        // battle only builds Limbs for heroes, and LimbSystem.Damage refuses non-Player actors outright,
+        // so every monster is immune to dismemberment.
         // Legacy pattern enemies (the three stage-one dummies) keep their scripted behaviour.
         public EnemyPattern EnemyPattern;
         // ---- designed-monster data ----
