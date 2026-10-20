@@ -82,6 +82,8 @@ namespace GameMake.CharacterUI
                 string state=limb.ProstheticFitted?"义体已装载":condition==LimbCondition.Severed?"断肢":condition==LimbCondition.Injured?"重伤":"完好";
                 LimbLabels[i].text=LimbSystem.PartName((LimbPart)i)+" · "+state+"\n"+limb.Hp+" / "+limb.MaxHp;
                 LimbLabels[i].color=condition==LimbCondition.Intact?muted:new Color32(215,115,92,255);
+                var hover=LimbButtons[i].GetComponent<LimbInstallHover>();
+                if(hover) hover.enabled=!limb.ProstheticFitted;
             }
             for(int i=0;i<2;i++)
             {
@@ -160,15 +162,30 @@ namespace GameMake.CharacterUI
             else if(mode<4)
             {
                 var part=(LimbPart)mode; PickerTitle.text=LimbSystem.PartName(part)+" / 义体";
-                foreach(var item in Source.Run.Prosthetics.Where(p=>p!=null && p.Part==part).GroupBy(p=>p.Id).Select(g=>g.First()))
+                var limb=LimbSystem.Get(hero,part);
+                if(limb!=null && limb.ProstheticFitted)
                 {
-                    string id=item.Id;
-                    string restriction=ProstheticSystem.RestrictionText(item);
-                    string description=item.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction);
-                    string blocked=Source.CharacterInstallBlockedReason(item);
-                    PickerRow(rows++,item.Name,description,blocked??"消耗手术包装载",blocked==null,()=>Source.CharacterInstallProsthetic(id));
+                    // The fitted piece has left the warehouse stock, so show that one piece alone.
+                    var equipped=LimbSystem.FindProsthetic(limb.Prosthetic);
+                    if(equipped!=null)
+                    {
+                        string restriction=ProstheticSystem.RestrictionText(equipped);
+                        EquippedRow(rows++,equipped.Name,equipped.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction));
+                    }
+                    else Empty("该部位已装载义体。");
                 }
-                if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n只有断肢可安装义体。\n装载消耗一个手术包；补给站可直接安装。");
+                else
+                {
+                    foreach(var item in Source.Run.Prosthetics.Where(p=>p!=null && p.Part==part).GroupBy(p=>p.Id).Select(g=>g.First()))
+                    {
+                        string id=item.Id;
+                        string restriction=ProstheticSystem.RestrictionText(item);
+                        string description=item.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction);
+                        string blocked=Source.CharacterInstallBlockedReason(item);
+                        PickerRow(rows++,item.Name,description,blocked??"消耗手术包装载",blocked==null,()=>Source.CharacterInstallProsthetic(id));
+                    }
+                    if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n只有断肢可安装义体。\n装载消耗一个手术包；补给站可直接安装。");
+                }
             }
             else if(mode==4)
             {
@@ -199,6 +216,16 @@ namespace GameMake.CharacterUI
             float height=Mathf.Max(66,detail.preferredHeight+20); detail.rectTransform.sizeDelta=new Vector2(250,height);
             var art=Art(row,"Equip",ItemSprite,4,48+height,250,50); var button=Click(art); button.interactable=enabled; button.onClick.AddListener(handler);
             Label(art.transform,"Label",enabled?action:"不可操作",10,4,230,42,15,cream,TextAnchor.MiddleCenter);
+            pickerHeight+=height+116; row.sizeDelta=new Vector2(260,height+106);
+        }
+        void EquippedRow(int index,string name,string description)
+        {
+            var row=Group(PickerItems,"Equipped Row "+index,0,pickerHeight,260,170);
+            Label(row,"Name",name,4,4,250,30,22,cream);
+            var detail=Label(row,"Description",description,4,40,250,66,16,muted,TextAnchor.UpperLeft);
+            float height=Mathf.Max(66,detail.preferredHeight+20); detail.rectTransform.sizeDelta=new Vector2(250,height);
+            var plate=Art(row,"Equipped",ItemSprite,4,48+height,250,50);
+            Label(plate.transform,"Label","已装备",10,4,230,42,15,cream,TextAnchor.MiddleCenter);
             pickerHeight+=height+116; row.sizeDelta=new Vector2(260,height+106);
         }
 

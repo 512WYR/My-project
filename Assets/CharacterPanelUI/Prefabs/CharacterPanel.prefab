@@ -628,10 +628,10 @@ MonoBehaviour:
   Close: {fileID: 876804994776551009}
   Backdrop: {fileID: 7861844066298723658}
   FullBodyArt:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 21300000, guid: d5a32dcdff09489999e12a7a894ce8d5, type: 3}
+  - {fileID: 21300000, guid: e2abcb5308fd462a8427d51cce29f3fa, type: 3}
+  - {fileID: 21300000, guid: fb9cfe65009b4e589dfb48a9b8599db8, type: 3}
+  - {fileID: 21300000, guid: 9b9df581396144b3853783a9546ebd88, type: 3}
   FullBodyImage: {fileID: 1503747003174698553}
   FullBodyName: {fileID: 7497899730257297437}
   FullBodyPlaceholder: {fileID: 7099059090342859445}

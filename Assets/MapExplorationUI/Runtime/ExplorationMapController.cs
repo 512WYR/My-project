@@ -224,9 +224,15 @@ namespace GameMake.ExplorationUI
                 slot.Sanity.fillAmount = Mathf.Clamp01((float)actor.Sanity / 100);
                 slot.Vitals.text = "生命 " + actor.Hp + "/" + actor.MaxHp + "   理智 " + actor.Sanity.ToString("0");
                 slot.Placeholder.Silhouette = actor.Definition.Silhouette;
+                // Same as the battle party column: draw the authored portrait through the silhouette
+                // graphic, and leave the separate portrait Image available for hand-assigned art.
+                var portrait = ActorArt.Portrait(actor.Definition);
+                slot.Placeholder.SetPortrait(portrait);
                 slot.Placeholder.enabled = !slot.Portrait.sprite;
                 slot.Portrait.enabled = slot.Portrait.sprite;
-                slot.Placeholder.color = actor.Dead ? new Color32(55,55,55,255) : cream;
+                slot.Placeholder.color = portrait
+                    ? actor.Dead ? new Color32(120,120,120,255) : Color.white
+                    : actor.Dead ? new Color32(55,55,55,255) : cream;
                 if (SelectedCharacter == i) PartyDetail.text = actor.Name + "  ·  " + (actor.Dead ? "已阵亡" : "探索队员");
             }
         }
