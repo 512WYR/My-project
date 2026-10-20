@@ -160,13 +160,13 @@ namespace Ruin.Tests
         {
             var high = Run(80);
             high.Battles = 1;
-            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, high).Count, "高理智的事件池含 EVT-H001");
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, high).Count, "高理智的事件池含 EVT-H001，不含已禁用的 EVT-007");
             Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Contain("EVT-H001"));
             Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Not.Contain("EVT-L001"));
 
             var low = Run(20);
             low.Battles = 1;
-            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, low).Count, "低理智的事件池含 EVT-L001");
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, low).Count, "低理智的事件池含 EVT-L001，不含已禁用的 EVT-007");
             Assert.That(EventScripts.Pool(NodeType.Event, low), Does.Contain("EVT-L001"));
             Assert.That(EventScripts.Pool(NodeType.Event, low), Does.Not.Contain("EVT-H001"));
 
@@ -178,14 +178,14 @@ namespace Ruin.Tests
         {
             var high = Run(80);
             var low = Run(20);
-            Assert.AreEqual(6, EventScripts.Pool(NodeType.Event, high).Count, "首战前去掉两条回血事件");
+            Assert.AreEqual(6, EventScripts.Pool(NodeType.Event, high).Count, "首战前去掉两条回血事件，EVT-007 已禁用");
             Assert.AreEqual(6, EventScripts.Pool(NodeType.Event, low).Count);
             Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Not.Contain("EVT-005"));
             Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Not.Contain("EVT-006"));
 
             high.Battles = 1;
             low.Battles = 1;
-            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, high).Count, "首战后恢复完整事件池");
+            Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, high).Count, "首战后恢复完整事件池（不含已禁用的 EVT-007）");
             Assert.AreEqual(8, EventScripts.Pool(NodeType.Event, low).Count);
             Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Contain("EVT-005"));
             Assert.That(EventScripts.Pool(NodeType.Event, high), Does.Contain("EVT-006"));
@@ -247,7 +247,7 @@ namespace Ruin.Tests
             string tenth = RollEvent(run);
             Assert.AreEqual(order[0], ninth, "池耗尽后先重复最久未见的一条");
             Assert.AreEqual(order[1], tenth, "随后轮到第二条最久未见的");
-            Assert.AreEqual(9, run.Map.EventHistory.Count);
+            Assert.AreEqual(10, run.Map.EventHistory.Count);
             Assert.AreEqual(order[0], run.Map.EventHistory[8], "重复项继续追加到历史末尾");
         }
 
@@ -334,7 +334,7 @@ namespace Ruin.Tests
 
             Assert.IsTrue(session.WantsBattle, "挖到上限会引来战斗");
             Assert.AreEqual(NodeType.Battle, session.BattleKind);
-            Assert.AreEqual(3 + 4 * node.EventLimit, run.Map.Supplies, "每次挖矿 +4 矿石");
+            Assert.AreEqual(3 + 2 * node.EventLimit, run.Map.Supplies, "每次挖矿 +2 矿石");
             Assert.AreEqual(sanity - 3 * node.EventLimit, run.Heroes[0].Sanity, 0.001, "每次挖矿全队理智 -3");
             Assert.IsTrue(EventScripts.CanLeave(node));
         }
@@ -461,6 +461,8 @@ namespace Ruin.Tests
             var ranksBefore = lowRun.Heroes.Select(h => h.Rank).OrderBy(r => r).ToArray();
             EventSession session;
             Assert.IsTrue(Pick(low, 0, lowRun, out session), "选守夜者");
+            Assert.IsFalse(session.WantsBattle, "选完守夜者先看遭遇描述，不直接开打");
+            Assert.IsTrue(Pick(low, 0, lowRun, out session), "确认开始战斗");
             Assert.IsTrue(session.WantsBattle, "休整都会以战斗收尾");
             Assert.That(lowRun.Heroes.Select(h => h.Rank).OrderBy(r => r).ToArray(), Is.EqualTo(ranksBefore),
                 "打乱的是站位，不是队伍成员");
@@ -469,6 +471,8 @@ namespace Ruin.Tests
             var highRun = Run(80);
             var highRanks = highRun.Heroes.Select(h => h.Rank).ToArray();
             Assert.IsTrue(Pick(high, 0, highRun, out session), "高理智选守夜者");
+            Assert.IsFalse(session.WantsBattle, "高理智同样先看遭遇描述");
+            Assert.IsTrue(Pick(high, 0, highRun, out session), "高理智确认开始战斗");
             Assert.IsTrue(session.WantsBattle);
             Assert.That(highRun.Heroes.Select(h => h.Rank).ToArray(), Is.EqualTo(highRanks), "高理智分支不动站位");
         }
@@ -526,6 +530,128 @@ namespace Ruin.Tests
             Assert.AreEqual(7, run.Map.Supplies);
             Assert.That(run.Heroes.Select(h => h.Sanity).ToArray(), Is.EqualTo(sanity));
             Assert.IsFalse(session.WantsBattle);
+        }
+
+        [Test] public void TheStoryEventIsDisabledFromTheNormalPoolButStillForceable()
+        {
+            var run = Run(50);
+            run.Battles = 1;
+            Assert.That(EventScripts.Pool(NodeType.Event, run), Does.Not.Contain("EVT-007"),
+                "剧情事件已禁用，不会在正常路线中抽到");
+            var node = new NodeState { Type = NodeType.Event };
+            EventScripts.Roll(node, run, Rules(), "EVT-007");
+            Assert.AreEqual("EVT-007", node.EventId, "调试台的强制事件仍然可以进入");
+        }
+
+        // ---------------- EVT-009 废弃义肢工坊 ----------------
+
+        [Test] public void TheWorkshopDrawerOpensOnceAndReturnsToTheMenu()
+        {
+            var run = Run(50);
+            run.Map.Supplies = 5;
+            var node = Room("EVT-009");
+            var sanityBefore = run.Heroes.Select(h => h.Sanity).ToArray();
+            int stockBefore = run.Prosthetics.Count;
+
+            var page = EventScripts.Page(node, run, Rules());
+            Assert.AreEqual(4, page.Choices.Count, "主页面有手术包、抽屉、调查、离开四项");
+            Assert.AreEqual("请他做一只手术包", page.Choices[0].Label);
+            Assert.AreEqual("拉开抽屉", page.Choices[1].Label);
+
+            EventSession session;
+            Assert.IsTrue(Pick(node, 1, run, out session));
+            Assert.AreEqual(0, node.EventStep, "开完抽屉回到主页面");
+            Assert.AreEqual(1, node.EventFlag, "抽屉只开一次");
+            Assert.AreEqual(7, run.Map.Supplies, "矿石 +2");
+            Assert.AreEqual(stockBefore + 1, run.Prosthetics.Count, "义体 +1");
+            for (int i = 0; i < run.Heroes.Count; i++)
+                Assert.AreEqual(sanityBefore[i] - 4, run.Heroes[i].Sanity, "全队理智 -4");
+
+            uint state = run.Random.State;
+            var again = EventScripts.Page(node, run, Rules());
+            Assert.AreEqual(4, again.Choices.Count, "隐藏选项仍占位，索引保持稳定");
+            Assert.That(again.Choices.Where(c => c.Label == "拉开抽屉").All(c => !c.Shown),
+                "抽屉选项不再显示");
+            Assert.IsFalse(Pick(node, 1, run, out session), "隐藏的抽屉不能再点");
+            Assert.AreEqual(state, run.Random.State, "重新渲染不消耗随机数");
+        }
+
+        [Test] public void TheWorkshopHandsOutASurgeryKitInsteadOfFittingAProsthetic()
+        {
+            var run = Run(50);
+            var node = Room("EVT-009");
+            int kitsBefore = ConsumableSystem.Count(run, ConsumableKind.SurgeryKit);
+            int stockBefore = run.Prosthetics.Count;
+
+            var page = EventScripts.Page(node, run, Rules());
+            Assert.IsTrue(page.Choices[0].Enabled, "没有断肢也能拿手术包");
+            Assert.AreEqual("请他做一只手术包", page.Choices[0].Label);
+            Assert.That(page.Choices[0].Detail, Does.Contain("手术包"));
+
+            EventSession session;
+            Assert.IsTrue(Pick(node, 0, run, out session));
+            Assert.AreEqual(EventScripts.DoneStep, node.EventStep, "拿完手术包事件结束");
+            Assert.AreEqual(kitsBefore + 1, ConsumableSystem.Count(run, ConsumableKind.SurgeryKit));
+            Assert.AreEqual(stockBefore, run.Prosthetics.Count, "不再安装或消耗库存义体");
+            Assert.That(session.Note, Does.Contain("手术包"));
+        }
+
+        [Test] public void TheWorkshopKitOptionRendersTheSameWithoutDrawingRandomness()
+        {
+            var run = Run(50);
+            var node = Room("EVT-009");
+            uint state = run.Random.State;
+
+            var first = EventScripts.Page(node, run, Rules());
+            var second = EventScripts.Page(node, run, Rules());
+            Assert.AreEqual(first.Choices.Count, second.Choices.Count);
+            for (int i = 0; i < first.Choices.Count; i++)
+            {
+                Assert.AreEqual(first.Choices[i].Label, second.Choices[i].Label);
+                Assert.AreEqual(first.Choices[i].Detail, second.Choices[i].Detail);
+                Assert.AreEqual(first.Choices[i].Enabled, second.Choices[i].Enabled);
+            }
+            Assert.AreEqual(state, run.Random.State, "主页面渲染不消耗随机数");
+        }
+
+        [Test] public void TheWorkshopNestReadsPlayerSanityAndStaysNonLethal()
+        {
+            var high = Run(60);
+            var node = Room("EVT-009");
+            EventSession session;
+            Assert.IsTrue(Pick(node, 2, high, out session), "调查搏动组织");
+            var page = EventScripts.Page(node, high, Rules());
+            Assert.AreEqual(3, node.EventStep);
+            Assert.AreEqual("记录它的节奏", page.Choices[0].Label);
+            Assert.That(page.Choices.Select(c => c.Label), Does.Not.Contain("把手伸进笼子"));
+            var sanityBefore = high.Heroes.Select(h => h.Sanity).ToArray();
+            int stockBefore = high.AccessoryStock.Count;
+            Assert.IsTrue(Pick(node, 0, high, out session));
+            Assert.AreEqual(stockBefore + 1, high.AccessoryStock.Count);
+            for (int i = 0; i < high.Heroes.Count; i++)
+                Assert.AreEqual(sanityBefore[i] + 2, high.Heroes[i].Sanity, "全队理智 +2");
+
+            var low = Run(40);
+            node = Room("EVT-009");
+            Assert.IsTrue(Pick(node, 2, low, out session));
+            page = EventScripts.Page(node, low, Rules());
+            Assert.AreEqual("把手伸进笼子", page.Choices[0].Label);
+            Assert.That(page.Choices.Select(c => c.Label), Does.Not.Contain("记录它的节奏"));
+            var hpBefore = low.Heroes.Select(h => h.Hp).ToArray();
+            var lowSanityBefore = low.Heroes.Select(h => h.Sanity).ToArray();
+            stockBefore = low.AccessoryStock.Count;
+            Assert.IsTrue(Pick(node, 0, low, out session));
+            Assert.AreEqual(stockBefore + 1, low.AccessoryStock.Count);
+            for (int i = 0; i < low.Heroes.Count; i++)
+                Assert.AreEqual(lowSanityBefore[i] - 6, low.Heroes[i].Sanity, "全队理智 -6");
+
+            int wounded = 0;
+            for (int i = 0; i < low.Heroes.Count; i++)
+            {
+                Assert.That(low.Heroes[i].Hp, Is.GreaterThan(0), "事件伤害不会致死");
+                if (low.Heroes[i].Hp != hpBefore[i]) wounded++;
+            }
+            Assert.AreEqual(1, wounded, "随机一名队员按最大生命的 20% 受伤");
         }
 
         // 祭坛只给两项交易，报价在进房时冻结；重新渲染不会换一套数字。

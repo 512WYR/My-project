@@ -466,11 +466,9 @@ namespace Ruin.Runtime
             view.Choices.Add(new RoomPageChoice(
                 wiped || (boss && !won) ? "结束本局" : boss ? "通关结算" : "继续前进",
                 wiped ? "查看本局结果" : boss ? "查看本局结果" : "选择下一个位置"));
-            view.Choices.Add(new RoomPageChoice("新开演练", "重置全部队员"));
             view.Choose = index =>
             {
                 if (index == 0) app.ContinueBattle();
-                else if (index == 1) app.NewRun();
             };
             return view;
         }

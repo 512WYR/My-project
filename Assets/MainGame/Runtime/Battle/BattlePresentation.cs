@@ -68,6 +68,9 @@ namespace Ruin.Runtime
 
         private Vector2 actorBase;
         private Vector2 actorHit;
+        // +1 when the player acts (left to right), -1 when an enemy acts (right to left). The whole
+        // cut-in is laid out around this sign so the two sides never attack in the same direction.
+        private float attackSide = 1f;
 
         public static BattlePresentation Ensure(StageOneApp owner)
         {
@@ -228,7 +231,7 @@ namespace Ruin.Runtime
                 // hit lands with the numbers. The sanity attack is one continuous take, so it only
                 // fires on impact.
                 if (!sanityAttack) SfxDirector.Play(SfxCue.AttackWindup);
-                Vector2 wind = actorBase + new Vector2(-36f, 0f);
+                Vector2 wind = actorBase + new Vector2(-36f * attackSide, 0f);
                 yield return Tween(0.18f, t => actorSlot.anchoredPosition = Vector2.Lerp(actorBase, wind, EaseOut(t)), token);
                 yield return Tween(0.16f, t => actorSlot.anchoredPosition = Vector2.Lerp(wind, actorHit, EaseIn(t)), token);
 
@@ -239,7 +242,8 @@ namespace Ruin.Runtime
                     float punch = EaseOut(t);
                     for (int i = 0; i < activeTargets; i++)
                     {
-                        targetSlots[i].anchoredPosition = targetBasePositions[i] + new Vector2(targetRecoils[i] * punch, 0f);
+                        targetSlots[i].anchoredPosition = targetBasePositions[i]
+                            + new Vector2(targetRecoils[i] * punch * attackSide, 0f);
                         targetArts[i].color = Color.Lerp(targetFlashColors[i], targetBaseColors[i], t);
                     }
                     float pop = Pop(t);
@@ -260,7 +264,9 @@ namespace Ruin.Runtime
                 actorSlot.anchoredPosition = Vector2.Lerp(fadeFrom, actorBase, t);
                 actorSlot.localScale = Vector3.one;
                 for (int i = 0; i < activeTargets; i++)
-                    targetSlots[i].anchoredPosition = Vector2.Lerp(targetBasePositions[i] + new Vector2(targetRecoils[i], 0f), targetBasePositions[i], t);
+                    targetSlots[i].anchoredPosition = Vector2.Lerp(
+                        targetBasePositions[i] + new Vector2(targetRecoils[i] * attackSide, 0f),
+                        targetBasePositions[i], t);
             }, token);
 
             HideStage();
@@ -270,7 +276,10 @@ namespace Ruin.Runtime
         {
             if (!actorArt || !actorSlot || group == null || group.Actor == null) return false;
 
-            actorBase = new Vector2(ActorX, SlotY);
+            // Heroes always stand on the left and strike right; enemies stand on the right and strike
+            // left. Everything below is mirrored from this one sign.
+            attackSide = group.Actor.Player ? 1f : -1f;
+            actorBase = new Vector2(ActorX * attackSide, SlotY);
             actorSlot.anchoredPosition = actorBase;
             actorSlot.localScale = Vector3.one;
             // Skill frames take priority. A monster action with no skill art ("X 发动攻击。") uses its
@@ -318,7 +327,8 @@ namespace Ruin.Runtime
             float width = TargetWidth(activeTargets);
             float height = width * 1.6f;
             float total = activeTargets * width + Mathf.Max(0, activeTargets - 1) * TargetGap;
-            float start = TargetCentreX - total * 0.5f + width * 0.5f;
+            float centreX = TargetCentreX * attackSide;
+            float start = centreX - total * 0.5f + width * 0.5f;
 
             for (int i = 0; i < MaxTargets; i++)
             {
@@ -332,7 +342,9 @@ namespace Ruin.Runtime
                 if (!use) continue;
 
                 var r = shown[i];
-                float x = start + i * (width + TargetGap);
+                // Rank 1 stays closest to the acting side, so an enemy beat fills the row from the right.
+                int column = attackSide > 0f ? i : activeTargets - 1 - i;
+                float x = start + column * (width + TargetGap);
                 targetSlots[i].sizeDelta = new Vector2(width, height);
                 targetSlots[i].anchoredPosition = new Vector2(x, SlotY);
                 targetSlots[i].localScale = Vector3.one;
@@ -374,8 +386,8 @@ namespace Ruin.Runtime
                 }
             }
 
-            actorHit = new Vector2(TargetCentreX - total * 0.5f - 160f, SlotY);
-            if (activeTargets == 0) actorHit = actorBase + new Vector2(120f, 0f);
+            actorHit = new Vector2(centreX - attackSide * (total * 0.5f + 160f), SlotY);
+            if (activeTargets == 0) actorHit = actorBase + new Vector2(120f * attackSide, 0f);
             if (HasMiss(group)) actorHit = Vector2.Lerp(actorBase, actorHit, 0.55f);
 
             return activeTargets > 0 || !string.IsNullOrEmpty(actorResult.text);

@@ -165,7 +165,7 @@ namespace GameMake.IndustrialDebugUI
         private static readonly string[] EventIds =
         {
             "EVT-001", "EVT-002", "EVT-003", "EVT-004", "EVT-005", "EVT-006",
-            "EVT-007", "EVT-008", "EVT-H001", "EVT-L001", ""
+            "EVT-007", "EVT-008", "EVT-H001", "EVT-L001", "EVT-009"
         };
         // Button order on both pages. SkillForm's own numeric order is Technical, Basic, Primal,
         // which reads badly in the UI, so the buttons use this explicit order instead.
@@ -924,7 +924,7 @@ namespace GameMake.IndustrialDebugUI
                 {
                     text.AppendLine("当前不在事件/祭坛房间。");
                     text.AppendLine("点击下方任意事件按钮，会把当前位置的候选替换成该事件并立即进入；");
-                    text.AppendLine("其中 EVT-008 以祭坛房进入。EVT-H001 / EVT-L001 仍然可以强制进入，方便检查理智分支。");
+                    text.AppendLine("其中 EVT-008 以祭坛房进入，EVT-009 是普通事件。EVT-H001 / EVT-L001 仍然可以强制进入，方便检查理智分支。");
                 }
                 else
                 {

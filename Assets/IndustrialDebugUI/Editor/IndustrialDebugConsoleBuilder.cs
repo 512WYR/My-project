@@ -315,7 +315,7 @@ namespace GameMake.IndustrialDebugUI.EditorTools
             console.EventBody = Body(content, "Event Body", 20, 56, 1540, 480, 16);
             Label(content, "Force Title", "强制事件（替换当前位置候选并立即进入）", 20, 552, 1540, 30, 20, Gold);
             string[] ids = { "EVT-001", "EVT-002", "EVT-003", "EVT-004", "EVT-005", "EVT-006",
-                "EVT-007", "EVT-008", "EVT-H001", "EVT-L001" };
+                "EVT-007", "EVT-008", "EVT-H001", "EVT-L001", "EVT-009" };
             console.EventButtons = new Button[11];
             for (int i = 0; i < console.EventButtons.Length; i++)
             {

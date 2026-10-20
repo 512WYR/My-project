@@ -247,7 +247,9 @@ namespace GameMake.EventUI
                 .Where(x=>x.Choice.Shown).ToArray();
             leave=content.CanLeave; continueChoice=-1;
             // The event scripts use a single closing choice where the other rooms use an advance button.
-            if(!leave && Source.Room==RoomView.Event && visible.Length==1
+            // A settled event battle also sits on the event room and offers one "继续前进" choice, but
+            // that choice belongs to the settlement page and must reach ContinueBattle, not the script.
+            if(!leave && Source.Battle==null && Source.Room==RoomView.Event && visible.Length==1
                 && new[]{"继续","继续前进","离开"}.Contains(visible[0].Choice.Label))
                 continueChoice=visible[0].Index;
             // Rooms keep their choices while the advance button is available; an event's closing page has
