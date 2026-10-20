@@ -554,11 +554,18 @@ namespace Ruin.Runtime
             art.Accent = actor.Player ? MenuUi.Gold : new Color32(0xB4, 0x6B, 0x5B, 0xFF);
             var portrait = show != null ? show : ActorArt.Portrait(spec);
             art.SetPortrait(portrait);
+            // A copy also mirrors its portrait so it faces the other way, matching its card and the
+            // monster art that stands on the enemy side.
+            art.FlipX = actor.IsCopy;
             // The cut-in background is nearly black, so the vector silhouettes use a lighter body than
             // they do on the battle card; a portrait keeps its own colours and only greys out on death.
-            art.color = portrait != null
-                ? dead ? new Color(0.47f, 0.47f, 0.47f, 1f) : Color.white
-                : dead ? new Color32(0x3A, 0x41, 0x44, 0xFF) : new Color32(0x7A, 0x84, 0x86, 0xFF);
+            // A boss copy uses the same greyscale material as its card so the two screens agree.
+            art.material = actor.IsCopy ? ActorArt.CopyMaterial : null;
+            art.color = actor.IsCopy
+                ? ActorArt.CopyColor(dead)
+                : portrait != null
+                    ? dead ? new Color(0.47f, 0.47f, 0.47f, 1f) : Color.white
+                    : dead ? new Color32(0x3A, 0x41, 0x44, 0xFF) : new Color32(0x7A, 0x84, 0x86, 0xFF);
             art.SetVerticesDirty();
         }
 

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Ruin.Core;
 using UnityEngine;
@@ -12,6 +13,49 @@ namespace Ruin.Runtime
     {
         // Heroes are checked first, then monsters. Ids are unique per side, so one cache covers both.
         private static readonly string[] Roots = { "StageOne/HeroArt/", "StageOne/EnemyArt/" };
+        // A boss copy wears the hero's portrait in black and white, so the duplicate reads as a copy at
+        // a glance. The card and the cut-in read these same two brightness values: alive copies keep
+        // full brightness, dead ones dim.
+        public static readonly Color CopyTint = Color.white;
+        public static readonly Color CopyDeadTint = new Color(0.58f, 0.58f, 0.58f, 1f);
+
+        // Graphic.color multiplies the texture and cannot desaturate it, so the copy treatment needs a
+        // shader that converts the sampled portrait to luminance. It is authored under a Resources
+        // folder so the build includes it even though no material asset references it.
+        private static Material copyMaterial;
+        // A failed lookup is remembered too: the battle HUD refreshes several times a second and would
+        // otherwise retry the Resources load for every copy on every refresh.
+        private static bool copyMaterialLookup;
+
+        public static Material CopyMaterial
+        {
+            get
+            {
+                if (copyMaterial) return copyMaterial;
+                if (copyMaterialLookup) return null;
+                copyMaterialLookup = true;
+                var shader = Resources.Load<Shader>("CopyGrey");
+                if (shader == null) shader = Shader.Find("Ruin/UI Copy Grey");
+                if (shader == null) return null;
+                copyMaterial = new Material(shader)
+                {
+                    name = "Copy Grey (Runtime)",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                copyMaterial.SetFloat("_Saturation", 0f);
+                copyMaterial.SetFloat("_Brightness", 1.12f);
+                return copyMaterial;
+            }
+        }
+
+        // The vertex colour a copy should use. If the shader is missing (for example it was stripped
+        // from a build), fall back to the old multiplicative grey so a copy still looks different.
+        public static Color CopyColor(bool dead)
+        {
+            if (CopyMaterial != null)
+                return dead ? CopyDeadTint : CopyTint;
+            return dead ? new Color32(138, 138, 138, 255) : new Color32(216, 216, 216, 255);
+        }
         private static readonly Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
         // Image-based HUDs (the authored Gothic panel) take a Sprite instead of a Texture2D, so the
         // sprite form is cached alongside the texture and built once per Id.
@@ -21,9 +65,12 @@ namespace Ruin.Runtime
         {
             if (spec == null || string.IsNullOrEmpty(spec.Id)) return null;
             if (cache.TryGetValue(spec.Id, out var cached)) return cached;
-            Texture2D texture = null;
-            for (int i = 0; i < Roots.Length && texture == null; i++)
-                texture = Load(Roots[i] + spec.Id);
+            Texture2D texture = LoadBody(spec.Id);
+            if (texture == null)
+            {
+                var source = CopySourceId(spec.Id);
+                if (source != null) texture = LoadBody(source);
+            }
             // Misses are cached too. The battle HUD renders several times a second, and a repeated
             // Resources lookup for the characters that have no art would otherwise hit the asset system.
             cache[spec.Id] = texture;
@@ -36,15 +83,11 @@ namespace Ruin.Runtime
         {
             if (spec == null || string.IsNullOrEmpty(spec.Id)) return null;
             if (spriteCache.TryGetValue(spec.Id, out var cached)) return cached;
-            Sprite sprite = null;
-            for (int i = 0; i < Roots.Length && sprite == null; i++)
+            Sprite sprite = LoadBodySprite(spec.Id);
+            if (sprite == null)
             {
-                sprite = Resources.Load<Sprite>(Roots[i] + spec.Id);
-                if (sprite != null) continue;
-                var texture = Load(Roots[i] + spec.Id);
-                if (texture != null)
-                    sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f), 100f);
+                var source = CopySourceId(spec.Id);
+                if (source != null) sprite = LoadBodySprite(source);
             }
             spriteCache[spec.Id] = sprite;
             return sprite;
@@ -118,6 +161,39 @@ namespace Ruin.Runtime
             if (showCache.TryGetValue(path, out var cached)) return cached;
             showCache[path] = Load(path);
             return showCache[path];
+        }
+
+        // A copy boss summons units whose spec id is "copy_<heroId>"; they ship no art of their own
+        // and borrow the hero file when the full id has none. The copy boss itself is also called
+        // copy_boss, so its own portrait always wins before the prefix is stripped.
+        private static string CopySourceId(string id)
+        {
+            return id != null && id.Length > 5 && id.StartsWith("copy_", StringComparison.Ordinal)
+                ? id.Substring(5) : null;
+        }
+
+        private static Texture2D LoadBody(string id)
+        {
+            for (int i = 0; i < Roots.Length; i++)
+            {
+                var texture = Load(Roots[i] + id);
+                if (texture != null) return texture;
+            }
+            return null;
+        }
+
+        private static Sprite LoadBodySprite(string id)
+        {
+            for (int i = 0; i < Roots.Length; i++)
+            {
+                var sprite = Resources.Load<Sprite>(Roots[i] + id);
+                if (sprite != null) return sprite;
+                var texture = Load(Roots[i] + id);
+                if (texture != null)
+                    return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f), 100f);
+            }
+            return null;
         }
 
         private static Texture2D Load(string path)

@@ -131,11 +131,16 @@ namespace GameMake.IndustrialBattleUI
         static void TintCard(GothicBattleCard card)
         {
             if(!card || !card.Art) return;
+            bool dead=card.DeadCross!=null && card.DeadCross.activeSelf;
+            bool copy=card.Actor!=null && card.Actor.IsCopy;
             // The bronze tint is for the vector figure. A portrait carries its own colours, so it only
-            // greys out when the actor is dead — the same rule GothicBattleCard.Render applies.
-            card.Art.color=card.Art.Portrait
-                ?(card.DeadCross.activeSelf?new Color32(120,120,120,255):Color.white)
-                :card.DeadCross.activeSelf?new Color32(70,70,66,255):new Color32(206,190,163,255);
+            // greys out when the actor is dead — the same rule GothicBattleCard.Render applies. A boss
+            // copy keeps its greyscale material here too, so the later tint pass cannot erase it.
+            card.Art.material=copy?ActorArt.CopyMaterial:null;
+            card.Art.color=copy?ActorArt.CopyColor(dead)
+                :card.Art.Portrait
+                    ?(dead?new Color32(120,120,120,255):Color.white)
+                    :dead?new Color32(70,70,66,255):new Color32(206,190,163,255);
             card.Art.SetVerticesDirty();
         }
         IEnumerator Spin()

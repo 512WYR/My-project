@@ -20,6 +20,10 @@ namespace Ruin.Runtime
         public bool IsEnemy;
         public Color Accent = new Color(0.7f, 0.7f, 0.7f);
         public Texture2D Portrait;
+        // Mirrors the portrait horizontally inside the same rect. Enemy-side art faces left, so a boss
+        // copy of a hero has to be flipped rather than shown in the hero's original facing. The UV swap
+        // keeps this independent of the rect's pivot and of the span/tween scale changes on the node.
+        public bool FlipX;
         private VertexHelper mesh;
         private Vector2 origin;
         private Vector2 scale;
@@ -113,10 +117,12 @@ namespace Ruin.Runtime
             float fit = Mathf.Min(r.width / Portrait.width, r.height / Portrait.height);
             var size = new Vector2(Portrait.width * fit, Portrait.height * fit);
             Vector2 min = r.center - size * 0.5f;
-            mesh.AddVert(new Vector2(min.x, min.y), color, new Vector2(0, 0));
-            mesh.AddVert(new Vector2(min.x, min.y + size.y), color, new Vector2(0, 1));
-            mesh.AddVert(new Vector2(min.x + size.x, min.y + size.y), color, new Vector2(1, 1));
-            mesh.AddVert(new Vector2(min.x + size.x, min.y), color, new Vector2(1, 0));
+            float left = FlipX ? 1f : 0f;
+            float right = FlipX ? 0f : 1f;
+            mesh.AddVert(new Vector2(min.x, min.y), color, new Vector2(left, 0));
+            mesh.AddVert(new Vector2(min.x, min.y + size.y), color, new Vector2(left, 1));
+            mesh.AddVert(new Vector2(min.x + size.x, min.y + size.y), color, new Vector2(right, 1));
+            mesh.AddVert(new Vector2(min.x + size.x, min.y), color, new Vector2(right, 0));
             mesh.AddTriangle(0, 1, 2);
             mesh.AddTriangle(2, 3, 0);
         }

@@ -44,6 +44,9 @@ namespace GameMake.GothicHUD
 
         // Filled by the controller so a click can be routed back without the card knowing about the battle.
         [HideInInspector] public string ActorId;
+        // Last actor rendered here. The details panel re-tints the cards outside Render, so it needs
+        // the state to tell a boss copy from the hero it was cloned from.
+        [HideInInspector] public ActorState Actor;
 
         // The feet strip is created lazily under the art, never as a direct child of the card: the span
         // code caches direct-child positions and would treat it as a badge. It shows the concrete buff
@@ -60,6 +63,7 @@ namespace GameMake.GothicHUD
             if (actor == null) { gameObject.SetActive(false); return; }
             gameObject.SetActive(true);
             ActorId = actor.Id;
+            Actor = actor;
 
             Color accent = actor.Player ? AllyAccent : EnemyAccent;
             if (actor.Dead) accent = DeadAccent;
@@ -84,11 +88,19 @@ namespace GameMake.GothicHUD
                 // Heroes and monsters may both ship a portrait under Resources/StageOne/<HeroArt|EnemyArt>/<Id>.
                 // Anything without a file keeps the procedural silhouette.
                 Art.SetPortrait(ActorArt.Portrait(actor.Definition));
+                // A copy mirrors the hero's portrait so it faces the other way on the enemy side, just
+                // like the monster art. Cards are reused between ranks, so non-copies reset the flag.
+                Art.FlipX = actor.IsCopy;
                 // A portrait carries its own colours, so only the dead state tints it. The vector figure
-                // still uses the stage's near-black body colour.
-                Art.color = Art.Portrait != null
-                    ? (actor.Dead ? new Color32(120, 120, 120, 255) : Color.white)
-                    : (actor.Dead ? DeadBody : AliveBody);
+                // still uses the stage's near-black body colour. A boss copy renders through a greyscale
+                // material so it reads as a duplicate rather than the hero standing on the other side;
+                // non-copies must clear the material because cards are reused between ranks.
+                Art.material = actor.IsCopy ? ActorArt.CopyMaterial : null;
+                Art.color = actor.IsCopy
+                    ? ActorArt.CopyColor(actor.Dead)
+                    : Art.Portrait != null
+                        ? (actor.Dead ? new Color32(120, 120, 120, 255) : Color.white)
+                        : (actor.Dead ? DeadBody : AliveBody);
                 Art.raycastTarget = false;
                 // The silhouette fields are plain fields on a mesh that is only rebuilt when the graphic is
                 // marked dirty, and the colour alone may be unchanged when a swap puts a different hero on
