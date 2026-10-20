@@ -354,7 +354,7 @@ namespace GameMake.IndustrialDebugUI.EditorTools
                 console.RepairButtons[i] = Btn(content, "Repair " + parts[i], "修复·" + parts[i],
                     20 + i * 386, 638, 370, 52, out _, 18);
 
-            Label(content, "Install Title", "安装义肢（只处理断肢，使用队伍仓库）", 20, 708, 1540, 30, 20, Gold);
+            Label(content, "Install Title", "安装义肢（任意未装义体的部位，使用队伍仓库）", 20, 708, 1540, 30, 20, Gold);
             console.InstallButtons = new Button[4];
             for (int i = 0; i < 4; i++)
                 console.InstallButtons[i] = Btn(content, "Install " + parts[i], "安装·" + parts[i],
@@ -362,7 +362,7 @@ namespace GameMake.IndustrialDebugUI.EditorTools
 
             var note = Label(content, "Note",
                 "「击伤」造成一次部位伤害，「断肢」连续两次，结果与敌人重劈一致。\n"
-                + "义肢在「物品与饰品」页发放；安装按钮只在仓库里存在对应部位的义肢且该部位断肢时可用。",
+                + "义肢在「物品与饰品」页发放；安装按钮在仓库里存在对应部位的义肢且该部位未装义体时可用。",
                 20, 820, 1540, 70, 15, Muted);
             note.verticalOverflow = VerticalWrapMode.Overflow;
         }

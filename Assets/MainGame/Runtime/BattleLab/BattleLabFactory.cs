@@ -377,8 +377,6 @@ namespace Ruin.Runtime
                         && prosthetic.RestrictSilhouette != hero.Spec.Silhouette)
                         errors.Add(name + " 不能装备「" + prosthetic.Name + "」（"
                             + ProstheticSystem.RestrictionText(prosthetic) + "）。");
-                    if (hero.Limbs[part] != LabLimbState.Severed)
-                        errors.Add(name + " 的" + LimbSystem.PartName((LimbPart)part) + "未断肢，不能安装「" + prosthetic.Name + "」。");
                 }
             }
         }
@@ -550,11 +548,6 @@ namespace Ruin.Runtime
                 }
                 string prostheticId = cfg.ProstheticIds[part];
                 if (string.IsNullOrEmpty(prostheticId)) continue;
-                if (cfg.Limbs[part] != LabLimbState.Severed)
-                {
-                    errors.Add(hero.Name + " 的" + LimbSystem.PartName((LimbPart)part) + "未断肢，无法安装义肢。");
-                    continue;
-                }
                 var item = LimbSystem.Prosthetic(prostheticId, rules == null ? null : rules.Limbs);
                 if (item == null)
                 {

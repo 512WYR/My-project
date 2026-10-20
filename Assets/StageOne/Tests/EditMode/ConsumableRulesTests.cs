@@ -255,20 +255,50 @@ namespace Ruin.Tests
             run.Prosthetics.Add(LimbSystem.Clone(LimbSystem.Prosthetic("prosthetic_arm", rules.Limbs)));
 
             string note;
-            // No kit yet, limb already severed.
+            // No kit yet: the kit path refuses and keeps the piece.
             LimbSystem.Get(hero, LimbPart.Arm).Hp = 0;
             Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, run.Prosthetics[0], out note), Is.False);
             Assert.AreEqual("需要手术包才能在这里安装义体。", note);
             Assert.IsFalse(LimbSystem.HasProsthetic(hero, LimbPart.Arm));
             Assert.AreEqual(1, run.Prosthetics.Count);
 
-            // Kit in hand, but the part is still flesh.
+            // With a kit even an intact part is accepted now.
             Grant(run, ConsumableKind.SurgeryKit);
             LimbSystem.Get(hero, LimbPart.Arm).Hp = LimbSystem.Get(hero, LimbPart.Arm).MaxHp;
-            Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, run.Prosthetics[0], out note), Is.False);
-            Assert.AreEqual("只能安装在断肢上。", note);
+            Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, run.Prosthetics[0], out note), Is.True, note);
+            Assert.IsTrue(LimbSystem.HasProsthetic(hero, LimbPart.Arm));
+            Assert.AreEqual(0, ConsumableSystem.Count(run, ConsumableKind.SurgeryKit));
+
+            // A second fitting on the same part is refused and keeps both items.
+            var second = LimbSystem.Clone(LimbSystem.Prosthetic("siege_hydraulic_arm", rules.Limbs));
+            run.Prosthetics.Add(second);
+            Grant(run, ConsumableKind.SurgeryKit);
+            Assert.That(ConsumableSystem.UseSurgeryKit(run, hero, second, out note), Is.False);
+            Assert.AreEqual("该部位已经装有义体，无法替换。", note);
             Assert.AreEqual(1, ConsumableSystem.Count(run, ConsumableKind.SurgeryKit));
             Assert.AreEqual(1, run.Prosthetics.Count);
+        }
+
+        [Test]
+        public void FreeInstallSpendsEightHpAndTheStockedPieceWithoutAKit()
+        {
+            var rules = new CombatRules();
+            var run = Run(rules, HeroSpec("a", maxHp: 40));
+            var hero = run.Heroes[0];
+            hero.Hp = 30;
+            run.Prosthetics.Add(LimbSystem.Clone(LimbSystem.Prosthetic("prosthetic_arm", rules.Limbs)));
+
+            string note;
+            Assert.That(ConsumableSystem.UseFreeInstall(run, hero, run.Prosthetics[0], out note), Is.True, note);
+            Assert.IsTrue(LimbSystem.HasProsthetic(hero, LimbPart.Arm), "完好部位也能自由装载");
+            Assert.AreEqual(22, hero.Hp, "自由装载扣 8 点生命");
+            Assert.AreEqual(0, run.Prosthetics.Count, "装载的义体离开库存");
+
+            var second = LimbSystem.Clone(LimbSystem.Prosthetic("siege_hydraulic_arm", rules.Limbs));
+            run.Prosthetics.Add(second);
+            Assert.That(ConsumableSystem.UseFreeInstall(run, hero, second, out note), Is.False);
+            Assert.AreEqual("该部位已经装有义体，无法替换。", note);
+            Assert.AreEqual(1, run.Prosthetics.Count, "被拒绝的装载不消耗库存");
         }
 
         [Test]

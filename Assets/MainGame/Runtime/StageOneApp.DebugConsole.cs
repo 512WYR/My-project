@@ -208,7 +208,7 @@ namespace Ruin.Runtime
             }
             if (!LimbSystem.Install(hero, item))
             {
-                Hint = "只有断肢才能安装义肢。";
+                Hint = "无法安装该义体。";
                 Refresh();
                 return;
             }

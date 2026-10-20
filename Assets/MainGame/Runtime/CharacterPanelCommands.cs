@@ -52,27 +52,39 @@ namespace Ruin.Runtime
                 Hint = note; Refresh();
             }
         }
-        // The character panel fits a prosthetic only with a surgery kit; the supply station's own install
-        // option is the other route. The view asks the same method, so the visible reason and the command
-        // can never disagree.
+        // The character panel fits a prosthetic with a surgery kit when the party carries one. With no
+        // kit the same action becomes a free fitting, which costs HP instead of an item; the supply
+        // station's own install option costs neither. The view asks these same members, so the visible
+        // reason, cost label and command can never disagree.
+        public bool CharacterInstallUsesKit =>
+            Run != null && ConsumableSystem.Count(Run, ConsumableKind.SurgeryKit) > 0;
+        public string CharacterInstallActionText => CharacterInstallUsesKit
+            ? "消耗手术包装载"
+            : "自由装载 · 生命 -" + LimbSystem.FreeInstallHpCost;
+
         public string CharacterInstallBlockedReason(ProstheticSpec item)
         {
             if (CharacterHero == null) return "请选择一名队员";
             if (CharacterHero.Dead) return "角色已阵亡";
             if (!CanManageCharacter) return "等待我方行动";
-            return ConsumableSystem.SurgeryKitBlockedReason(Run, CharacterHero, item);
+            return CharacterInstallUsesKit
+                ? ConsumableSystem.SurgeryKitBlockedReason(Run, CharacterHero, item)
+                : ConsumableSystem.FreeInstallBlockedReason(CharacterHero, item);
         }
         public void CharacterInstallProsthetic(string itemId)
         {
             if (!CanManageCharacter || CharacterHero == null || CharacterHero.Dead) return;
             var item = Run.Prosthetics.FirstOrDefault(p => p != null && p.Id == itemId);
             if (item == null) { Hint = "没有对应部位的义体库存。"; Refresh(); return; }
-            string blocked = ConsumableSystem.SurgeryKitBlockedReason(Run, CharacterHero, item);
+            string blocked = CharacterInstallBlockedReason(item);
             if (blocked != null) { Hint = blocked; Refresh(); return; }
             var hero = CharacterHero;
             bool inBattle = !AwaitingNode;
             int from = inBattle ? Battle.Events.Count : 0;
-            if (!ConsumableSystem.UseSurgeryKit(Run, hero, item, out string note))
+            bool installed = CharacterInstallUsesKit
+                ? ConsumableSystem.UseSurgeryKit(Run, hero, item, out string note)
+                : ConsumableSystem.UseFreeInstall(Run, hero, item, out note);
+            if (!installed)
             { Hint = note; Refresh(); return; }
             Hint = note;
             if (inBattle)

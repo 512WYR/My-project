@@ -182,17 +182,32 @@ namespace Ruin.Tests
             Assert.AreEqual(LimbCondition.Severed, LimbSystem.ConditionOf(hero, LimbPart.Arm));
         }
 
-        [Test] public void InstallRequiresASeveredLimb()
+        [Test] public void InstallAcceptsAnyLimbButCannotReplaceAFittedPiece()
         {
             var hero = Run().Heroes[0];
             var arm = LimbSystem.Prosthetic("prosthetic_arm", Rules());
-            Assert.IsFalse(LimbSystem.CanInstall(hero, arm), "完好部位不能安装义肢");
+            Assert.IsTrue(LimbSystem.CanInstall(hero, arm), "完好部位可以自由装载");
             LimbSystem.Damage(hero, LimbPart.Arm, LimbSystem.HitAmount(hero, LimbPart.Arm, Rules()));
-            Assert.IsFalse(LimbSystem.CanInstall(hero, arm), "重伤也不是安装条件，必须先断肢");
-            LimbSystem.Damage(hero, LimbPart.Arm, LimbSystem.HitAmount(hero, LimbPart.Arm, Rules()));
-            Assert.IsTrue(LimbSystem.CanInstall(hero, arm));
+            Assert.IsTrue(LimbSystem.CanInstall(hero, arm), "重伤部位也可以直接装载");
             Assert.IsTrue(LimbSystem.Install(hero, arm));
-            Assert.IsFalse(LimbSystem.CanInstall(hero, arm), "装好以后就不再是断肢");
+            Assert.IsFalse(LimbSystem.CanInstall(hero, arm), "已装义体的部位不能替换");
+            Assert.AreEqual("该部位已经装有义体，无法替换。", LimbSystem.InstallBlockedReason(hero, arm));
+        }
+
+        [Test] public void FreeInstallCostsEightHpAndLeavesAtLeastOne()
+        {
+            var hero = RunState.Create(new[] { Fighter("guard", 42, 9) }, 1, 50, catalog.Rules()).Heroes[0];
+            hero.Hp = 30;
+            var arm = LimbSystem.Prosthetic("prosthetic_arm", Rules());
+            Assert.IsTrue(LimbSystem.FreeInstall(hero, arm, out int paid), "自由装载应当成功");
+            Assert.AreEqual(8, paid, "自由装载扣 8 点生命");
+            Assert.AreEqual(22, hero.Hp);
+            Assert.IsTrue(LimbSystem.HasProsthetic(hero, LimbPart.Arm));
+
+            var low = RunState.Create(new[] { Fighter("low", 42, 9) }, 1, 50, catalog.Rules()).Heroes[0];
+            low.Hp = 3;
+            Assert.IsTrue(LimbSystem.FreeInstall(low, LimbSystem.Prosthetic("prosthetic_leg", Rules())));
+            Assert.AreEqual(1, low.Hp, "生命代价最低留 1 点");
         }
 
         [Test] public void CrippledHeroKeepsItsSkillsAndSwap()

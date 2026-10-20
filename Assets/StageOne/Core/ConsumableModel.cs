@@ -9,7 +9,7 @@ namespace Ruin.Core
     {
         SanityLock, // 理智锁定药剂
         HpRestore,  // 血量恢复药
-        SurgeryKit  // 手术包：消耗一件并为断肢装载义体
+        SurgeryKit  // 手术包：消耗一件并为任意未装义体的部位装载义体
     }
 
     [Serializable]

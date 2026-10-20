@@ -325,7 +325,7 @@ namespace Ruin.Runtime
             StopAllCoroutines(); Busy = false; ClearPending(); Battle = null;
             Room = RoomView.Supply; AwaitingNode = true; RoomNote = null;
             Run.Map.SupplyHealed = false; Run.Map.SupplyCalmed = false; Run.Map.SupplyRepairFreeUsed = false;
-            Hint = "补给站：治疗全队、修复重伤部位、为断肢安装义肢、静养恢复理智。离开后继续前进。";
+            Hint = "补给站：治疗全队、修复重伤部位、为任意部位安装义肢、静养恢复理智。离开后继续前进。";
             Refresh();
         }
 
@@ -444,7 +444,7 @@ namespace Ruin.Runtime
             }
             if (!LimbSystem.Install(hero, item))
             {
-                SupplyNote("只有断肢才能安装义肢。");
+                SupplyNote("无法安装该义体。");
                 Refresh(); return;
             }
             Run.Prosthetics.Remove(item);

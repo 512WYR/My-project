@@ -73,7 +73,7 @@ namespace GameMake.CharacterUI
             FullBodyName.text=hero.Name;
             if(opening) BeginEntrance();
             Vitals.text="生命  "+hero.Hp+" / "+hero.MaxHp+"       理智  "+hero.Sanity.ToString("0")+" / 100"+(hero.Dead?"       已阵亡":"");
-            Notice.text=Source.CanManageCharacter ? (Source.AwaitingNode?"消耗手术包可安装义体 · 点击药品使用 · 点击空框装备饰品":"我方行动中 · 使用药品或手术包装载消耗本次行动") : "当前仅可查看，等待我方行动后可操作";
+            Notice.text=Source.CanManageCharacter ? (Source.AwaitingNode?"手术包装载义体免费；无手术包则自由装载，生命 -"+LimbSystem.FreeInstallHpCost+" · 点击药品使用 · 点击空框装备饰品":"我方行动中 · 装载义体或使用药品会消耗本次行动") : "当前仅可查看，等待我方行动后可操作";
             for(int i=0;i<4;i++)
             {
                 var limb=LimbSystem.Get(hero,(LimbPart)i);
@@ -157,7 +157,7 @@ namespace GameMake.CharacterUI
             if(mode<0)
             {
                 PickerTitle.text="装备仓库";
-                Label(PickerItems,"Help","悬停肢体图标显示加号\n点击选择对应义体\n\n装载义体需要手术包\n（补给站安装除外）\n随行手术包 ×"+ConsumableSystem.Count(Source.Run,ConsumableKind.SurgeryKit)+"\n\n下方药品点击即可使用\n\n点击空饰品框打开仓库\n装载后会追加新的空框",8,8,242,356,19,muted,TextAnchor.UpperLeft);
+                Label(PickerItems,"Help","悬停肢体图标显示加号\n点击选择对应义体\n\n任意未装义体的部位都可装载\n有手术包时优先消耗手术包\n无手术包则自由装载：生命 -"+LimbSystem.FreeInstallHpCost+"\n（补给站安装不扣生命）\n随行手术包 ×"+ConsumableSystem.Count(Source.Run,ConsumableKind.SurgeryKit)+"\n\n下方药品点击即可使用\n\n点击空饰品框打开仓库\n装载后会追加新的空框",8,8,242,356,19,muted,TextAnchor.UpperLeft);
             }
             else if(mode<4)
             {
@@ -182,9 +182,9 @@ namespace GameMake.CharacterUI
                         string restriction=ProstheticSystem.RestrictionText(item);
                         string description=item.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction);
                         string blocked=Source.CharacterInstallBlockedReason(item);
-                        PickerRow(rows++,item.Name,description,blocked??"消耗手术包装载",blocked==null,()=>Source.CharacterInstallProsthetic(id));
+                        PickerRow(rows++,item.Name,description,blocked??Source.CharacterInstallActionText,blocked==null,()=>Source.CharacterInstallProsthetic(id));
                     }
-                    if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n只有断肢可安装义体。\n装载消耗一个手术包；补给站可直接安装。");
+                    if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n任意未装义体的部位都可装载。\n有手术包时优先消耗手术包，无手术包则自由装载并失去 "+LimbSystem.FreeInstallHpCost+" 点生命；补给站安装不扣生命。");
                 }
             }
             else if(mode==4)

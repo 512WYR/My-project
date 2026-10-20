@@ -27,8 +27,8 @@ namespace Ruin.Core
             new ConsumableSpec
             {
                 Id = "con_surgery_kit", Name = "手术包", Kind = ConsumableKind.SurgeryKit,
-                Description = "为一名队员的断肢装载仓库中的一件义体，消耗一个手术包。"
-                    + "补给站等特殊地点的安装选项不需要手术包。"
+                Description = "为一名队员装载仓库中的一件义体，消耗一个手术包。"
+                    + "没有手术包时也可以自由装载，但会失去 8 点生命；补给站安装不扣生命。"
             }
         };
 
@@ -98,8 +98,10 @@ namespace Ruin.Core
 
         // ---- 手术包 ----
         // The kit is the field alternative to a supply station's fitting service: one kit plus one
-        // stocked prosthetic fits it onto a severed part. Everything else still follows LimbSystem's
-        // install rules (severed part, matching silhouette). A refused fitting keeps both items.
+        // stocked prosthetic fits it onto any part without a fitting. Everything else still follows
+        // LimbSystem's install rules (no replacement, matching silhouette). A refused fitting keeps
+        // both items. Without a kit the same action is possible through UseFreeInstall, which pays
+        // LimbSystem.FreeInstallHpCost instead.
 
         public static string SurgeryKitBlockedReason(RunState run, ActorState hero, ProstheticSpec item)
         {
@@ -119,13 +121,36 @@ namespace Ruin.Core
             note = null;
             string blocked = SurgeryKitBlockedReason(run, hero, item);
             if (blocked != null) { note = blocked; return false; }
-            if (!LimbSystem.Install(hero, item)) { note = "只有断肢才能安装义体。"; return false; }
+            if (!LimbSystem.Install(hero, item)) { note = "无法安装该义体。"; return false; }
             int kit = run.Consumables == null ? -1
                 : run.Consumables.FindIndex(c => c != null && c.Kind == ConsumableKind.SurgeryKit);
             if (kit >= 0) run.Consumables.RemoveAt(kit);
             if (run.Prosthetics != null) run.Prosthetics.Remove(item);
             note = hero.Name + " 消耗手术包，装上了" + item.Name + "，"
                 + LimbSystem.PartName(item.Part) + "恢复基础功能。";
+            return true;
+        }
+
+        // 自由装载：没有手术包时的现场改造路线。规则与手术包一致，只是改为扣除 8 点生命。
+        public static string FreeInstallBlockedReason(ActorState hero, ProstheticSpec item)
+        {
+            if (item == null) return "请选择一件义体。";
+            if (hero == null) return "请选择一名队员。";
+            if (hero.Dead) return "已经阵亡。";
+            return LimbSystem.InstallBlockedReason(hero, item);
+        }
+
+        public static bool UseFreeInstall(RunState run, ActorState hero, ProstheticSpec item, out string note)
+        {
+            note = null;
+            string blocked = FreeInstallBlockedReason(hero, item);
+            if (blocked != null) { note = blocked; return false; }
+            if (!LimbSystem.FreeInstall(hero, item, out int hpCost))
+            { note = "无法装载该义体。"; return false; }
+            if (run.Prosthetics != null) run.Prosthetics.Remove(item);
+            note = hero.Name + " 未使用手术包，直接装上了" + item.Name + "，"
+                + LimbSystem.PartName(item.Part) + "恢复基础功能，失去 " + hpCost + " 点生命"
+                + "（当前 " + hero.Hp + "/" + hero.MaxHp + "）。";
             return true;
         }
 

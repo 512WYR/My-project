@@ -12,6 +12,8 @@ namespace Ruin.Core
     {
         public const double DefaultHitRatio = 0.5;
         public const double DefaultDamageRatio = 0.5;
+        // 自由装载的生命代价：不在补给站、也不消耗手术包，直接把义体装进身体。最低留 1 点生命。
+        public const int FreeInstallHpCost = 8;
 
         public static readonly LimbPartRule[] DefaultParts =
         {
@@ -237,15 +239,16 @@ namespace Ruin.Core
             return true;
         }
 
-        // A prosthetic only goes onto a part that is already gone: a part still carrying a fitting is not
-        // severed, and one that is severed lost its fitting with it. Character-exclusive pieces also have
-        // to match the actor's silhouette. Null means installable; every other value is player-facing.
+        // Any part without a fitting can take one, whether it is intact, injured or severed. The only
+        // per-part restriction left is that a fitted part cannot be replaced. Character-exclusive pieces
+        // also have to match the actor's silhouette. Null means installable; every other value is
+        // player-facing.
         public static string InstallBlockedReason(ActorState actor, ProstheticSpec item)
         {
             if (actor == null || item == null) return "义体不存在。";
             var limb = Get(actor, item.Part);
             if (limb == null) return "该角色没有" + PartName(item.Part) + "部位。";
-            if (limb.Hp > 0) return "只能安装在断肢上。";
+            if (limb.ProstheticFitted) return "该部位已经装有义体，无法替换。";
             if (!string.IsNullOrEmpty(item.RestrictSilhouette)
                 && (actor.Definition == null || item.RestrictSilhouette != actor.Definition.Silhouette))
                 return ProstheticSystem.RestrictionText(item);
@@ -257,6 +260,8 @@ namespace Ruin.Core
             return InstallBlockedReason(actor, item) == null;
         }
 
+        // Fits the piece without charging HP. This is the supply station and surgery kit path; the part
+        // is restored to full no matter what state it was in before.
         public static bool Install(ActorState actor, ProstheticSpec item)
         {
             if (!CanInstall(actor, item)) return false;
@@ -266,6 +271,24 @@ namespace Ruin.Core
             limb.Hp = limb.MaxHp;
             // Installing a -MaxHp piece can lower the ceiling below the current value.
             actor.Hp = Math.Min(actor.Hp, actor.MaxHp);
+            return true;
+        }
+
+        // 自由装载：不经过补给站，也不消耗手术包，直接现场改造。代价是 FreeInstallHpCost 点生命，
+        // 最低留 1 点。生命扣除在部位恢复与 MaxHp 夹紧之后结算，所以报告的代价只是这 8 点本身。
+        public static bool FreeInstall(ActorState actor, ProstheticSpec item)
+        {
+            return FreeInstall(actor, item, out _);
+        }
+
+        public static bool FreeInstall(ActorState actor, ProstheticSpec item, out int hpCost)
+        {
+            hpCost = 0;
+            // The HP payment floors at 1, so a dead actor would otherwise be revived as a side effect.
+            if (actor == null || actor.Dead || !CanInstall(actor, item) || !Install(actor, item)) return false;
+            int before = actor.Hp;
+            actor.Hp = Math.Max(1, actor.Hp - FreeInstallHpCost);
+            hpCost = before - actor.Hp;
             return true;
         }
 

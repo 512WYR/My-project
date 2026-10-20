@@ -317,7 +317,7 @@ namespace Ruin.Runtime
         private void DrawHeroLimbs(BattleLabHeroConfig slot, int i)
         {
             bool open = Ui.GroupOpen("hero-limbs-" + i, false);
-            bool next = BattleLabUi.Foldout(open, "部位与义肢", "义肢只在断肢时安装");
+            bool next = BattleLabUi.Foldout(open, "部位与义肢", "义肢可装在任意未装义体的部位");
             Ui.SetGroupOpen("hero-limbs-" + i, next);
             if (!next) return;
             BattleLabUi.BeginIndent();
@@ -339,7 +339,7 @@ namespace Ruin.Runtime
                     slot.ProstheticIds[part] = prostheticIds[chosen];
                 GUILayout.EndHorizontal();
             }
-            BattleLabUi.Small("未断肢却选择义肢会在校验时报错；专属义体只能由对应角色装备。");
+            BattleLabUi.Small("已装义体的部位不能再装；专属义体只能由对应角色装备。");
             BattleLabUi.EndIndent();
         }
 
@@ -729,7 +729,7 @@ namespace Ruin.Runtime
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
             if (BattleLabUi.Button("全部怪物（按站位能塞多少塞多少）")) ApplyPresetNow(BattleLabPreset.AllMonsters);
-            if (BattleLabUi.Button("全部饰品 + 消耗品 + 断肢装义肢")) ApplyPresetNow(BattleLabPreset.FullEquipment);
+            if (BattleLabUi.Button("全部饰品 + 消耗品 + 装义肢")) ApplyPresetNow(BattleLabPreset.FullEquipment);
             if (BattleLabUi.Button("恢复默认配置"))
             {
                 ReplaceConfig(BattleLabFactory.CreateDefault(Catalog));
