@@ -130,13 +130,17 @@ namespace Ruin.Runtime
 
         static RoomPageView Supply(StageOneApp app, RoomPageContext context)
         {
+            RoomPageView view;
             switch (context.Section)
             {
-                case 1: return SupplyHeroes(app, context);
-                case 2: return SupplyLimbs(app, context);
-                case 3: return SupplyLimbItems(app, context);
-                default: return SupplyMain(app, context);
+                case 1: view = SupplyHeroes(app, context); break;
+                case 2: view = SupplyLimbs(app, context); break;
+                case 3: view = SupplyLimbItems(app, context); break;
+                default: view = SupplyMain(app, context); break;
             }
+            // Supply commands refresh in place; there is no narrative that needs a typewriter here.
+            view.Instant = true;
+            return view;
         }
 
         static RoomPageView SupplyMain(StageOneApp app, RoomPageContext context)
@@ -148,9 +152,8 @@ namespace Ruin.Runtime
             view.Body = "治疗为每名队员恢复 " + ratio + "% 生命，阵亡成员不会复活。\n"
                 + "静养为玩家理智 +" + Exploration.CalmSanity.ToString("0.#") + "。\n"
                 + "重伤部位可以修复，断肢可以在这里直接安装对应部位的义肢，不需要手术包。\n"
-                + (healPrice == 0 && calmPrice == 0
-                    ? "本层补给站的治疗与静养免费。"
-                    : "本层治疗与静养各需 " + healPrice + " 矿石。");
+                + (healPrice == 0 ? "本层治疗免费；" : "本层治疗需 " + healPrice + " 矿石；")
+                + (calmPrice == 0 ? "静养免费。" : "静养需 " + calmPrice + " 矿石。");
             view.Hint = "治疗 " + (app.Map.SupplyHealed ? "已使用" : "可用")
                 + "   ·   静养 " + (app.Map.SupplyCalmed ? "已使用" : "可用")
                 + "\n" + StockText(app);
@@ -172,8 +175,8 @@ namespace Ruin.Runtime
                 canCalm));
             view.Choices.Add(new RoomPageChoice(
                 "部位与义肢",
-                "查看每名队员的四个部位，修复重伤或安装义肢"));
-            view.Choices.Add(new RoomPageChoice("商店", "使用矿石购买义体、饰品与药品"));
+                "查看每名队员的四个部位，修复重伤或安装义肢 · 查看不消耗矿石"));
+            view.Choices.Add(new RoomPageChoice("商店", "按标价使用矿石购买义体、饰品与药品"));
 
             view.Choose = index =>
             {
@@ -341,9 +344,10 @@ namespace Ruin.Runtime
                 string blocked = LimbSystem.InstallBlockedReason(hero, item);
                 if (blocked == null && !canInstall)
                     blocked = "矿石不足，安装需要 " + SupplyShop.InstallPrice + " 矿石。";
-                string detail = item.Description
-                    + (string.IsNullOrEmpty(restriction) ? "" : "\n" + restriction)
-                    + "\n库存 " + group.Count() + " · 安装 " + CostLabel(SupplyShop.InstallPrice, canInstall);
+                string detail = "安装 " + CostLabel(SupplyShop.InstallPrice, canInstall)
+                    + " · 库存 " + group.Count()
+                    + "\n" + item.Description
+                    + (string.IsNullOrEmpty(restriction) ? "" : "\n" + restriction);
                 view.Choices.Add(new RoomPageChoice(item.Name, detail, blocked == null));
             }
             if (groups.Count == 0)
@@ -379,8 +383,8 @@ namespace Ruin.Runtime
                     return h.Name + (h.Dead ? "   阵亡" : "   生命 " + h.Hp + " / " + h.MaxHp)
                         + "   " + (limbs.Length == 0 ? "部位全部完好" : "最严重 " + limbs);
                 }));
-            view.Hint = StockText(app) + "\n矿石 " + app.Map.Supplies
-                + "   ·   玩家理智 " + app.Run.PlayerSanity.ToString("0.0");
+            view.Hint = StockText(app)
+                + "\n玩家理智 " + app.Run.PlayerSanity.ToString("0.0");
             view.CanLeave = true;
             view.AdvanceLabel = "下到第 " + (app.Map.Floor + 1) + " 层  →";
             view.Advance = () => app.AdvanceFloor();
@@ -514,12 +518,14 @@ namespace Ruin.Runtime
 
         static string StockText(StageOneApp app)
         {
+            string supplies = "当前矿石 " + app.Map.Supplies;
             string accessories = "持有饰品 " + app.Run.AccessoryStock.Count + " 件";
             string consumables = "持有道具 " + app.Run.Consumables.Count + " 件";
             var items = app.Run.Prosthetics;
-            if (items.Count == 0) return "持有义肢：无   ·   " + accessories + "   ·   " + consumables;
+            if (items.Count == 0) return supplies + "   ·   持有义肢：无   ·   " + accessories + "   ·   " + consumables;
             var groups = items.GroupBy(p => p.Id).Select(g => g.First().Name + (g.Count() > 1 ? " ×" + g.Count() : ""));
-            return "持有义肢：" + string.Join("   ·   ", groups) + "   ·   " + accessories + "   ·   " + consumables;
+            return supplies + "   ·   持有义肢：" + string.Join("   ·   ", groups)
+                + "   ·   " + accessories + "   ·   " + consumables;
         }
     }
 }

@@ -71,7 +71,11 @@ namespace Ruin.Core
             if(run==null || run.Map==null || run.Map.Finished) return false;
             var product=Products(rules).FirstOrDefault(p=>p.Id==id);
             if(product==null) { note="商品不存在。"; return false; }
-            if(run.Map.Supplies<product.Price) { note="矿石不足。"; return false; }
+            if(run.Map.Supplies<product.Price)
+            {
+                note="矿石不足：需要 "+product.Price+" 矿石，当前 "+run.Map.Supplies+" 矿石。";
+                return false;
+            }
             if(product.Prosthetic!=null)
             {
                 run.Prosthetics.Add(LimbSystem.Clone(product.Prosthetic));
@@ -79,7 +83,7 @@ namespace Ruin.Core
             else if(product.Accessory!=null) run.AccessoryStock.Add(AccessorySystem.Clone(product.Accessory));
             else run.Consumables.Add(ConsumableSystem.Clone(product.Consumable));
             run.Map.Supplies-=product.Price;
-            note="已购买「"+product.Name+"」，放入库存。";
+            note="已购买「"+product.Name+"」，消耗 "+product.Price+" 矿石，剩余 "+run.Map.Supplies+" 矿石，已放入库存。";
             return true;
         }
     }

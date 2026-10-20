@@ -32,9 +32,10 @@ namespace GameMake.EventEditor
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
         [MenuItem("GameMake/Event UI/Build And Apply Event Page")]
-        public static void Build()
+        public static void Build() { Build(true); }
+        public static void Build(bool promptForUnsavedScenes)
         {
-            if(!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            if(promptForUnsavedScenes && !Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             Directory.CreateDirectory(Root+"/Prefabs"); Directory.CreateDirectory(Root+"/Scenes"); Directory.CreateDirectory(Output);
             AssetDatabase.Refresh();
             frame=Import("通用边框",new Vector4(72,72,72,100));
@@ -61,7 +62,7 @@ namespace GameMake.EventEditor
                 view.Header=Label(page,"Header","事件终端",66,38,700,36,25,Cream);
                 Label(page,"Terminal Index","MORROW  /  FIELD TERMINAL",1380,42,460,27,17,Muted,TextAnchor.MiddleRight);
 
-                var monitor=Group(page,"Event Monitor - 显示屏",66,92,1030,422);
+                var monitor=Group(page,"Event Monitor - 显示屏",66,92,1030,422); view.Monitor=monitor;
                 var tiles=Art(monitor,"Monitor Grid",grid,35,35,960,352); tiles.type=Image.Type.Tiled;
                 var border=Art(monitor,"Monitor Frame",screen,0,0,1030,422,1.8f); border.fillCenter=false;
                 view.EventIllustration=Solid(monitor,"Event Illustration - 拖入事件图片",45,45,940,332,Color.white);
@@ -102,7 +103,28 @@ namespace GameMake.EventEditor
                 view.ReadingStatus=Label(story,"Reading Status","正在读取事件记录…",30,390,970,22,15,Muted);
 
                 view.ChoiceHeading=Label(page,"Choices Heading","行动选择",1160,102,680,35,25,Cream);
-                view.ChoiceColumn=Group(page,"Choice Column",1160,164,680,680);
+                var choiceScroll=Group(page,"Choice Scroll",1160,164,680,680).gameObject.AddComponent<ScrollRect>();
+                choiceScroll.horizontal=false; choiceScroll.vertical=true;
+                choiceScroll.movementType=ScrollRect.MovementType.Clamped; choiceScroll.scrollSensitivity=32;
+                view.ChoiceScroll=choiceScroll;
+                var choiceViewport=Group(choiceScroll.transform,"Choice Viewport",0,0,680,680);
+                Solid(choiceViewport,"Choice Hit Area",0,0,680,680,Color.clear).raycastTarget=true;
+                choiceViewport.gameObject.AddComponent<RectMask2D>();
+                choiceScroll.viewport=choiceViewport; view.ChoiceViewport=choiceViewport;
+                view.ChoiceColumn=Group(choiceViewport,"Choice Column",0,0,680,680);
+                choiceScroll.content=view.ChoiceColumn;
+                var choiceTrack=Solid(page,"Choice Scrollbar",1852,164,8,680,new Color32(42,49,43,255));
+                choiceTrack.raycastTarget=true;
+                var choiceBar=choiceTrack.gameObject.AddComponent<Scrollbar>();
+                choiceBar.direction=Scrollbar.Direction.BottomToTop;
+                var choiceSlideArea=Group(choiceTrack.transform,"Sliding Area",0,0,8,680);
+                var choiceHandle=Solid(choiceSlideArea,"Handle",0,0,8,60,new Color32(148,165,143,255));
+                choiceHandle.raycastTarget=true;
+                choiceHandle.rectTransform.anchorMin=Vector2.zero; choiceHandle.rectTransform.anchorMax=Vector2.one;
+                choiceHandle.rectTransform.offsetMin=choiceHandle.rectTransform.offsetMax=Vector2.zero;
+                choiceBar.handleRect=choiceHandle.rectTransform; choiceBar.targetGraphic=choiceHandle; choiceBar.size=.3f;
+                choiceScroll.verticalScrollbar=choiceBar;
+                choiceScroll.verticalScrollbarVisibility=ScrollRect.ScrollbarVisibility.AutoHide;
                 view.Choices=new EventChoiceView[4];
                 for(int i=0;i<4;i++)
                 {
@@ -113,16 +135,15 @@ namespace GameMake.EventEditor
                     box.rectTransform.anchorMin=Vector2.zero; box.rectTransform.anchorMax=Vector2.one; box.rectTransform.offsetMin=box.rectTransform.offsetMax=Vector2.zero;
                     card.Hit=Button(box); card.Number=Label(option,"Number",(i+1).ToString("D2"),28,25,50,36,23,Muted);
                     card.Title=Label(option,"Title","选择",88,24,560,38,26,Cream);
+                    card.Title.verticalOverflow=VerticalWrapMode.Overflow;
                     card.Detail=Label(option,"Detail","",88,67,550,42,19,Muted,TextAnchor.UpperLeft);
+                    card.Detail.verticalOverflow=VerticalWrapMode.Overflow;
                 }
                 var advance=Art(page,"Continue Or Leave - 继续或离开",frame,1528,932,312,94,3);
                 view.Continue=Button(advance); view.ContinueFade=advance.gameObject.AddComponent<CanvasGroup>();
                 view.ContinueLabel=Label(advance.transform,"Label","继续  →",24,19,264,54,27,Cream,TextAnchor.MiddleCenter);
                 view.ContinuePosition=advance.rectTransform.anchoredPosition;
                 SupplyStationBuilder.Attach(view);
-                var existing=AssetDatabase.LoadAssetAtPath<GameObject>(Prefab);
-                if(existing && existing.GetComponent<IndustrialEventPage>().SupplyView)
-                    view.SupplyView.Mascot.sprite=existing.GetComponent<IndustrialEventPage>().SupplyView.Mascot.sprite;
                 view.Page.SetActive(false);
                 PrefabUtility.SaveAsPrefabAsset(root,Prefab);
             }
