@@ -91,8 +91,23 @@ namespace Ruin.Runtime
             scrim.raycastTarget = true;
 
             startMain = MenuUi.Stretch(startCanvas.transform, "Main");
-            var title = MenuUi.CenterLabel(startMain, "Title", "锈骨深渊", 0, 230, 1200, 120, 82, MenuUi.Gold);
-            AddShadow(title, new Vector2(4, -4), new Color(0f, 0f, 0f, .72f));
+            // The title is shipped art (Resources/StageOne/Title). A missing file falls back to the old
+            // text so a build with a trimmed Resources folder still shows a title.
+            var titleSprite = LoadTitleSprite();
+            if (titleSprite)
+            {
+                // 1920x819 art kept at its ratio; the bottom edge clears the "demo" label at y=158.
+                var title = MenuUi.Center(startMain, "Title", 0, 348, 780, 333);
+                var image = title.gameObject.AddComponent<Image>();
+                image.sprite = titleSprite;
+                image.preserveAspect = true;
+                image.raycastTarget = false;
+            }
+            else
+            {
+                var title = MenuUi.CenterLabel(startMain, "Title", "锈骨深渊", 0, 230, 1200, 120, 82, MenuUi.Gold);
+                AddShadow(title, new Vector2(4, -4), new Color(0f, 0f, 0f, .72f));
+            }
             MenuUi.CenterLabel(startMain, "Demo", "demo", 0, 158, 400, 32, 22, MenuUi.Muted);
             MenuUi.CenterSolid(startMain, "TitleRule", 0, 120, 360, 2, MenuUi.Line);
 
@@ -301,6 +316,24 @@ namespace Ruin.Runtime
             if (startCanvas) Destroy(startCanvas.gameObject);
             if (pauseCanvas) Destroy(pauseCanvas.gameObject);
             if (Time.timeScale == 0f) Time.timeScale = 1f;
+        }
+
+        private static Sprite titleSprite;
+
+        // Resources/StageOne/Title is loaded once. A sprite import is used as-is; a plain texture
+        // import is wrapped in a Sprite so either import mode works.
+        private static Sprite LoadTitleSprite()
+        {
+            if (titleSprite) return titleSprite;
+            titleSprite = Resources.Load<Sprite>("StageOne/Title");
+            if (!titleSprite)
+            {
+                var texture = Resources.Load<Texture2D>("StageOne/Title");
+                if (texture)
+                    titleSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(.5f, .5f), 100f);
+            }
+            return titleSprite;
         }
 
         private static void AddShadow(Text text, Vector2 distance, Color color)

@@ -50,6 +50,27 @@ namespace Ruin.Runtime
             return sprite;
         }
 
+        // Square bust icons for buttons that open the character panel. They live in their own folder
+        // because the full-body portrait above uses the same Id under HeroArt.
+        private static readonly string IconRoot = "StageOne/HeroPortrait/";
+        private static readonly Dictionary<string, Sprite> iconCache = new Dictionary<string, Sprite>();
+
+        public static Sprite PortraitIcon(ActorSpec spec)
+        {
+            if (spec == null || string.IsNullOrEmpty(spec.Id)) return null;
+            if (iconCache.TryGetValue(spec.Id, out var cached)) return cached;
+            Sprite sprite = Resources.Load<Sprite>(IconRoot + spec.Id);
+            if (sprite == null)
+            {
+                var texture = Load(IconRoot + spec.Id);
+                if (texture != null)
+                    sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f), 100f);
+            }
+            iconCache[spec.Id] = sprite;
+            return sprite;
+        }
+
         // ---- show portraits ----
         // The cut-in swaps the base portrait for the pose that matches the beat: a skill's own art, a
         // monster's attack swing, or a hurt frame on whoever just took the hit. All of them live under

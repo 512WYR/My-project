@@ -249,6 +249,11 @@ namespace GameMake.CharacterUI
             Label(WindowContent,"Full Body Heading","角色立绘",52,42,240,38,26,cream);
             var portrait=Group(WindowContent,"Full Body Art - 完整立绘",56,146,232,550);
             FullBodyImage=Solid(portrait,"Full Body Image",0,0,232,550,Color.white); FullBodyImage.preserveAspect=true; FullBodyImage.enabled=false;
+            // Image.preserveAspect aligns the scaled art to the image's own pivot, and Group() gives
+            // every node a top-left pivot. A 2:3 portrait fits the width, so it was pinned to the top
+            // of the slot; centering the rect makes the leftover space split evenly above and below.
+            FullBodyImage.rectTransform.pivot=new Vector2(.5f,.5f);
+            FullBodyImage.rectTransform.anchoredPosition=new Vector2(116,-275);
             FullBodyPlaceholder=Label(portrait,"Art Space","立绘预留",0,0,232,550,23,new Color32(94,97,86,255),TextAnchor.MiddleCenter);
             FullBodyName=Label(WindowContent,"Full Body Name","",56,719,232,37,27,cream,TextAnchor.MiddleCenter);
             var window=Group(WindowContent,"Equipment Content",280,0,1160,860);

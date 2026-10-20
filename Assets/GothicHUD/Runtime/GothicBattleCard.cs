@@ -235,6 +235,11 @@ namespace GameMake.GothicHUD
         private RectTransform healthRect;
         private Vector2 healthBaseSize;
         private readonly List<ChildLayout> healthChildren = new List<ChildLayout>();
+        // The portrait is widened with the span as well: a multi-rank monster stretched a card wider
+        // but left the art at its single-rank width, so the boss looked small in the middle of its body.
+        private RectTransform artRect;
+        private Vector2 artBaseSize;
+        private Vector2 artBasePosition;
         private bool layoutCached;
 
         /// <summary>
@@ -260,6 +265,10 @@ namespace GameMake.GothicHUD
             {
                 var rect = child.Rect;
                 if (!rect) continue;
+                // The art is widened below instead of being slid right: every rect here is anchored to
+                // the card's top-left corner, so keeping its left edge and adding the span width makes
+                // it grow symmetrically inside the card.
+                if (artRect && rect == artRect) continue;
                 var position = child.Position;
                 // Badges are corner-anchored labels: keep "行动" on the left edge and push "可选" to the
                 // new right edge. Everything else slides to the middle of the widened card.
@@ -267,6 +276,13 @@ namespace GameMake.GothicHUD
                 else if (TargetBadge && rect.gameObject == TargetBadge) position.x += extra;
                 else position.x += extra * 0.5f;
                 rect.anchoredPosition = position;
+            }
+            // The portrait / silhouette fills the widened card. Without this a 2- or 3-rank boss keeps
+            // its art at the width of one position, leaving most of the span empty around it.
+            if (artRect)
+            {
+                artRect.sizeDelta = new Vector2(artBaseSize.x + extra, artBaseSize.y);
+                artRect.anchoredPosition = artBasePosition;
             }
         }
 
@@ -289,6 +305,11 @@ namespace GameMake.GothicHUD
                 child.Rect.anchoredPosition = child.Position;
                 child.Rect.sizeDelta = child.Size;
             }
+            if (artRect)
+            {
+                artRect.anchoredPosition = artBasePosition;
+                artRect.sizeDelta = artBaseSize;
+            }
         }
 
         private void CacheLayout()
@@ -310,6 +331,12 @@ namespace GameMake.GothicHUD
                     if (rect)
                         healthChildren.Add(new ChildLayout { Rect = rect, Position = rect.anchoredPosition, Size = rect.sizeDelta });
                 }
+            }
+            artRect = Art ? Art.transform as RectTransform : null;
+            if (artRect)
+            {
+                artBaseSize = artRect.sizeDelta;
+                artBasePosition = artRect.anchoredPosition;
             }
             children.Clear();
             for (int i = 0; i < transform.childCount; i++)

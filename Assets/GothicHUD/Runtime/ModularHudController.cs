@@ -48,6 +48,9 @@ namespace GameMake.GothicHUD
         public GothicHudPanel Panel;
         [Header("角色数据 / 可在 Inspector 预览")]
         public HudCharacterState[] Characters = { new HudCharacterState(), new HudCharacterState(), new HudCharacterState(), new HudCharacterState() };
+        // Square bust icons pushed in by the page that owns this widget. Kept separate from
+        // HudCharacterState.Portrait so the large portrait can still show the full-body art.
+        [NonSerialized] public Sprite[] PortraitIcons;
         [Range(0, 3)] public int SelectedCharacter;
         [Header("生命与理智")]
         public Image HealthFill;
@@ -94,8 +97,8 @@ namespace GameMake.GothicHUD
             {
                 var source = lastRun.Heroes[i]; var target = Characters[i];
                 target.Name = source.Name; target.Subtitle = source.Definition.Subtitle;
-                // Fill the authored portrait slot from Resources/StageOne/HeroArt/<Id> when the slot has
-                // not been given custom art by hand.
+                // Full-body art is the fallback for a character that ships no square icon. The HUD itself
+                // prefers Resources/StageOne/HeroPortrait/<Id> through ActorArt.PortraitIcon.
                 if (!target.Portrait) target.Portrait = ActorArt.PortraitSprite(source.Definition);
                 target.Health = source.Hp; target.MaxHealth = source.MaxHp; target.Sanity = (float)source.Sanity;
                 if (source.Id == BattleSource.InspectedId) SelectedCharacter = i;
@@ -167,8 +170,15 @@ namespace GameMake.GothicHUD
             {
                 if (Panel.CharacterName) Panel.CharacterName.text = actor.Name;
                 if (Panel.CharacterSubtitle) Panel.CharacterSubtitle.text = actor.Subtitle;
-                SetPortrait(Panel.MainPortrait, actor.Portrait);
-                for (int i = 0; i < Panel.PartyPortraits.Length && i < Characters.Length; i++) SetPortrait(Panel.PartyPortraits[i], Characters[i].Portrait);
+                // The bottom console shows the square bust icon in both the large portrait slot and the
+                // party buttons. The full-body art is only a fallback for characters that ship no icon.
+                var mainIcon = PortraitIcon(SelectedCharacter);
+                SetPortrait(Panel.MainPortrait, mainIcon ? mainIcon : actor.Portrait);
+                for (int i = 0; i < Panel.PartyPortraits.Length && i < Characters.Length; i++)
+                {
+                    var partyIcon = PortraitIcon(i);
+                    SetPortrait(Panel.PartyPortraits[i], partyIcon ? partyIcon : Characters[i].Portrait);
+                }
                 for (int i = 0; i < Panel.PartySelections.Length; i++) if (Panel.PartySelections[i]) Panel.PartySelections[i].SetActive(i == SelectedCharacter);
             }
             if (Limbs == null) return;
@@ -183,6 +193,17 @@ namespace GameMake.GothicHUD
                 if (view.Status) { view.Status.text = broken ? "已损坏" : state.Current < state.Maximum ? "受伤" : "完好"; view.Status.color = broken ? new Color32(226, 92, 64, 255) : new Color32(167, 145, 108, 255); }
             }
         }
+        // Square bust icon for the character at index, or null when no icon is known. The page that
+        // drives this widget pushes the icons; the lastRun lookup only covers the built-in follow mode.
+        private Sprite PortraitIcon(int index)
+        {
+            if (PortraitIcons != null && index >= 0 && index < PortraitIcons.Length && PortraitIcons[index])
+                return PortraitIcons[index];
+            if (lastRun == null || lastRun.Heroes == null || index < 0 || index >= lastRun.Heroes.Count) return null;
+            var hero = lastRun.Heroes[index];
+            return hero == null || hero.Definition == null ? null : ActorArt.PortraitIcon(hero.Definition);
+        }
+
         static void SetPortrait(Image image, Sprite sprite)
         {
             if (!image) return;

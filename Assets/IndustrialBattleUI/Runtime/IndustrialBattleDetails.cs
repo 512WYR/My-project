@@ -25,6 +25,14 @@ namespace GameMake.IndustrialBattleUI
         Coroutine spin;
         void Start() { Bind(); Sync(); }
         void Update() { if (BattleHud && BattleHud.BattleSource != bound) { Bind(); Sync(); } }
+        void LateUpdate()
+        {
+            // The presentation component and this page both listen to the same Changed event, so the
+            // order they run in is not guaranteed. Enforce the invariant after both have synced: as
+            // soon as the portrait slot carries art, the procedural/full-body main figure stays off.
+            if (MainFigure && BattleHud && BattleHud.Panel && BattleHud.Panel.MainPortrait)
+                MainFigure.enabled = !BattleHud.Panel.MainPortrait.sprite;
+        }
         void OnEnable() { Bind(); Sync(); }
         void OnDisable()
         {
