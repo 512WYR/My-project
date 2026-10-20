@@ -31,25 +31,40 @@ namespace Ruin.Runtime
         private static readonly Color LimbColor = new Color32(0xD6, 0x92, 0x5B, 0xFF);
         private static readonly Color SeveredColor = new Color32(0xE0, 0x6A, 0x4F, 0xFF);
         private static readonly Color BuffColor = new Color32(0xE2, 0xC8, 0x89, 0xFF);
-        private static readonly Color DamageFlash = new Color32(0xFF, 0xD0, 0xC4, 0xFF);
-        private static readonly Color HealFlash = new Color32(0xC8, 0xFF, 0xD8, 0xFF);
-        private static readonly Color DodgeFlash = new Color32(0xD0, 0xFA, 0xFF, 0xFF);
-        private static readonly Color LimbFlash = new Color32(0xFF, 0xE0, 0xB0, 0xFF);
+        // Portrait colours. The flash is the strong version shown on impact; the tint is a light wash
+        // held only briefly after the hit, then eased back so the beat does not stay coloured.
+        private static readonly Color DamageFlash = new Color32(0xFF, 0x4D, 0x4D, 0xFF);
+        private static readonly Color HealFlash = new Color32(0x45, 0xFF, 0x70, 0xFF);
+        private static readonly Color LimbFlash = new Color32(0xFF, 0x6A, 0x4F, 0xFF);
         private static readonly Color SanityFlash = new Color32(0xDB, 0xCC, 0xFF, 0xFF);
-        private static readonly Color BuffFlash = new Color32(0xFF, 0xF0, 0xC8, 0xFF);
+        private static readonly Color BuffFlash = new Color32(0x4D, 0x8C, 0xFF, 0xFF);
+        private static readonly Color DamageTint = new Color(1f, 0.76f, 0.76f, 1f);
+        private static readonly Color HealTint = new Color(0.72f, 1f, 0.78f, 1f);
+        private static readonly Color BuffTint = new Color(0.72f, 0.85f, 1f, 1f);
+        private static readonly Color SanityTint = new Color(0.86f, 0.78f, 1f, 1f);
+        private static readonly Color GuardTint = new Color(0.80f, 0.88f, 1f, 1f);
+        // How long the light tint stays on after the hit, and how long it takes to return to the
+        // portrait's own colours. Both are short on purpose: the colour is a punctuation, not a state.
+        private const float TintHold = 0.18f;
+        private const float TintFade = 0.10f;
 
         private StageOneApp app;
         private Canvas canvas;
         private GameObject stage;
         private CanvasGroup stageGroup;
+        private RectTransform contentRoot;
         private RectTransform actorSlot;
         private SilhouetteGraphic actorArt;
         private Text actorResult;
+        // The only attack effect left is a very thin ray for gun skills. Portraits themselves carry
+        // the colour feedback: red for HP loss, green for healing, blue for buffs.
+        private Image rayFx;
         private readonly RectTransform[] targetSlots = new RectTransform[MaxTargets];
         private readonly SilhouetteGraphic[] targetArts = new SilhouetteGraphic[MaxTargets];
         private readonly Text[] targetResults = new Text[MaxTargets];
         private readonly Color[] targetBaseColors = new Color[MaxTargets];
         private readonly Color[] targetFlashColors = new Color[MaxTargets];
+        private readonly Color[] targetTintColors = new Color[MaxTargets];
         private readonly Vector2[] targetBasePositions = new Vector2[MaxTargets];
         private readonly float[] targetRecoils = new float[MaxTargets];
         private readonly RectTransform[] targetStatusRoots = new RectTransform[MaxTargets];
@@ -68,9 +83,13 @@ namespace Ruin.Runtime
 
         private Vector2 actorBase;
         private Vector2 actorHit;
+        private Color actorBaseColor = Color.white;
+        private Color actorTintColor = Color.white;
         // +1 when the player acts (left to right), -1 when an enemy acts (right to left). The whole
         // cut-in is laid out around this sign so the two sides never attack in the same direction.
         private float attackSide = 1f;
+        // The current skill's timing and effect profile. Missing ids use the default charge-and-dash.
+        private SkillShowProfile profile = SkillPresentation.For(null);
 
         public static BattlePresentation Ensure(StageOneApp owner)
         {
@@ -127,8 +146,8 @@ namespace Ruin.Runtime
             scrim.color = new Color32(5, 6, 8, 235);
             scrim.raycastTarget = true;
 
-            var content = MenuUi.Stretch(stage.transform, "Content");
-            actorSlot = MenuUi.Center(content, "Actor", ActorX, SlotY, 300f, 480f);
+            contentRoot = MenuUi.Stretch(stage.transform, "Content");
+            actorSlot = MenuUi.Center(contentRoot, "Actor", ActorX, SlotY, 300f, 480f);
             actorArt = AddArt(actorSlot);
             actorResult = MakeResult(actorSlot, "Result", 76);
             actorResult.rectTransform.anchoredPosition = new Vector2(0f, 340f);
@@ -138,13 +157,18 @@ namespace Ruin.Runtime
 
             for (int i = 0; i < MaxTargets; i++)
             {
-                targetSlots[i] = MenuUi.Center(content, "Target " + (i + 1), TargetCentreX, SlotY, 220f, 352f);
+                targetSlots[i] = MenuUi.Center(contentRoot, "Target " + (i + 1), TargetCentreX, SlotY, 220f, 352f);
                 targetArts[i] = AddArt(targetSlots[i]);
                 targetResults[i] = MakeResult(targetSlots[i], "Result", 64);
                 targetStatusTexts[i] = MakeStatusStrip(targetSlots[i], "Status", -220f, 270f, 38f, 15,
                     out targetStatusRoots[i], out targetStatusHovers[i]);
                 targetSlots[i].gameObject.SetActive(false);
             }
+
+            // A single hairline ray. It paints over the portraits but never takes clicks.
+            rayFx = MenuUi.CenterSolid(contentRoot, "Ray", 0f, SlotY, 100f, 3f, Color.white);
+            rayFx.raycastTarget = false;
+            rayFx.gameObject.SetActive(false);
 
             stage.SetActive(false);
         }
@@ -209,34 +233,44 @@ namespace Ruin.Runtime
 
             bool support = !HasOffence(group);
             bool sanityAttack = !support && IsSanityAttack(group);
+            bool ranged = !support && profile.Ranged;
+            bool heavy = !support && profile.Style == SkillShowStyle.Heavy;
             Vector2 fadeFrom = actorBase;
             if (support)
             {
                 // Heal / protect / buff: no dash. The actor pulses in place and every target glows in
-                // its result colour at the same time.
+                // its result colour at the same time. A cleanse leans the pulse upward; a buff swells a
+                // little wider, so even the three support families do not read as the same beat.
+                float swell = profile.Style == SkillShowStyle.Buff ? 0.07f : 0.05f;
+                float lift = profile.Style == SkillShowStyle.Heal || profile.Style == SkillShowStyle.Cleanse
+                    ? 8f : 0f;
                 yield return Tween(0.20f, t =>
                 {
-                    float pulse = 1f + 0.05f * Mathf.Sin(t * Mathf.PI);
+                    float pulse = 1f + swell * Mathf.Sin(t * Mathf.PI);
                     actorSlot.localScale = new Vector3(pulse, pulse, 1f);
+                    actorSlot.anchoredPosition = actorBase + new Vector2(0f, lift * Mathf.Sin(t * Mathf.PI));
                     for (int i = 0; i < activeTargets; i++)
-                        targetArts[i].color = Color.Lerp(targetFlashColors[i], targetBaseColors[i], t);
+                        targetArts[i].color = Color.Lerp(targetFlashColors[i], targetTintColors[i], t);
                 }, token);
                 ShowResults();
-                PlaySupportCue(group);
+                PlaySupportCue(group, profile);
                 yield return RevealResults(token);
             }
             else
             {
-                // The attack is split around the dash: the windup plays while the actor lines up, the
-                // hit lands with the numbers. The sanity attack is one continuous take, so it only
-                // fires on impact.
-                if (!sanityAttack) SfxDirector.Play(SfxCue.AttackWindup);
-                Vector2 wind = actorBase + new Vector2(-36f * attackSide, 0f);
-                yield return Tween(0.18f, t => actorSlot.anchoredPosition = Vector2.Lerp(actorBase, wind, EaseOut(t)), token);
-                yield return Tween(0.16f, t => actorSlot.anchoredPosition = Vector2.Lerp(wind, actorHit, EaseIn(t)), token);
+                // The attack is split around the strike: the windup plays while the actor lines up, the
+                // hit lands with the numbers. A ranged skill only leans in; melee and heavy skills dash.
+                // The sanity attack is one continuous take, so it only fires on impact.
+                if (!sanityAttack) SfxDirector.Play(SfxCue.AttackWindup, 1f, profile.Pitch);
+                Vector2 wind = actorBase + new Vector2(profile.Windup * attackSide, 0f);
+                float windupTime = ranged ? 0.13f : heavy ? 0.24f : 0.18f;
+                float strikeTime = ranged ? 0.11f : heavy ? 0.19f : 0.16f;
+                yield return Tween(windupTime, t => actorSlot.anchoredPosition = Vector2.Lerp(actorBase, wind, EaseOut(t)), token);
+                yield return Tween(strikeTime, t => actorSlot.anchoredPosition = Vector2.Lerp(wind, actorHit, EaseIn(t)), token);
 
                 ShowResults();
-                PlayOffenceCue(group, sanityAttack);
+                ShowRay(ranged);
+                PlayOffenceCue(group, sanityAttack, profile);
                 yield return Tween(0.18f, t =>
                 {
                     float punch = EaseOut(t);
@@ -244,37 +278,71 @@ namespace Ruin.Runtime
                     {
                         targetSlots[i].anchoredPosition = targetBasePositions[i]
                             + new Vector2(targetRecoils[i] * punch * attackSide, 0f);
-                        targetArts[i].color = Color.Lerp(targetFlashColors[i], targetBaseColors[i], t);
+                        targetArts[i].color = Color.Lerp(targetFlashColors[i], targetTintColors[i], t);
                     }
                     float pop = Pop(t);
                     for (int i = 0; i < activeTargets; i++)
                         targetResults[i].rectTransform.localScale = new Vector3(pop, pop, 1f);
                     if (actorResult.gameObject.activeSelf)
                         actorResult.rectTransform.localScale = new Vector3(pop, pop, 1f);
+                    SetFxAlpha(1f - 0.55f * t);
+                    if (profile.Shake && contentRoot)
+                    {
+                        contentRoot.anchoredPosition = new Vector2(
+                            Mathf.Sin(t * 74f) * 7f, Mathf.Cos(t * 58f) * 5f);
+                    }
                 }, token);
+                if (contentRoot) contentRoot.anchoredPosition = Vector2.zero;
                 fadeFrom = actorHit;
             }
 
-            float hold = 0.80f + (group.Critical ? 0.20f : 0f) + (HasDeath(group) ? 0.18f : 0f);
-            yield return WaitRealtime(hold, token);
+            float hold = 0.80f + (group.Critical ? 0.20f : 0f) + (HasDeath(group) ? 0.18f : 0f)
+                + profile.ExtraHold;
+            // The colour wash is short: hold it just past the result pop, then return the portraits to
+            // their own colours while the numbers stay up for the rest of the beat.
+            yield return WaitRealtime(TintHold, token);
+            yield return Tween(TintFade, t =>
+            {
+                if (actorArt) actorArt.color = Color.Lerp(actorTintColor, actorBaseColor, t);
+                for (int i = 0; i < activeTargets; i++)
+                    targetArts[i].color = Color.Lerp(targetTintColors[i], targetBaseColors[i], t);
+            }, token);
+            if (token != generation) yield break;
+            // The closing fade starts from the portrait's own colours, so it must not re-apply a tint
+            // that has already been removed.
+            actorTintColor = actorBaseColor;
+            for (int i = 0; i < activeTargets; i++) targetTintColors[i] = targetBaseColors[i];
+            float rest = hold - TintHold - TintFade;
+            if (rest > 0f) yield return WaitRealtime(rest, token);
 
             yield return Tween(0.22f, t =>
             {
                 stageGroup.alpha = 1f - t;
                 actorSlot.anchoredPosition = Vector2.Lerp(fadeFrom, actorBase, t);
                 actorSlot.localScale = Vector3.one;
+                if (actorArt) actorArt.color = Color.Lerp(actorTintColor, actorBaseColor, t);
                 for (int i = 0; i < activeTargets; i++)
+                {
                     targetSlots[i].anchoredPosition = Vector2.Lerp(
                         targetBasePositions[i] + new Vector2(targetRecoils[i] * attackSide, 0f),
                         targetBasePositions[i], t);
+                    targetArts[i].color = Color.Lerp(targetTintColors[i], targetBaseColors[i], t);
+                }
+                SetFxAlpha(0.45f * (1f - t));
+                if (contentRoot) contentRoot.anchoredPosition = Vector2.zero;
             }, token);
 
+            HideFx();
             HideStage();
         }
 
         private bool Configure(BattleShowGroup group)
         {
             if (!actorArt || !actorSlot || group == null || group.Actor == null) return false;
+
+            profile = SkillPresentation.For(group.SkillId);
+            HideFx();
+            if (contentRoot) contentRoot.anchoredPosition = Vector2.zero;
 
             // Heroes always stand on the left and strike right; enemies stand on the right and strike
             // left. Everything below is mirrored from this one sign.
@@ -288,6 +356,7 @@ namespace Ruin.Runtime
             if (actorShow == null && !group.Actor.Player)
                 actorShow = ActorArt.AttackPortrait(group.Actor.Definition);
             ApplyArt(actorArt, group.Actor, false, actorShow);
+            actorBaseColor = actorArt.color;
             actorResult.text = "";
             actorResult.gameObject.SetActive(false);
             actorStatusContent = null;
@@ -322,6 +391,11 @@ namespace Ruin.Runtime
                     if (actorStatusHover) actorStatusHover.Bind(group.Actor);
                 }
             }
+
+            // A support skill's caster heals/buffs itself through the self result; a dead self result
+            // keeps the grey death tint ApplyArt already applied.
+            actorTintColor = self != null && !self.Died ? TintFor(self) : actorArt.color;
+            actorArt.color = actorTintColor;
 
             activeTargets = shown.Count;
             float width = TargetWidth(activeTargets);
@@ -358,6 +432,7 @@ namespace Ruin.Runtime
                 ApplyArt(targetArts[i], r.Target, r.Died, targetShow);
                 targetBaseColors[i] = targetArts[i].color;
                 targetFlashColors[i] = FlashFor(r);
+                targetTintColors[i] = TintFor(r);
 
                 int size = Mathf.Clamp(Mathf.RoundToInt(width * 0.42f), 36, 84);
                 Color color;
@@ -369,7 +444,8 @@ namespace Ruin.Runtime
                 label.fontSize = size;
                 label.text = text ?? "";
                 label.color = color;
-                targetRecoils[i] = RecoilFor(r);
+                // Heavy and scatter skills throw the target further; pin-down effects barely move it.
+                targetRecoils[i] = RecoilFor(r) * profile.Recoil;
 
                 if (!r.Died && (r.Buffed || r.LimbWorn || r.SanityLocked))
                 {
@@ -388,9 +464,48 @@ namespace Ruin.Runtime
 
             actorHit = new Vector2(centreX - attackSide * (total * 0.5f + 160f), SlotY);
             if (activeTargets == 0) actorHit = actorBase + new Vector2(120f * attackSide, 0f);
+            // A ranged skill never crosses the screen: the actor leans in, and the thin ray carries the
+            // strike across the gap.
+            if (profile.Ranged) actorHit = actorBase + new Vector2(profile.HitOffset * attackSide, 0f);
             if (HasMiss(group)) actorHit = Vector2.Lerp(actorBase, actorHit, 0.55f);
 
             return activeTargets > 0 || !string.IsNullOrEmpty(actorResult.text);
+        }
+
+        // Only gun-style skills keep an effect: a hairline ray from the actor to the target. Melee and
+        // heavy beats are carried by the dash, the recoil and the portrait tint alone.
+        private void ShowRay(bool ranged)
+        {
+            if (!rayFx || !ranged) return;
+
+            int last = profile.Style == SkillShowStyle.Pierce ? activeTargets - 1 : 0;
+            float toX = activeTargets > 0 ? targetBasePositions[last].x
+                : actorHit.x + 240f * attackSide;
+            float fromX = actorSlot.anchoredPosition.x;
+            // Very thin: 2px for a pierce line, 3px for a normal shot.
+            float thickness = profile.Style == SkillShowStyle.Pierce ? 2f : 3f;
+            rayFx.rectTransform.sizeDelta = new Vector2(Mathf.Max(8f, Mathf.Abs(toX - fromX)), thickness);
+            rayFx.rectTransform.anchoredPosition = new Vector2((fromX + toX) * 0.5f, SlotY);
+            rayFx.rectTransform.localRotation = Quaternion.identity;
+            rayFx.rectTransform.localScale = Vector3.one;
+            rayFx.color = profile.Trail;
+            rayFx.gameObject.SetActive(true);
+        }
+
+        private void SetFxAlpha(float alpha)
+        {
+            if (!rayFx || !rayFx.gameObject.activeSelf) return;
+            var color = profile.Trail;
+            color.a = profile.Trail.a * Mathf.Clamp01(alpha);
+            rayFx.color = color;
+        }
+
+        private void HideFx()
+        {
+            if (!rayFx) return;
+            rayFx.gameObject.SetActive(false);
+            rayFx.rectTransform.localRotation = Quaternion.identity;
+            rayFx.rectTransform.localScale = Vector3.one;
         }
 
         private void ShowResults()
@@ -472,29 +587,61 @@ namespace Ruin.Runtime
         // Heal wins over guard; either one replaces the generic click the beat would otherwise have.
         // A fully blocked attack has no damage, so it also lands in the support branch: the show plan
         // labels the blocker "格挡", while a protect skill labels its target "守护".
-        private static void PlaySupportCue(BattleShowGroup group)
+        private static void PlaySupportCue(BattleShowGroup group, SkillShowProfile profile)
         {
-            bool heal = false, block = false, guard = false;
+            bool heal = false, cleanse = false, block = false, guard = false, buffed = false;
             for (int i = 0; i < group.Results.Count; i++)
             {
                 var r = group.Results[i];
                 if (r == null) continue;
                 if (r.Heal > 0) heal = true;
+                if (r.Label == "净化") cleanse = true;
                 if (r.Guarded)
                 {
                     if (r.Label == "格挡") block = true;
                     else guard = true;
                 }
-                if (r.Buffed && Contains(r.BuffText, "防御")) guard = true;
+                if (r.Buffed)
+                {
+                    buffed = true;
+                    if (Contains(r.BuffText, "防御")) guard = true;
+                }
             }
-            if (heal) SfxDirector.Play(SfxCue.Heal);
-            else if (block) SfxDirector.Play(SfxCue.Block);
-            else if (guard) SfxDirector.Play(SfxCue.DefendUp);
+
+            // A profile only replaces the generic cue when its family actually matches the result, so
+            // an interrupted ranged attack still blocks with the block sound, not a gunshot.
+            if (heal)
+            {
+                if (profile != null && (profile.Style == SkillShowStyle.Heal
+                    || profile.Style == SkillShowStyle.Cleanse)) PlayProfileCue(profile);
+                else SfxDirector.Play(SfxCue.Heal);
+            }
+            else if (cleanse)
+            {
+                if (profile != null && profile.Style == SkillShowStyle.Cleanse) PlayProfileCue(profile);
+                else SfxDirector.Play(SfxCue.Heal);
+            }
+            else if (block)
+            {
+                if (profile != null && profile.Style == SkillShowStyle.Guard) PlayProfileCue(profile);
+                else SfxDirector.Play(SfxCue.Block);
+            }
+            else if (guard)
+            {
+                if (profile != null && (profile.Style == SkillShowStyle.Guard
+                    || profile.Style == SkillShowStyle.Buff)) PlayProfileCue(profile);
+                else SfxDirector.Play(SfxCue.DefendUp);
+            }
+            else if (buffed)
+            {
+                if (profile != null && profile.Support) PlayProfileCue(profile);
+                else SfxDirector.Play(SfxCue.DefendUp);
+            }
         }
 
         // A miss has no impact sound. An interception puts damage on the guardian, while a plain block
         // leaves the guarded target at zero damage, so the same result flags distinguish the two.
-        private static void PlayOffenceCue(BattleShowGroup group, bool sanityAttack)
+        private static void PlayOffenceCue(BattleShowGroup group, bool sanityAttack, SkillShowProfile profile)
         {
             bool missed = false, guarded = false, intercepted = false, hit = false;
             for (int i = 0; i < group.Results.Count; i++)
@@ -513,7 +660,17 @@ namespace Ruin.Runtime
             // A fully blocked beat has no number anywhere; if any target still took damage the normal
             // impact sound is the honest one.
             else if (guarded && !hit) SfxDirector.Play(SfxCue.Block);
-            else SfxDirector.Play(sanityAttack ? SfxCue.SanityAttack : SfxCue.AttackHit);
+            else if (sanityAttack) SfxDirector.Play(SfxCue.SanityAttack);
+            else if (profile != null && profile.Style != SkillShowStyle.Default && !profile.Support)
+                PlayProfileCue(profile);
+            else SfxDirector.Play(SfxCue.AttackHit);
+        }
+
+        private static void PlayProfileCue(SkillShowProfile profile)
+        {
+            if (profile == null) return;
+            SfxDirector.Play(profile.Hit, 1f, profile.Pitch);
+            if (profile.Extra.HasValue) SfxDirector.Play(profile.Extra.Value, profile.ExtraGain, profile.Pitch);
         }
 
         // The whisperer is the sanity enemy; any enemy hit that actually drains sanity gets its take
@@ -549,14 +706,29 @@ namespace Ruin.Runtime
 
         private static Color FlashFor(BattleShowResult r)
         {
-            if (r.Missed) return MissColor;
-            if (r.Dodged) return DodgeFlash;
-            if (r.Damage > 0) return DamageFlash;
+            // A miss or a dodge is told by its label and motion only; the portrait stays uncoloured.
+            if (r.Missed || r.Dodged) return Color.white;
+            // HP loss owns the beat: a bleed rider or a buff must not repaint a hurt target blue.
+            if (r.Damage > 0 || r.Died) return DamageFlash;
             if (r.LimbWorn) return LimbFlash;
             if (r.SanityDelta < -0.0001) return SanityFlash;
             if (r.Heal > 0) return HealFlash;
             if (r.Buffed) return BuffFlash;
             return GuardColor;
+        }
+
+        // Held briefly after the hit. Red = HP loss, green = healing, blue = buff; the other result
+        // kinds keep their status colours. Misses and dodges never tint the portrait.
+        private static Color TintFor(BattleShowResult r)
+        {
+            if (r == null) return Color.white;
+            if (r.Missed || r.Dodged) return Color.white;
+            if (r.Damage > 0 || r.Died || r.LimbWorn) return DamageTint;
+            if (r.SanityDelta < -0.0001) return SanityTint;
+            if (r.Heal > 0) return HealTint;
+            if (r.Buffed) return BuffTint;
+            if (r.Guarded) return GuardTint;
+            return Color.white;
         }
 
         private static float RecoilFor(BattleShowResult r)
@@ -756,6 +928,8 @@ namespace Ruin.Runtime
         {
             BattleStatusTooltip.HideAll();
             if (stageGroup) stageGroup.alpha = 0f;
+            if (contentRoot) contentRoot.anchoredPosition = Vector2.zero;
+            HideFx();
             if (stage) stage.SetActive(false);
         }
 
@@ -773,6 +947,8 @@ namespace Ruin.Runtime
             if (canvas) Destroy(canvas.gameObject);
             canvas = null;
             stage = null;
+            contentRoot = null;
+            rayFx = null;
             actorSlot = null;
             actorArt = null;
             actorResult = null;

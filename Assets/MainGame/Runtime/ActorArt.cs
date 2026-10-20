@@ -81,9 +81,25 @@ namespace Ruin.Runtime
         private static readonly string HurtRoot = "StageOne/Show/Hurt/";
         private static readonly Dictionary<string, Texture2D> showCache = new Dictionary<string, Texture2D>();
 
+        // Prosthetic replacement skills are new Ids that reuse the art of the skill they replace until
+        // their own frame is drawn. A direct hit always wins, so dropping <newId>.png in later needs no
+        // code change; this table only covers the fallback.
+        private static readonly Dictionary<string, string> SkillArtAliases = new Dictionary<string, string>
+        {
+            { "g_whaling_anchor", "g_grapple" },
+            { "s_double_guard", "s_guard" },
+            { "s_double_guard_low", "s_primal_guard" },
+            { "w_boiler_shock", "w_bash" },
+            { "m_boiling_mist", "m_mist" }
+        };
+
         public static Texture2D SkillPortrait(string skillId)
         {
-            return string.IsNullOrEmpty(skillId) ? null : Show(SkillRoot + skillId);
+            if (string.IsNullOrEmpty(skillId)) return null;
+            var texture = Show(SkillRoot + skillId);
+            if (texture != null) return texture;
+            string alias;
+            return SkillArtAliases.TryGetValue(skillId, out alias) ? Show(SkillRoot + alias) : null;
         }
 
         public static Texture2D AttackPortrait(ActorSpec spec)
