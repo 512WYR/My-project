@@ -16,6 +16,9 @@ namespace Ruin.Runtime
             if (!MenuOverlay.ShouldShowStartMenu(this)) return;
             menu = MenuOverlay.Ensure(this);
             menu.ShowStartMenu();
+            // Built after the title screen so the shared font/canvas setup is warm, and above it so
+            // the title cannot be seen or clicked during the fixed three-second advisory.
+            StartupNotice.Show(this);
         }
 
         public void StartRunFromMenu()

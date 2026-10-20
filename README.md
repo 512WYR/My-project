@@ -30,7 +30,7 @@ Unity版本：2022.3.62f3c1。打开 `Assets/Scenes/mainScene.unity`，点击Pla
 
 ## 操作
 
-- 启动后进入主菜单：**开始游戏** / **设置**（音乐音量，自动保存）/ **退出游戏**。
+- 启动后先显示约 3 秒的不可跳过黑屏提示（健康游戏忠告与 AI 美术内容说明，含淡入淡出），随后进入主菜单：**开始游戏** / **设置**（音乐音量，自动保存）/ **退出游戏**。
 - 点击技能，再点击高亮目标。点击角色查看理智、技能概率或敌人预告。
 - 每次行动或敌人行动都会全屏切入一段短演出：双方立绘对冲，目标头顶显示大号伤害/治疗/暴击/未命中/闪避等结果，并附上理智变化、肢体受伤/断肢、流血与具体 Buff 名称（格挡、反击、追击、防御力+、命中+ 等），播完自动返回战斗页。肢体提示只在部位降到一半（受伤）或归零（断肢）时出现，普通磨损不刷屏；流血在施加时显示具体层数，每次结算单独显示当次流血伤害。群体技能的所有目标同屏同时结算。
 - 获得 Buff、出现肢体损伤或装有义体的角色脚下会出现状态条；鼠标悬停可查看每条效果的数值与说明。已装义体的部位常驻「义体·部位」提示，悬停可读到义体名称、完整效果与剩余部位生命；装备的饰品也会以「饰品·名称」列出原描述。战斗页每张位置卡片的立绘底部也常驻同一条状态摘要，悬停同样可用，且不会挡住角色点击。
@@ -50,6 +50,8 @@ Unity版本：2022.3.62f3c1。打开 `Assets/Scenes/mainScene.unity`，点击Pla
 
 站位掩码采用位置1至4对应1、2、4、8，例如3表示位置1和2，15表示全部位置。完整的字段说明、敌人编队编辑方式和 Battle Lab 调参固化流程见 [数据修改指南](Docs/数据修改指南.md)。
 
+启动提示页的文案（健康游戏忠告与 AI 美术内容说明）写在 `Assets/MainGame/Runtime/Menu/StartupNotice.cs`，停留时长由同文件的 `HoldSeconds` 控制，修改后需重新打包。
+
 ## 结构与验证
 
 `Core`是无Unity依赖的规则层；`Runtime`是数据适配和uGUI表现；`Editor`负责生成入口与构建；`Tests`包含规则与场景测试。
@@ -58,9 +60,13 @@ Unity版本：2022.3.62f3c1。打开 `Assets/Scenes/mainScene.unity`，点击Pla
 
 打包菜单：
 
-- **GameMake → Build Playable Demo Windows**：生成可玩 Demo 到工作区 `交付/可玩Demo/Windows/BetweenTheVeils.exe`。使用 Release 构建，不包含调试台。
+- **GameMake → Build Playable Demo Windows**：生成可玩 Demo 到工作区 `交付/可玩Demo/Windows/RustBoneAbyss.exe`。使用 Release 构建，不包含调试台。
 - **GameMake → Build Stage One Windows**：生成开发试玩版到 `交付/阶段一/Windows试玩版/`，保留调试台，供验收使用。
 
-分发时压缩整个 `Windows` 文件夹：exe 旁边的 `BetweenTheVeils_Data`、`UnityPlayer.dll` 与 `MonoBleedingEdge` 都是必需的，不要只发 exe。开发试玩中的验收工具是屏幕上的「调试台」，只存在于编辑器与 Development Build；正式发行构建不包含它，也不包含任何特殊功能键。
+两种构建的 exe 文件名与产品名（窗口标题）均为 `RustBoneAbyss`。
+
+分发时压缩整个 `Windows` 文件夹：exe 旁边的 `RustBoneAbyss_Data`、`UnityPlayer.dll` 与 `MonoBleedingEdge` 都是必需的，不要只发 exe。开发试玩中的验收工具是屏幕上的「调试台」，只存在于编辑器与 Development Build；正式发行构建不包含它，也不包含任何特殊功能键。
+
+游戏图标为 `Assets/Branding/GameIcon.jpg`：打开工程时会自动写入 Standalone 的 Player Settings，打包前也会再应用一次；也可手动执行 **GameMake → Apply Game Icon**。更换图标只需替换该文件并重新应用。
 
 完成本阶段后暂停，等待用户验收通过，再进入第二阶段。

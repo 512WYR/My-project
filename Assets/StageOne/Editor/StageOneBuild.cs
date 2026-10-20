@@ -43,7 +43,7 @@ namespace Ruin.Editor
             BackfillSpeedRanges(catalog);
             EnsureEnemyContent(catalog, monsters);
             AssignKinds(catalog);
-            PlayerSettings.productName = "Between the Veils - Stage One";
+            PlayerSettings.productName = "RustBoneAbyss";
             PlayerSettings.companyName = "GameMake";
             PlayerSettings.defaultScreenWidth = 1600; PlayerSettings.defaultScreenHeight = 900;
             PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
@@ -187,9 +187,13 @@ namespace Ruin.Editor
             // out of the demo. Ask before building; a cancelled dialog cancels the build.
             if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             Prepare();
+            // Player Settings carry the exe/taskbar icon. Applying it here as well as on editor load
+            // keeps the packaged player correct even on a fresh checkout where the delayed pass has
+            // not run yet.
+            GameIconSetup.Apply();
             string workspace = Directory.GetParent(Application.dataPath).Parent.FullName;
             string target = Path.Combine(workspace,
-                relativeFolder.Replace('/', Path.DirectorySeparatorChar), "BetweenTheVeils.exe");
+                relativeFolder.Replace('/', Path.DirectorySeparatorChar), "RustBoneAbyss.exe");
             Directory.CreateDirectory(Path.GetDirectoryName(target));
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
                 scenes = new[] { ScenePath }, locationPathName = target, target = BuildTarget.StandaloneWindows64,
