@@ -165,7 +165,7 @@ namespace GameMake.IndustrialDebugUI
         private static readonly string[] EventIds =
         {
             "EVT-001", "EVT-002", "EVT-003", "EVT-004", "EVT-005", "EVT-006",
-            "EVT-007", "EVT-008", "EVT-H001", "EVT-L001", ""
+            "EVT-007", "EVT-008", "EVT-H001", "EVT-L001", "EVT-009"
         };
         // Button order on both pages. SkillForm's own numeric order is Technical, Basic, Primal,
         // which reads badly in the UI, so the buttons use this explicit order instead.
@@ -924,7 +924,7 @@ namespace GameMake.IndustrialDebugUI
                 {
                     text.AppendLine("当前不在事件/祭坛房间。");
                     text.AppendLine("点击下方任意事件按钮，会把当前位置的候选替换成该事件并立即进入；");
-                    text.AppendLine("其中 EVT-008 以祭坛房进入。EVT-H001 / EVT-L001 仍然可以强制进入，方便检查理智分支。");
+                    text.AppendLine("其中 EVT-008 以祭坛房进入，EVT-009 是普通事件。EVT-H001 / EVT-L001 仍然可以强制进入，方便检查理智分支。");
                 }
                 else
                 {
@@ -1232,7 +1232,7 @@ namespace GameMake.IndustrialDebugUI
             "08  每个队员有头部、躯干、手臂、腿部四个部位，各有独立血量。\n" +
             "      只有执斧者的重劈与追猎者的追猎会重创部位：一次重伤，两次断肢。\n" +
             "      重伤与断肢削弱对应属性（头→命中，躯干→防御，手臂→攻击，腿→速度）。\n" +
-            "      补给站能修复重伤；断肢只能安装已经持有的义肢。\n\n" +
+            "      补给站能修复重伤；任意未装义体的部位都能安装已经持有的义肢，已装义体不可替换。\n\n" +
             "09  路线共三层：第1层从初始增益房间出发，第2、3层从补给站出发。\n" +
             "      每层最后是电梯井（第3层为首领）；层内的房间只在你走到跟前时才抽出。\n\n" +
             "10  每次给出1至3个候选，你选一个走过去；同一个位置不会重复同一种房间。\n" +

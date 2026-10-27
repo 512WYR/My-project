@@ -44,6 +44,9 @@ namespace GameMake.GothicHUD
 
         // Filled by the controller so a click can be routed back without the card knowing about the battle.
         [HideInInspector] public string ActorId;
+        // Last actor rendered here. The details panel re-tints the cards outside Render, so it needs
+        // the state to tell a boss copy from the hero it was cloned from.
+        [HideInInspector] public ActorState Actor;
 
         // The feet strip is created lazily under the art, never as a direct child of the card: the span
         // code caches direct-child positions and would treat it as a badge. It shows the concrete buff
@@ -60,6 +63,7 @@ namespace GameMake.GothicHUD
             if (actor == null) { gameObject.SetActive(false); return; }
             gameObject.SetActive(true);
             ActorId = actor.Id;
+            Actor = actor;
 
             Color accent = actor.Player ? AllyAccent : EnemyAccent;
             if (actor.Dead) accent = DeadAccent;
@@ -84,11 +88,19 @@ namespace GameMake.GothicHUD
                 // Heroes and monsters may both ship a portrait under Resources/StageOne/<HeroArt|EnemyArt>/<Id>.
                 // Anything without a file keeps the procedural silhouette.
                 Art.SetPortrait(ActorArt.Portrait(actor.Definition));
+                // A copy mirrors the hero's portrait so it faces the other way on the enemy side, just
+                // like the monster art. Cards are reused between ranks, so non-copies reset the flag.
+                Art.FlipX = actor.IsCopy;
                 // A portrait carries its own colours, so only the dead state tints it. The vector figure
-                // still uses the stage's near-black body colour.
-                Art.color = Art.Portrait != null
-                    ? (actor.Dead ? new Color32(120, 120, 120, 255) : Color.white)
-                    : (actor.Dead ? DeadBody : AliveBody);
+                // still uses the stage's near-black body colour. A boss copy renders through a greyscale
+                // material so it reads as a duplicate rather than the hero standing on the other side;
+                // non-copies must clear the material because cards are reused between ranks.
+                Art.material = actor.IsCopy ? ActorArt.CopyMaterial : null;
+                Art.color = actor.IsCopy
+                    ? ActorArt.CopyColor(actor.Dead)
+                    : Art.Portrait != null
+                        ? (actor.Dead ? new Color32(120, 120, 120, 255) : Color.white)
+                        : (actor.Dead ? DeadBody : AliveBody);
                 Art.raycastTarget = false;
                 // The silhouette fields are plain fields on a mesh that is only rebuilt when the graphic is
                 // marked dirty, and the colour alone may be unchanged when a swap puts a different hero on
@@ -235,6 +247,11 @@ namespace GameMake.GothicHUD
         private RectTransform healthRect;
         private Vector2 healthBaseSize;
         private readonly List<ChildLayout> healthChildren = new List<ChildLayout>();
+        // The portrait is widened with the span as well: a multi-rank monster stretched a card wider
+        // but left the art at its single-rank width, so the boss looked small in the middle of its body.
+        private RectTransform artRect;
+        private Vector2 artBaseSize;
+        private Vector2 artBasePosition;
         private bool layoutCached;
 
         /// <summary>
@@ -260,6 +277,10 @@ namespace GameMake.GothicHUD
             {
                 var rect = child.Rect;
                 if (!rect) continue;
+                // The art is widened below instead of being slid right: every rect here is anchored to
+                // the card's top-left corner, so keeping its left edge and adding the span width makes
+                // it grow symmetrically inside the card.
+                if (artRect && rect == artRect) continue;
                 var position = child.Position;
                 // Badges are corner-anchored labels: keep "行动" on the left edge and push "可选" to the
                 // new right edge. Everything else slides to the middle of the widened card.
@@ -267,6 +288,13 @@ namespace GameMake.GothicHUD
                 else if (TargetBadge && rect.gameObject == TargetBadge) position.x += extra;
                 else position.x += extra * 0.5f;
                 rect.anchoredPosition = position;
+            }
+            // The portrait / silhouette fills the widened card. Without this a 2- or 3-rank boss keeps
+            // its art at the width of one position, leaving most of the span empty around it.
+            if (artRect)
+            {
+                artRect.sizeDelta = new Vector2(artBaseSize.x + extra, artBaseSize.y);
+                artRect.anchoredPosition = artBasePosition;
             }
         }
 
@@ -289,6 +317,11 @@ namespace GameMake.GothicHUD
                 child.Rect.anchoredPosition = child.Position;
                 child.Rect.sizeDelta = child.Size;
             }
+            if (artRect)
+            {
+                artRect.anchoredPosition = artBasePosition;
+                artRect.sizeDelta = artBaseSize;
+            }
         }
 
         private void CacheLayout()
@@ -310,6 +343,12 @@ namespace GameMake.GothicHUD
                     if (rect)
                         healthChildren.Add(new ChildLayout { Rect = rect, Position = rect.anchoredPosition, Size = rect.sizeDelta });
                 }
+            }
+            artRect = Art ? Art.transform as RectTransform : null;
+            if (artRect)
+            {
+                artBaseSize = artRect.sizeDelta;
+                artBasePosition = artRect.anchoredPosition;
             }
             children.Clear();
             for (int i = 0; i < transform.childCount; i++)

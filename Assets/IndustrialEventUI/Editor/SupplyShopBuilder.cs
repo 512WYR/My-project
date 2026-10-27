@@ -30,20 +30,34 @@ namespace GameMake.EventEditor
             Label(shop.Close.transform,"Label","×",0,0,66,52,32,Cream,TextAnchor.MiddleCenter);
 
             var monitor=Group(window,"Shop Monitor - 商品电子屏幕",44,100,480,688);
-            var source=owner.SupplyView.Monitor;
-            var sourceGrid=source.Find("Monitor Grid").GetComponent<Image>();
-            var tiles=Art(monitor,"Grid",sourceGrid.sprite,28,28,424,632); tiles.type=Image.Type.Tiled;
-            var rim=Art(monitor,"Monitor Frame",source.Find("Monitor Frame").GetComponent<Image>().sprite,0,0,480,688);
-            rim.pixelsPerUnitMultiplier=2; rim.fillCenter=false;
+            var source=owner.Monitor;
+            if(!source && owner.Page) source=owner.Page.transform.Find("Event Monitor - 显示屏") as RectTransform;
+            var sourceGrid=source?source.Find("Monitor Grid"):null;
+            if(sourceGrid)
+            {
+                var tiles=Art(monitor,"Grid",sourceGrid.GetComponent<Image>().sprite,28,28,424,632); tiles.type=Image.Type.Tiled;
+            }
+            var sourceFrame=source?source.Find("Monitor Frame"):null;
+            if(sourceFrame)
+            {
+                var rim=Art(monitor,"Monitor Frame",sourceFrame.GetComponent<Image>().sprite,0,0,480,688);
+                rim.pixelsPerUnitMultiplier=2; rim.fillCenter=false;
+            }
             shop.ProductCategory=Label(monitor,"Category","",44,42,392,34,20,Muted);
             shop.Mascot=Solid(monitor,"Mascot - 吉祥物",48,98,384,220,Color.white);
             shop.Mascot.preserveAspect=true; shop.Mascot.enabled=false;
             Label(monitor,"Terminal Code","MORROW  /  SUPPLY",44,330,392,26,16,Muted);
             shop.ProductName=Label(monitor,"Product Name","",44,372,392,64,30,Cream);
             shop.ProductDescription=Label(monitor,"Description","",44,450,392,138,21,Muted,TextAnchor.UpperLeft);
+            shop.ProductDescription.resizeTextForBestFit=true; shop.ProductDescription.resizeTextMinSize=14;
+            shop.ProductDescription.resizeTextMaxSize=21;
             shop.ProductOwned=Label(monitor,"Stock","",44,616,392,30,18,Cream);
-            var noise=Object.Instantiate(source.GetComponentInChildren<RetroScreenNoise>(true),monitor);
-            var noiseRect=(RectTransform)noise.transform; noiseRect.anchoredPosition=new Vector2(30,-30); noiseRect.sizeDelta=new Vector2(420,628);
+            var noiseSource=source?source.GetComponentInChildren<RetroScreenNoise>(true):null;
+            if(noiseSource)
+            {
+                var noise=Object.Instantiate(noiseSource,monitor);
+                var noiseRect=(RectTransform)noise.transform; noiseRect.anchoredPosition=new Vector2(30,-30); noiseRect.sizeDelta=new Vector2(420,628);
+            }
 
             var names=new[]{"义体","饰品","血药","理智药","手术包"}; shop.Tabs=new Button[names.Length];
             for(int i=0;i<names.Length;i++)
@@ -72,6 +86,8 @@ namespace GameMake.EventEditor
             card.Title=Label(card.transform,"Title","",22,17,314,36,25,Cream);
             card.Owned=Label(card.transform,"Owned","",338,22,108,26,17,Muted,TextAnchor.MiddleRight);
             card.Description=Label(card.transform,"Description","",22,62,424,92,18,Muted,TextAnchor.UpperLeft);
+            card.Description.resizeTextForBestFit=true; card.Description.resizeTextMinSize=12;
+            card.Description.resizeTextMaxSize=18;
             card.Price=Label(card.transform,"Price","",24,174,230,30,23,Cream);
             card.Buy=Button(Art(card.transform,"Buy",frame,288,166,156,42));
             card.BuyLabel=Label(card.Buy.transform,"Label","购买",8,4,140,34,20,Cream,TextAnchor.MiddleCenter);

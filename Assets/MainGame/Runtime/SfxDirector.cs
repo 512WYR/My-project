@@ -22,7 +22,19 @@ namespace Ruin.Runtime
         SanityAttack,
         // The unsplit attack take. The cut-in uses the windup/hit pair, but scripts and previews that
         // cannot drive the two-beat animation can still ask for a single attack sound.
-        Attack
+        Attack,
+        // ---- skill-specific cues (appended, so existing enum values never move) ----
+        Gunshot,
+        GunshotHeavy,
+        GunshotScatter,
+        GrappleChain,
+        Slash,
+        HeavyHit,
+        ShieldBash,
+        Buff,
+        Cleanse,
+        SteamBurst,
+        Bleed
     }
 
     public sealed class SfxDirector : MonoBehaviour
@@ -35,13 +47,39 @@ namespace Ruin.Runtime
         private static readonly string[] ClipNames =
         {
             "click", "turn", "defend_up", "guard_hit", "attack_windup", "attack_hit",
-            "attack_miss", "block", "heal", "sanity_attack", "attack"
+            "attack_miss", "block", "heal", "sanity_attack", "attack",
+            "gunshot", "gunshot_heavy", "gunshot_scatter", "grapple_chain", "slash",
+            "heavy_hit", "shield_bash", "buff", "cleanse", "steam_burst", "bleed"
         };
         private static readonly float[] CueVolumes =
         {
             .55f, .7f, .8f, .9f, .75f, .9f,
-            .8f, .9f, .8f, .9f, .9f
+            .8f, .9f, .8f, .9f, .9f,
+            .95f, 1f, 1f, .8f, .9f,
+            1f, .9f, .8f, .85f, .9f, .7f
         };
+
+        // A skill may name a cue whose file has not been dropped in yet. Chasing this chain means the
+        // table in Docs/技能演出与音效映射表.md can be implemented before every asset exists: a missing
+        // gunshot still falls back to the old impact instead of making the beat silent.
+        private static SfxCue? FallbackFor(SfxCue cue)
+        {
+            switch (cue)
+            {
+                case SfxCue.Gunshot: return SfxCue.AttackHit;
+                case SfxCue.GunshotHeavy: return SfxCue.Gunshot;
+                case SfxCue.GunshotScatter: return SfxCue.Gunshot;
+                case SfxCue.GrappleChain: return SfxCue.Block;
+                case SfxCue.Slash: return SfxCue.AttackHit;
+                case SfxCue.HeavyHit: return SfxCue.AttackHit;
+                case SfxCue.ShieldBash: return SfxCue.Block;
+                case SfxCue.Buff: return SfxCue.DefendUp;
+                case SfxCue.Cleanse: return SfxCue.Heal;
+                case SfxCue.SteamBurst: return SfxCue.HeavyHit;
+                // Bleed has no reasonable stand-in: a hit sound on a healing mist would read wrong.
+                default: return null;
+            }
+        }
 
         private static SfxDirector instance;
         private static float masterVolume = -1f;
@@ -83,10 +121,10 @@ namespace Ruin.Runtime
 
         // Static entry point so callers never have to hold a reference. Ensure() keeps one director for
         // the whole scene; a second one would double every click.
-        public static void Play(SfxCue cue, float gain = 1f)
+        public static void Play(SfxCue cue, float gain = 1f, float pitch = 1f)
         {
             var director = Ensure();
-            if (director) director.PlayCue(cue, gain);
+            if (director) director.PlayCue(cue, gain, pitch);
         }
 
         private void Awake()
@@ -115,16 +153,27 @@ namespace Ruin.Runtime
             }
         }
 
-        private void PlayCue(SfxCue cue, float gain)
+        private void PlayCue(SfxCue cue, float gain, float pitch)
         {
+            int volumeCue = (int)cue;
             var clip = ClipFor(cue);
+            // Walk the fallback chain at most a few steps; every mapping today ends at a cue that
+            // already existed before the skill-specific table was added.
+            for (int depth = 0; clip == null && depth < 4; depth++)
+            {
+                var fallback = FallbackFor(cue);
+                if (!fallback.HasValue) break;
+                cue = fallback.Value;
+                clip = ClipFor(cue);
+            }
             if (!clip || voices == null || voices.Length == 0) return;
 
             var voice = voices[nextVoice];
             nextVoice = (nextVoice + 1) % voices.Length;
             voice.Stop();
             voice.clip = clip;
-            voice.volume = MasterVolume * CueVolumes[(int)cue] * Mathf.Clamp01(gain);
+            voice.pitch = Mathf.Clamp(pitch, 0.3f, 3f);
+            voice.volume = MasterVolume * CueVolumes[volumeCue] * Mathf.Clamp01(gain);
             voice.Play();
         }
 
@@ -162,7 +211,7 @@ namespace Ruin.Runtime
             {
                 var button = raycastHits[i].gameObject.GetComponentInParent<Button>();
                 if (!button || !button.IsInteractable()) continue;
-                PlayCue(SfxCue.Click, 1f);
+                PlayCue(SfxCue.Click, 1f, 1f);
                 return;
             }
         }

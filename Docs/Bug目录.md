@@ -447,6 +447,34 @@ tankHp=100->88 healerHp=100 healerRank=2
 
 ---
 
+## BUG-006 事件战斗胜利后结算页「继续」无法结束事件
+
+### 现象
+
+EVT-006「安全角落休整」打赢事件战斗后，战斗结算页只有一个「继续」按钮；点击后结算页不消失，事件也不结束，队伍卡在事件房间。EVT-001 等其它以战斗收尾的事件理论上同样受影响。
+
+### 复现步骤
+
+1. 进入任意以战斗收尾的事件（EVT-001 挖满、EVT-006 守夜后开战）。
+2. 打赢战斗，进入结算页。
+3. 点击结算页的「继续」按钮。
+4. 观察：没有回到事件页，也没有前进到路线，页面保持原样。
+
+### 根因
+
+`IndustrialEventPage.PrepareActions` 会把「事件房间里只有一个『继续／继续前进／离开』选项」折叠成底部的 Continue 按钮。事件战斗期间 `StageOneApp.Room` 仍是 `RoomView.Event`，结算页唯一的「继续前进」被误判为事件收尾选项：
+
+- Continue 按钮的 `Advance()` 走 `Source.ChooseEventOption(0)`，而不是 `current.Choose(0)` → `ContinueBattle()`。
+- 此时事件脚本已到 `DoneStep`，`EventScripts.Choose` 直接返回 `false`，只提示「这个选项现在不可用。」
+- `Battle` 仍是已结算状态，所以页面继续显示结算视图，形成死循环。
+
+### 修复
+
+- `IndustrialEventPage.PrepareActions` 的折叠条件加入 `Source.Battle == null`：结算页的选项必须作为普通选项卡展示，点击后由 `RoomPages.Settlement` 的 `Choose(0)` 调用 `StageOneApp.ContinueBattle()`。
+- 修复日期：2026-10-20。`Assembly-CSharp` 编译通过，待 Unity 内用事件战斗结算页点击验收。
+
+---
+
 ## 附录 A：验证方式
 
 - 编译：`dotnet build Ruin.Core.csproj`、`Ruin.Runtime.csproj`、`Ruin.Editor.csproj`、`Ruin.EditModeTests.csproj`、`Ruin.PlayModeTests.csproj`。

@@ -821,7 +821,10 @@ namespace Ruin.Core
                 actor.GuardReduction = Math.Max(0, skill.GuardReduction);
                 if (skill.MultiGuard && actor.ProstheticBattle != null)
                     actor.ProstheticBattle.DoubleGuardActive = true;
-                Log(actor.Name + " 守护 " + target.Name + "，持续到自身下次行动。", "guard", actor.Id, target.Id);
+                // Keep the " · " skill prefix here too: the cut-in resolves the skill portrait from the
+                // log line, and a protect beat has no action event of its own.
+                Log(actor.Name + " · " + skill.Name + " → " + target.Name + "，持续到自身下次行动。",
+                    "guard", actor.Id, target.Id);
             }
             else if (skill.Cleanse)
             {

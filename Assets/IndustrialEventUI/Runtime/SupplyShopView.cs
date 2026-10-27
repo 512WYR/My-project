@@ -119,7 +119,8 @@ namespace GameMake.EventUI
             ProductName.text=chosen?.Name??"选择商品";
             ProductDescription.text=chosen?.Description??"";
             ProductOwned.text=chosen==null?"":"库存 "+SupplyShop.Owned(bound.Run,chosen)+"    /    单价 "+chosen.Price+" 矿石";
-            Mascot.sprite=Owner.SupplyView.Mascot.sprite; Mascot.enabled=Mascot.sprite;
+            // The supply station no longer has a mascot display; keep the reserved slot blank.
+            if(Mascot) Mascot.enabled=false;
         }
     }
 }

@@ -170,6 +170,11 @@ namespace GameMake.GothicHUD
         private void SyncPresentation(StageOneApp app)
         {
             if (!Presentation) return;
+            // The bottom console and the party column both show square bust icons. This HUD runs
+            // ModularHudController with FollowStageOneBattle off, so its own lookup never fills them;
+            // push the icons here. The full-body art stays only as the fallback in ModularHudController.
+            if (Presentation.PortraitIcons == null || Presentation.PortraitIcons.Length < Presentation.Characters.Length)
+                Presentation.PortraitIcons = new Sprite[Presentation.Characters.Length];
             for (int i = 0; i < Presentation.Characters.Length && i < app.Run.Heroes.Count; i++)
             {
                 var source = app.Run.Heroes[i];
@@ -177,6 +182,8 @@ namespace GameMake.GothicHUD
                 if (target == null || source == null) continue;
                 target.Name = source.Name;
                 target.Subtitle = source.Definition.Subtitle;
+                Presentation.PortraitIcons[i] = ActorArt.PortraitIcon(source.Definition)
+                    ?? ActorArt.PortraitSprite(source.Definition);
                 target.Health = source.Hp;
                 target.MaxHealth = Mathf.Max(1, source.MaxHp);
                 target.Sanity = (float)source.Sanity;

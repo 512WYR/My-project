@@ -105,20 +105,21 @@ namespace Ruin.Tests
         }
 
         [Test]
-        public void InstallRequiresSeveredLimbAndMatchingSilhouette()
+        public void InstallAcceptsAnyLimbAndStillChecksSilhouette()
         {
-            var run = Run(HeroSpec("a", silhouette: "warrior"), HeroSpec("b", speed: 5, silhouette: "gunner"));
-            var warrior = Find(Battle(run), "a");
+            var warrior = Find(Battle(Run(HeroSpec("a", silhouette: "warrior"))), "a");
             var gunner = Find(Battle(Run(HeroSpec("g", silhouette: "gunner"))), "g");
+            var arm = LimbSystem.Prosthetic("prosthetic_arm", Rules.Limbs);
             var monocle = LimbSystem.Prosthetic("gunner_monocle", Rules.Limbs);
 
-            Assert.IsNotNull(LimbSystem.InstallBlockedReason(warrior, LimbSystem.Prosthetic("prosthetic_arm", Rules.Limbs)),
-                "完好部位不能装义体");
-            Sever(warrior, LimbPart.Head);
+            Assert.IsNull(LimbSystem.InstallBlockedReason(warrior, arm), "完好部位也能自由装载");
+            Assert.IsTrue(LimbSystem.Install(warrior, arm));
+            Assert.AreEqual("该部位已经装有义体，无法替换。",
+                LimbSystem.InstallBlockedReason(warrior, arm), "已装义体的部位不能替换");
+
             Assert.IsNotNull(LimbSystem.InstallBlockedReason(warrior, monocle), "专属义体拒绝错误角色");
             Assert.IsFalse(LimbSystem.Install(warrior, monocle));
-            Sever(gunner, LimbPart.Head);
-            Assert.IsNull(LimbSystem.InstallBlockedReason(gunner, monocle));
+            Assert.IsNull(LimbSystem.InstallBlockedReason(gunner, monocle), "完好部位也能装专属义体");
             Assert.IsTrue(LimbSystem.Install(gunner, LimbSystem.Clone(monocle)));
             Assert.AreEqual(ProstheticKind.GunnerMonocle, LimbSystem.Get(gunner, LimbPart.Head).ProstheticKind);
             Assert.AreEqual(LimbSystem.Get(gunner, LimbPart.Head).MaxHp, LimbSystem.Get(gunner, LimbPart.Head).Hp);

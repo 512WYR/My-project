@@ -17,9 +17,9 @@ namespace GameMake.EventUI
         public Text Header, ScreenTitle, ScreenCode, ScreenLocation, Body, ReadingStatus, ChoiceHeading;
         public Image EventIllustration;
         public SupplyStationView SupplyView;
-        bool IsSupply=>SupplyView && Source && Source.Room==RoomView.Supply && !Source.Map.Finished;
-        public ScrollRect StoryScroll;
-        public RectTransform StoryContent, ChoiceColumn;
+        bool IsSupply=>Source && Source.Room==RoomView.Supply && !Source.Map.Finished;
+        public ScrollRect StoryScroll, ChoiceScroll;
+        public RectTransform StoryContent, ChoiceColumn, ChoiceViewport, Monitor;
         public EventChoiceView[] Choices=new EventChoiceView[0];
         public Button Continue;
         public Text ContinueLabel;
@@ -70,8 +70,63 @@ namespace GameMake.EventUI
             }
             if(hooked) return;
             hooked=true;
+            EnsureChoiceScroll();
             foreach(var choice in Choices) Hook(choice);
             Continue.onClick.AddListener(Advance);
+        }
+        // Older prefabs keep the choice column directly under the page and have no viewport. Rebuilding
+        // the prefab would overwrite hand-configured art, so add the scroll hierarchy in place instead.
+        public void EnsureChoiceScroll()
+        {
+            if(ChoiceScroll || !Page || !ChoiceColumn) return;
+            var page=Page.transform;
+            var scrollRect=(RectTransform)new GameObject("Choice Scroll",typeof(RectTransform)).transform;
+            scrollRect.SetParent(page,false);
+            scrollRect.anchorMin=scrollRect.anchorMax=scrollRect.pivot=new Vector2(0,1);
+            scrollRect.anchoredPosition=ChoiceColumn.anchoredPosition;
+            scrollRect.sizeDelta=new Vector2(680,680);
+            var scroll=scrollRect.gameObject.AddComponent<ScrollRect>();
+            scroll.horizontal=false; scroll.vertical=true;
+            scroll.movementType=ScrollRect.MovementType.Clamped; scroll.scrollSensitivity=32;
+
+            var viewport=(RectTransform)new GameObject("Choice Viewport",typeof(RectTransform)).transform;
+            viewport.SetParent(scrollRect,false);
+            viewport.anchorMin=viewport.anchorMax=viewport.pivot=new Vector2(0,1);
+            viewport.anchoredPosition=Vector2.zero; viewport.sizeDelta=new Vector2(680,680);
+            var hit=viewport.gameObject.AddComponent<Image>(); hit.color=Color.clear; hit.raycastTarget=true;
+            viewport.gameObject.AddComponent<RectMask2D>();
+            scroll.viewport=viewport;
+
+            ChoiceColumn.SetParent(viewport,false);
+            ChoiceColumn.anchorMin=ChoiceColumn.anchorMax=ChoiceColumn.pivot=new Vector2(0,1);
+            ChoiceColumn.anchoredPosition=Vector2.zero;
+            ChoiceColumn.sizeDelta=new Vector2(680,680);
+            scroll.content=ChoiceColumn;
+
+            var track=(RectTransform)new GameObject("Choice Scrollbar",typeof(RectTransform)).transform;
+            track.SetParent(page,false);
+            track.anchorMin=track.anchorMax=track.pivot=new Vector2(0,1);
+            track.anchoredPosition=scrollRect.anchoredPosition+new Vector2(692,0);
+            track.sizeDelta=new Vector2(8,680);
+            var trackImage=track.gameObject.AddComponent<Image>();
+            trackImage.color=new Color32(42,49,43,255); trackImage.raycastTarget=true;
+            var bar=track.gameObject.AddComponent<Scrollbar>();
+            bar.direction=Scrollbar.Direction.BottomToTop;
+            var slide=(RectTransform)new GameObject("Sliding Area",typeof(RectTransform)).transform;
+            slide.SetParent(track,false);
+            slide.anchorMin=slide.anchorMax=slide.pivot=new Vector2(0,1);
+            slide.anchoredPosition=Vector2.zero; slide.sizeDelta=new Vector2(8,680);
+            var handle=(RectTransform)new GameObject("Handle",typeof(RectTransform)).transform;
+            handle.SetParent(slide,false);
+            var handleImage=handle.gameObject.AddComponent<Image>();
+            handleImage.color=new Color32(148,165,143,255); handleImage.raycastTarget=true;
+            handle.anchorMin=Vector2.zero; handle.anchorMax=Vector2.one;
+            handle.offsetMin=handle.offsetMax=Vector2.zero;
+            bar.handleRect=handle; bar.targetGraphic=handleImage; bar.size=.3f;
+            scroll.verticalScrollbar=bar;
+            scroll.verticalScrollbarVisibility=ScrollRect.ScrollbarVisibility.AutoHide;
+
+            ChoiceScroll=scroll; ChoiceViewport=viewport;
         }
         void Hook(EventChoiceView choice)
         {
@@ -97,7 +152,6 @@ namespace GameMake.EventUI
         }
         void Lock()
         {
-            if(SupplyView) SupplyView.Lock();
             foreach(var choice in Choices) if(choice && choice.Hit) choice.Hit.interactable=false;
             if(Continue) Continue.interactable=false;
         }
@@ -152,7 +206,6 @@ namespace GameMake.EventUI
             if(!changed && !reopening && (reveal!=null || ActionsReady)) return;
             current=content;
             Cancel();
-            if(SupplyView) SupplyView.Prepare(IsSupply,Source,!keepSupply);
             Header.text=content.Header??"事件终端";
             ScreenTitle.text=content.Title??"";
             ScreenCode.text=content.Code??"";
@@ -188,13 +241,15 @@ namespace GameMake.EventUI
         }
         void PrepareActions(RoomPageView content,bool animate)
         {
-            // Supply recovery actions live under the mascot display; keep their original command indices
-            // out of the left menu, without removing hero/limb choices on supply subpages.
+            // Every shown choice is a standard right-column option now, including the supply station's
+            // recovery commands. The dedicated supply layout used to filter the first two indices out.
             var visible=content.Choices.Select((c,i)=>new { Choice=c,Index=i })
-                .Where(x=>x.Choice.Shown && !(IsSupply && context.Section==0 && x.Index<2)).ToArray();
+                .Where(x=>x.Choice.Shown).ToArray();
             leave=content.CanLeave; continueChoice=-1;
             // The event scripts use a single closing choice where the other rooms use an advance button.
-            if(!leave && Source.Room==RoomView.Event && visible.Length==1
+            // A settled event battle also sits on the event room and offers one "继续前进" choice, but
+            // that choice belongs to the settlement page and must reach ContinueBattle, not the script.
+            if(!leave && Source.Battle==null && Source.Room==RoomView.Event && visible.Length==1
                 && new[]{"继续","继续前进","离开"}.Contains(visible[0].Choice.Label))
                 continueChoice=visible[0].Index;
             // Rooms keep their choices while the advance button is available; an event's closing page has
@@ -207,18 +262,45 @@ namespace GameMake.EventUI
                 clone.Hit.onClick.RemoveAllListeners(); Hook(clone);
                 var list=Choices.ToList(); list.Add(clone); Choices=list.ToArray();
             }
-            float height=Mathf.Min(132,(680-Mathf.Max(0,count-1)*18)/Mathf.Max(1,count));
             for(int i=0;i<Choices.Length;i++)
             {
-                var item=Choices[i]; item.gameObject.SetActive(i<count);
-                if(i>=count) continue;
+                var item=Choices[i]; bool shown=i<count;
+                item.gameObject.SetActive(shown);
+                if(!shown) continue;
                 item.ChoiceIndex=visible[i].Index; item.Available=visible[i].Choice.Enabled;
                 item.Number.text=(i+1).ToString("D2"); item.Title.text=visible[i].Choice.Label;
                 item.Detail.text=visible[i].Choice.Detail??"";
-                var rect=(RectTransform)item.transform;
-                rect.sizeDelta=new Vector2(680,height); rect.anchoredPosition=new Vector2(animate?SlideDistance():0,-i*(height+18));
-                item.Fade.alpha=animate?0:(item.Available?1:.42f); item.Fade.blocksRaycasts=false; item.Hit.interactable=false;
             }
+            // Preferred heights are only meaningful after this page's texts have been assigned.
+            Canvas.ForceUpdateCanvases();
+            float viewportHeight=ChoiceViewport && ChoiceViewport.rect.height>1?ChoiceViewport.rect.height:680f;
+            float slide=ChoiceSlideDistance(), y=0;
+            for(int i=0;i<count;i++)
+            {
+                var item=Choices[i];
+                float titleHeight=Mathf.Max(38,item.Title.preferredHeight);
+                float detailTop=24+titleHeight+5;
+                float detailHeight=Mathf.Max(42,item.Detail.preferredHeight);
+                float cardHeight=Mathf.Max(132,detailTop+detailHeight+23);
+                var titleRect=item.Title.rectTransform;
+                titleRect.sizeDelta=new Vector2(titleRect.sizeDelta.x,titleHeight);
+                titleRect.anchoredPosition=new Vector2(titleRect.anchoredPosition.x,-24);
+                var detailRect=item.Detail.rectTransform;
+                detailRect.sizeDelta=new Vector2(detailRect.sizeDelta.x,detailHeight);
+                detailRect.anchoredPosition=new Vector2(detailRect.anchoredPosition.x,-detailTop);
+                var rect=(RectTransform)item.transform;
+                rect.sizeDelta=new Vector2(680,cardHeight); rect.anchoredPosition=new Vector2(animate?slide:0,-y);
+                item.Fade.alpha=animate?0:(item.Available?1:.42f); item.Fade.blocksRaycasts=false; item.Hit.interactable=false;
+                y+=cardHeight+18;
+            }
+            if(ChoiceColumn)
+            {
+                ChoiceColumn.sizeDelta=new Vector2(ChoiceColumn.sizeDelta.x,Mathf.Max(viewportHeight,y-18));
+                // Content and viewport both pivot at the top-left, so y=0 is the top of the list. This
+                // is independent of ScrollRect bounds, which may still be cached from before the resize.
+                ChoiceColumn.anchoredPosition=new Vector2(ChoiceColumn.anchoredPosition.x,0);
+            }
+            if(ChoiceScroll) ChoiceScroll.StopMovement();
             ChoiceHeading.text=count>0?"行动选择":"";
             ChoiceHeading.gameObject.SetActive(!animate && count>0);
             Continue.gameObject.SetActive(!animate && (leave || continueChoice>=0)); ContinueFade.alpha=animate?0:1; ContinueFade.blocksRaycasts=false;
@@ -229,6 +311,12 @@ namespace GameMake.EventUI
         {
             var canvas=GetComponent<Canvas>();
             return Mathf.Max(2100,canvas.pixelRect.width/Mathf.Max(.01f,canvas.scaleFactor)+800);
+        }
+        // Cards live inside a RectMask2D viewport, so they must start beyond the viewport itself rather
+        // than beyond the whole screen. 720 also clears the 680-wide card.
+        float ChoiceSlideDistance()
+        {
+            return (ChoiceViewport?ChoiceViewport.rect.width:680f)+720f;
         }
         IEnumerator Reveal()
         {
@@ -257,7 +345,6 @@ namespace GameMake.EventUI
                 float elapsed=Time.unscaledTime-started;
                 for(int i=0;i<shown.Length;i++) AnimateChoice(shown[i],Mathf.Clamp01((elapsed-i*.07f)/.32f));
                 if(showContinue) AnimateContinue(Mathf.Clamp01(elapsed/.32f));
-                if(IsSupply) SupplyView.SetProgress(1-Mathf.Pow(1-Mathf.Clamp01(elapsed/.32f),3));
                 yield return null;
             }
             FinishActions();
@@ -265,6 +352,11 @@ namespace GameMake.EventUI
         void FinishActions()
         {
             TextComplete=true;
+            // Supply commands refresh in place without running Reveal, which normally restores the body
+            // after Sync clears it for the typewriter. Put the new result back before unlocking.
+            if(Body && fullText!=null) Body.text=WithRewards(fullText);
+            if(ReadingStatus && StoryContent && StoryScroll && Body)
+                ReadingStatus.text=StoryContent.rect.height>StoryScroll.viewport.rect.height+2?"滚动阅读事件记录":"记录读取完毕";
             ChoiceHeading.gameObject.SetActive(Choices.Any(c=>c.gameObject.activeSelf));
             bool showContinue=leave || continueChoice>=0;
             Continue.gameObject.SetActive(showContinue);
@@ -280,7 +372,6 @@ namespace GameMake.EventUI
             if(IsSupply)
             {
                 supplyPresented=true; supplyNode=Source.ActiveNode; supplyRun=Source.Run;
-                SupplyView.SetProgress(1);
             }
         }
         // The report sits above the narrative, separated by a blank line. It is deliberately outside
@@ -307,7 +398,7 @@ namespace GameMake.EventUI
         {
             float eased=1-Mathf.Pow(1-progress,3);
             var rect=(RectTransform)choice.transform;
-            rect.anchoredPosition=new Vector2((1-eased)*SlideDistance(),rect.anchoredPosition.y);
+            rect.anchoredPosition=new Vector2((1-eased)*ChoiceSlideDistance(),rect.anchoredPosition.y);
             choice.Fade.alpha=eased*(choice.Available?1:.42f);
         }
         void AnimateContinue(float progress)

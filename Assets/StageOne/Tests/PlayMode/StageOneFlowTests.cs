@@ -221,6 +221,7 @@ namespace Ruin.Tests
             Assert.IsFalse(app.Run.Prosthetics.Any(p => p.Part == LimbPart.Arm), "安装后从仓库扣除");
             Assert.IsTrue(app.Run.Prosthetics.Any(p => p.Part == LimbPart.Leg), "没用到的义肢留在仓库");
             Assert.AreEqual(money - SupplyShop.InstallPrice, app.Map.Supplies, "安装义肢扣一份矿石");
+            Assert.IsTrue(app.RoomNote.Contains("消耗") && app.RoomNote.Contains("剩余"), "安装结果要写明扣款和余额");
         }
 
         [UnityTest] public IEnumerator TheSupplyRoomChargesForLaterFloorsAndLaterRepairs()
@@ -249,6 +250,7 @@ namespace Ruin.Tests
             Assert.Greater(hero.Hp, before, "付得起时正常治疗");
             Assert.IsTrue(app.Map.SupplyHealed);
             Assert.AreEqual(0, app.Map.Supplies, "第三层治疗收 2 矿石");
+            Assert.IsTrue(app.RoomNote.Contains("消耗") && app.RoomNote.Contains("剩余"), "治疗结果要写明扣款和余额");
 
             // 静养同样按层收费。
             app.Run.PlayerSanity = 20;
@@ -256,6 +258,7 @@ namespace Ruin.Tests
             app.SupplyCalm(); yield return null;
             Assert.AreEqual(30, app.Run.PlayerSanity, "静养恢复玩家理智");
             Assert.AreEqual(0, app.Map.Supplies, "第三层静养收 2 矿石");
+            Assert.IsTrue(app.RoomNote.Contains("消耗") && app.RoomNote.Contains("剩余"), "静养结果要写明扣款和余额");
         }
 
         [UnityTest] public IEnumerator AnEventRoomWalksItsSubStepsAndStaysShutUntilTheScriptEnds()

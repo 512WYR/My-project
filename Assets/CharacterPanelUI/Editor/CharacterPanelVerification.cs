@@ -112,8 +112,8 @@ namespace GameMake.CharacterEditor
             Check(LimbSystem.Get(hero,LimbPart.Arm).ProstheticFitted && app.Run.Prosthetics.Count==beforeInstall-1 && view.LimbImages[2].sprite==view.Healthy[2],"Prosthetic does not consume stock or restore arm/icon");
             int stock=app.Run.Prosthetics.Count; app.CharacterInstallProsthetic("prosthetic_arm"); Check(stock==app.Run.Prosthetics.Count,"Repeated installation consumes another item");
             var leg=LimbSystem.Get(hero,LimbPart.Leg); leg.Hp=Mathf.Max(1,leg.MaxHp/2); app.Refresh();
-            app.CharacterInstallProsthetic("prosthetic_leg"); Check(app.Run.Prosthetics.Count==stock && !leg.ProstheticFitted,"Injured flesh accepted prosthetic");
-            Pass("all four damage sprites; pointer hover plus; matching prosthetic consumed once; limb restored; intact/injured install rejected");
+            app.CharacterInstallProsthetic("prosthetic_leg"); Check(app.Run.Prosthetics.Count==stock-1 && leg.ProstheticFitted,"Injured flesh rejected prosthetic");
+            Pass("all four damage sprites; pointer hover plus; matching prosthetic consumed once; limb restored; intact/injured install accepted; fitted part cannot be replaced");
 
             hero.Hp=1; app.Run.Consumables.Add(ConsumableSystem.Clone(ConsumableSystem.ForKind(ConsumableKind.HpRestore)));
             app.Run.Consumables.Add(ConsumableSystem.Clone(ConsumableSystem.ForKind(ConsumableKind.SanityLock))); app.Refresh();

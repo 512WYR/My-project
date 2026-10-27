@@ -461,6 +461,91 @@ namespace Ruin.Tests
             Assert.That(buff.ActorId, Is.EqualTo(shield.Id));
         }
 
+        // ---- skill id resolution ----
+        // Skill portraits hang off SkillId. Only action events used to be parsed, so a miss, heal,
+        // protect or buff beat fell back to the base portrait even when the skill had its own art.
+
+        [Test]
+        public void MissMessageResolvesTheSkillId()
+        {
+            var hero = battle.Run.Heroes.First(h => battle.SkillsFor(h).Any(s => s.Effect == SkillEffect.Attack));
+            var skill = battle.SkillsFor(hero).First(s => s.Effect == SkillEffect.Attack);
+            var enemy = battle.Enemies[0];
+            var group = Single(new BattleEvent
+            {
+                Kind = "miss", ActorId = hero.Id, TargetId = enemy.Id,
+                Message = hero.Name + " · " + skill.Name + " 未命中。"
+            });
+
+            Assert.That(group.SkillId, Is.EqualTo(skill.Id));
+        }
+
+        [Test]
+        public void HealMessageResolvesTheSkillId()
+        {
+            var healer = battle.Run.Heroes.First(h => battle.SkillsFor(h).Any(s => s.Effect == SkillEffect.Heal));
+            var skill = battle.SkillsFor(healer).First(s => s.Effect == SkillEffect.Heal);
+            var group = Single(new BattleEvent
+            {
+                Kind = "heal", ActorId = healer.Id, TargetId = healer.Id, Amount = 7,
+                Message = healer.Name + " · " + skill.Name + " → " + healer.Name + " 恢复 7。"
+            });
+
+            Assert.That(group.SkillId, Is.EqualTo(skill.Id));
+        }
+
+        [Test]
+        public void ProtectMessageResolvesTheSkillId()
+        {
+            var caster = battle.Run.Heroes.First(h => battle.SkillsFor(h).Any(s => s.Effect == SkillEffect.Protect));
+            var skill = battle.SkillsFor(caster).First(s => s.Effect == SkillEffect.Protect);
+            var ward = battle.Run.Heroes.First(h => h.Id != caster.Id);
+            var group = Single(new BattleEvent
+            {
+                Kind = "guard", ActorId = caster.Id, TargetId = ward.Id,
+                Message = caster.Name + " · " + skill.Name + " → " + ward.Name + "，持续到自身下次行动。"
+            });
+
+            Assert.That(group.SkillId, Is.EqualTo(skill.Id));
+        }
+
+        [Test]
+        public void BuffMessageResolvesTheSkillId()
+        {
+            var caster = battle.Run.Heroes.First(h => battle.SkillsFor(h).Any(s => s.Effect == SkillEffect.Buff));
+            var skill = battle.SkillsFor(caster).First(s => s.Effect == SkillEffect.Buff);
+            var ward = battle.Run.Heroes.First(h => h.Id != caster.Id);
+            var group = Single(new BattleEvent
+            {
+                Kind = "buff", ActorId = caster.Id, TargetId = ward.Id, Detail = "防御力+20%",
+                Message = caster.Name + " · " + skill.Name + " → " + ward.Name + " 获得 防御力+20%。"
+            });
+
+            Assert.That(group.SkillId, Is.EqualTo(skill.Id));
+        }
+
+        // A prosthetic replaces a base skill with a brand new Id that is not in the character asset's
+        // three skill arrays. The plan decorates the actor's forms before matching so the replacement
+        // still finds its cut-in instead of dropping back to the attack frame.
+        [Test]
+        public void ProstheticReplacementNameResolvesToItsNewId()
+        {
+            var gunner = battle.Run.Heroes.First(h => h.Id == "gunner");
+            var limb = gunner.Limbs[0];
+            limb.Prosthetic = "test_whaling";
+            limb.ProstheticKind = ProstheticKind.WhalingHarpoonArm;
+
+            var anchor = battle.SkillsFor(gunner).First(s => s.Id == "g_whaling_anchor");
+            var enemy = battle.Enemies[0];
+            var group = Single(new BattleEvent
+            {
+                Kind = "miss", ActorId = gunner.Id, TargetId = enemy.Id,
+                Message = gunner.Name + " · " + anchor.Name + " 未命中。"
+            });
+
+            Assert.That(group.SkillId, Is.EqualTo("g_whaling_anchor"));
+        }
+
         [Test]
         public void NullInputsAreSafe()
         {

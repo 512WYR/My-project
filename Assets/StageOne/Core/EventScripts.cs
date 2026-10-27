@@ -111,6 +111,14 @@ namespace Ruin.Core
             return item;
         }
 
+        // Consumables follow the same copy rule: the run gets its own entry, never the shared table item.
+        public ConsumableSpec GrantConsumable(ConsumableKind kind)
+        {
+            var item = ConsumableSystem.Clone(ConsumableSystem.ForKind(kind));
+            if (item != null) Run.Consumables.Add(item);
+            return item;
+        }
+
         // Outside a fight nothing performs the death check, so an event wound is never lethal: health stops
         // at 1. The document leaves the exact number and the "what if it runs out" case open.
         public int DamageHero(ActorState hero, int percent)
@@ -164,6 +172,9 @@ namespace Ruin.Core
             // Recovery is not offered until the party has fought at least once: a heal room in the
             // first position of the route would hand out health before any battle could take it away.
             public bool Healing;
+            // Kept in the catalog so the debug tool can still force it by id, but a disabled script
+            // never enters a normal pool. EVT-007 is disabled while its story text is still a placeholder.
+            public bool Disabled;
         }
 
         // EVT-008 is the altar: the workshop serves whoever walks in, it does not happen to them.
@@ -175,8 +186,9 @@ namespace Ruin.Core
             new Script { Id = "EVT-004", Title = "破损的药剂箱", Kind = NodeType.Event },
             new Script { Id = "EVT-005", Title = "应急医疗室", Kind = NodeType.Event, Healing = true },
             new Script { Id = "EVT-006", Title = "安全角落休整", Kind = NodeType.Event, Healing = true },
-            new Script { Id = "EVT-007", Title = "剧情事件", Kind = NodeType.Event },
-            new Script { Id = "EVT-008", Title = "废弃义肢工坊", Kind = NodeType.Altar },
+            new Script { Id = "EVT-007", Title = "剧情事件", Kind = NodeType.Event, Disabled = true },
+            new Script { Id = "EVT-008", Title = "祭坛", Kind = NodeType.Altar },
+            new Script { Id = "EVT-009", Title = "废弃义肢工坊", Kind = NodeType.Event },
             new Script { Id = "EVT-H001", Title = "隐藏的岔道", Kind = NodeType.Event, Gate = Gate.High },
             new Script { Id = "EVT-L001", Title = "第五个人", Kind = NodeType.Event, Gate = Gate.Low }
         };
@@ -201,6 +213,7 @@ namespace Ruin.Core
         // this includes event-triggered fights.
         private static bool Eligible(Script script, RunState run)
         {
+            if (script.Disabled) return false;
             if (!Allows(script.Gate, run)) return false;
             if (script.Healing && (run == null || run.Battles < 1)) return false;
             return true;
@@ -295,6 +308,7 @@ namespace Ruin.Core
                 case "EVT-006": Rest(node, run, page); break;
                 case "EVT-007": Story(page); break;
                 case "EVT-008": Workshop(node, run, page); break;
+                case "EVT-009": ProstheticWorkshop(node, run, page); break;
                 case "EVT-H001": HiddenFork(node, run, page); break;
                 case "EVT-L001": FifthPerson(node, run, page); break;
             }
@@ -373,17 +387,17 @@ namespace Ruin.Core
             int left = Math.Max(0, node.EventLimit - node.EventCount);
             page.Body = "矿道口塌了一半，往里几步就是成片的矿脉。还能再挖 " + left + " 次。";
             page.Hint = "继续挖矿会消耗全队理智，次数用尽时会引来战斗。";
-            page.Choices.Add(new EventChoice("继续挖矿", "全队理智 -3 · 矿石 +4 · 剩余 " + (left - 1) + " 次", s =>
+            page.Choices.Add(new EventChoice("继续挖矿", "全队理智 -3 · 矿石 +2 · 剩余 " + (left - 1) + " 次", s =>
             {
                 s.TeamSanity(-3);
-                s.GainSupplies(4, "矿石");
+                s.GainSupplies(2, "矿石");
                 s.Node.EventCount++;
                 if (s.Node.EventCount >= s.Node.EventLimit)
                 {
                     s.RequestBattle(NodeType.Battle, "最后一次挖穿了一面空腔，里面的东西醒了。");
                     s.End("次数用尽，矿道深处有东西朝这边过来。");
                 }
-                else s.GoTo(0, "全队理智 -3，矿石 +4。");
+                else s.GoTo(0, "全队理智 -3，矿石 +2。");
             }));
             page.Choices.Add(new EventChoice("离开矿道", "保留已经到手的全部矿石", s =>
                 s.End("你带着已经到手的矿石退出了矿道。")));
@@ -574,21 +588,30 @@ namespace Ruin.Core
                             healed += s.HealHero(member, 30);
                         }
                         string note = "其余队员共恢复 " + healed + " 点生命。" + watch.Name + " 整夜没有合眼。";
-                        if (s.HighSanity)
-                        {
-                            s.RequestBattle(NodeType.EliteBattle, "天快亮时，一支精英小队摸了过来。");
-                            s.End(note + "敌人是精英，队伍站位没有被冲乱。");
-                        }
-                        else
-                        {
-                            s.ShuffleRanks();
-                            s.RequestBattle(NodeType.EliteBattle, "大型敌人撞开了掩体，队伍被冲散。");
-                            s.End(note + "敌人很大，队伍站位被打乱。");
-                        }
+                        // Freeze the branch here; the next step shows the encounter before the fight starts.
+                        s.Node.EventFlag = s.HighSanity ? 1 : 2;
+                        s.GoTo(1, note);
                     }));
                 }
                 return;
             }
+
+            // Step two: describe what woke up before the party is dropped into the fight. The battle only
+            // starts from the explicit option below, so the player always reads the encounter first.
+            bool organized = node.EventFlag == 1;
+            ChooserPage(page, 2, 2,
+                organized
+                    ? "天快亮时，掩体外传来压低的脚步和金属轻碰声。一支精英小队顺着你们留下的痕迹摸了过来，已经堵住了唯一的出口。"
+                    : "天快亮时，掩体被猛地撞开。一个体型远超常人的东西带着几个跟班挤了进来，队伍被冲散在原地。",
+                "没有退路，只能迎战。胜利后获得 3 矿石。");
+            page.Choices.Add(new EventChoice("开始战斗",
+                organized ? "进入精英战斗" : "进入精英战斗 · 站位已被冲散", s =>
+                {
+                    if (s.Node.EventFlag != 1) s.ShuffleRanks();
+                    s.RequestBattle(NodeType.EliteBattle,
+                        organized ? "精英小队已经围了上来。" : "大型敌人撞开了掩体。");
+                    s.End(organized ? "你们迎了上去。" : "队伍被冲散，只能各自迎战。");
+                }));
         }
 
         // ---------------- EVT-007 剧情事件 ----------------
@@ -607,6 +630,7 @@ namespace Ruin.Core
         private static void Workshop(NodeState node, RunState run, EventPage page)
         {
             page.Step = 1; page.StepCount = 1;
+            page.Title = "祭坛";
             page.Body = "工坊里堆着拆下来的义肢，墙中央却立着一座不该出现在这里的黑色祭坛。"
                 + "投料口亮着暗红色的灯，像一只不肯闭上的眼睛。台面上刻着一行小字：「拿来，或者从这里拿走。」";
             page.Hint = "祭坛只做等价交换：1 矿石 = 4 理智，1 生命 = 1 理智，1 件义体 = 16 理智。"
@@ -931,6 +955,95 @@ namespace Ruin.Core
                 }
             }
             s.End(payer + " -" + spend + "。投料口吐出了" + bought + "，像早就等在那里。");
+        }
+
+        // ---------------- EVT-009 废弃义肢工坊（普通事件） ----------------
+
+        // Steps: 0 main page, 3 the pulsing tissue. Steps 1 and 2 belonged to the old fitting flow; the
+        // workshop now hands out a surgery kit instead, so those pages are gone. The nest keeps step 3 so
+        // an in-progress node already sitting on it still renders after the change.
+        private static void ProstheticWorkshop(NodeState node, RunState run, EventPage page)
+        {
+            switch (node.EventStep)
+            {
+                case 3: WorkshopNestPage(run, page); break;
+                default: WorkshopMenuPage(node, page); break;
+            }
+        }
+
+        private static void WorkshopMenuPage(NodeState node, EventPage page)
+        {
+            page.Step = 1; page.StepCount = 2;
+            page.Body = "工坊的门早就被拆走了。车床还在转，踏板一下一下，像有人在数数。一个只剩上半身的人被皮带固定在台前，两条胳膊都换成了工具。他抬起眼，看了看你们的空袖管，又低头继续磨那截义肢。\n台面上摆着一只装满零件的抽屉，工作台后面还有一扇通往铁笼的小门。";
+            page.Hint = "他还能干活，也还愿意谈条件。";
+
+            page.Choices.Add(new EventChoice("请他做一只手术包", "获得手术包 ×1 · 可在角色面板装载义体", s =>
+            {
+                var kit = s.GrantConsumable(ConsumableKind.SurgeryKit);
+                s.End("师傅听完，从工作台底下摸出一只油纸包，里面是消过毒的针、线和一小罐胶。"
+                    + (kit == null ? "" : "获得「" + kit.Name + "」×1。")
+                    + "他没提价钱，只是又低头去磨那截义肢。");
+            }));
+
+            // One drawer per visit: the flag both hides the option afterwards and survives re-renders.
+            page.Choices.Add(new EventChoice("拉开抽屉", "矿石 +2 · 义体 ×1 · 全队理智 -4 · 仅一次", s =>
+            {
+                s.Node.EventFlag = 1;
+                s.TeamSanity(-4);
+                s.Run.Map.Supplies += 2;
+                var item = s.GrantProsthetic();
+                s.GoTo(0, "抽屉里没有工具，只有一叠用过的名牌和"
+                    + (item == null ? "几块废铁" : "一件还能用的义肢「" + item.Name + "」")
+                    + "。矿石 +2，全队理智 -4。");
+            })
+            { Shown = node.EventFlag != 1 });
+
+            page.Choices.Add(new EventChoice("调查搏动组织", "铁笼里的东西还在动",
+                s => s.GoTo(3, "铁笼里没有兽。一团缠着义肢肌腱的组织吊在横梁上，随着车床的节奏一鼓一缩。你靠近时，它停了半拍，像是在等你先开口。")));
+            page.Choices.Add(new EventChoice("离开", "什么也不碰", s => s.End("你们退了出去。身后的踏板又响了一下。")));
+        }
+
+        private static void WorkshopNestPage(RunState run, EventPage page)
+        {
+            page.Step = 2; page.StepCount = 2;
+            page.Body = "铁笼里没有兽。一团缠着义肢肌腱的组织吊在横梁上，随着车床的节奏一鼓一缩。你靠近时，它停了半拍，像是在等你先开口。";
+            page.Hint = "它在等一个它认识的人。";
+
+            if (run.PlayerSanity >= SanitySplit)
+            {
+                page.Choices.Add(new EventChoice("记录它的节奏", "全队理智 +2 · 获得一件饰品", s =>
+                {
+                    s.TeamSanity(2);
+                    var item = s.GrantAccessory();
+                    s.End("你把脉冲的间隔记在纸上。它和踏板的节奏完全一致——不是心跳，是在数数。数到某个数时，笼底滚出一件旧饰品。"
+                        + (item == null ? "" : " 获得「" + item.Name + "」。"));
+                }));
+            }
+            else
+            {
+                page.Choices.Add(new EventChoice("把手伸进笼子", "全队理智 -6 · 随机队员失去 20% 最大生命 · 获得一件饰品", s =>
+                {
+                    s.TeamSanity(-6);
+                    var living = s.Living();
+                    string wound = "";
+                    if (living.Count > 0)
+                    {
+                        var victim = living[PickIndex(living, s.Run.Random)];
+                        int lost = s.DamageHero(victim, 20);
+                        if (lost > 0) wound = victim.Name + " 失去了 " + lost + " 点生命。";
+                    }
+                    var item = s.GrantAccessory();
+                    s.End("组织缠住你的手腕，像在确认骨头。你抽回手时，手里多了一件沾着黏液的东西；队伍里有人开始小声数数，数到一半又忘了。"
+                        + " " + wound + (item == null ? "" : " 获得「" + item.Name + "」。"));
+                }));
+            }
+
+            page.Choices.Add(new EventChoice("关掉车床", "全队理智 +2 · 结束", s =>
+            {
+                s.TeamSanity(2);
+                s.End("你踩下踏板，车床停了。师傅也停下手，工坊第一次安静下来。你们在安静里站了一会儿，谁都没有说话。");
+            }));
+            page.Choices.Add(new EventChoice("退出去", "什么也不碰", s => s.End("你们退了出去。身后的踏板又响了一下。")));
         }
 
         // ---------------- EVT-H001 隐藏的岔道（高理智） ----------------

@@ -12,7 +12,9 @@ namespace Ruin.Runtime
         public void OpenSupplyShop()
         {
             if(!SupplyShopAvailable || SupplyShopOpen) return;
-            SupplyShopOpen=true; SupplyShopNote="选择商品查看详情，使用矿石购买。"; ClearPending(); Refresh();
+            SupplyShopOpen=true;
+            SupplyShopNote="选择商品查看详情。当前矿石 " + Run.Map.Supplies + "。";
+            ClearPending(); Refresh();
         }
         public void CloseSupplyShop()
         {
@@ -22,7 +24,8 @@ namespace Ruin.Runtime
         {
             if(!SupplyShopOpen || !SupplyShopAvailable) return false;
             bool bought=SupplyShop.Buy(Run,Catalog.Rules().Limbs,id,out string note);
-            SupplyShopNote=note; Refresh(); return bought;
+            // Keep the result in the page body after the modal closes; the shop notice is transient.
+            SupplyShopNote=note; RoomNote=note; Hint=note; Refresh(); return bought;
         }
     }
 }

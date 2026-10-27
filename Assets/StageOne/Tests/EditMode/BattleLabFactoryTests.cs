@@ -151,16 +151,19 @@ namespace Ruin.Tests
         }
 
         [Test]
-        public void ProstheticRequiresASeveredLimb()
+        public void ProstheticCanBeFittedToAnyLimb()
         {
             var cfg = Defaults();
             cfg.Heroes[0].ProstheticIds[(int)LimbPart.Arm] = "prosthetic_arm";
             cfg.Heroes[0].Limbs[(int)LimbPart.Arm] = LabLimbState.Intact;
             var errors = BattleLabFactory.Validate(cfg, catalog);
-            Assert.That(errors.Any(e => e.Contains("未断肢")), Is.True, string.Join("\n", errors));
+            Assert.That(errors.Any(e => e.Contains("未断肢")), Is.False, string.Join("\n", errors));
+
+            var run = Build(cfg);
+            Assert.AreEqual("prosthetic_arm", LimbSystem.Get(run.Heroes[0], LimbPart.Arm).Prosthetic);
 
             cfg.Heroes[0].Limbs[(int)LimbPart.Arm] = LabLimbState.Severed;
-            var run = Build(cfg);
+            run = Build(cfg);
             Assert.AreEqual("prosthetic_arm", LimbSystem.Get(run.Heroes[0], LimbPart.Arm).Prosthetic);
         }
 

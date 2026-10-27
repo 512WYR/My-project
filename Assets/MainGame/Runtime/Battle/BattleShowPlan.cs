@@ -99,6 +99,7 @@ namespace Ruin.Runtime
                         if (current == null) current = Synthetic(find, e.ActorId);
                         if (current == null) break;
                         RetargetSynthetic(current, find, e.ActorId);
+                        NoteSkill(current, Find(find, e.ActorId), e.Message);
                         if (e.Amount <= 0) break;
                         var target = Find(find, e.TargetId);
                         if (target == null) break;
@@ -110,6 +111,7 @@ namespace Ruin.Runtime
                         if (current == null) current = Synthetic(find, e.ActorId);
                         if (current == null) break;
                         RetargetSynthetic(current, find, e.ActorId);
+                        NoteSkill(current, Find(find, e.ActorId), e.Message);
                         var target = Find(find, e.TargetId);
                         if (target == null) break;
                         bool cleanse = e.Amount <= 0 && (Contains(e.Message, "清除") || Contains(e.Message, "移除"));
@@ -125,6 +127,9 @@ namespace Ruin.Runtime
                         if (current == null) current = Synthetic(find, e.ActorId);
                         if (current == null) break;
                         RetargetSynthetic(current, find, e.ActorId);
+                        // A miss returns before the engine logs its action event, so this message is
+                        // the only place the skill name is available.
+                        NoteSkill(current, Find(find, e.ActorId), e.Message);
                         var target = Find(find, e.TargetId);
                         if (target == null) break;
                         var result = ResultFor(current, target);
@@ -152,6 +157,7 @@ namespace Ruin.Runtime
                                 ? Synthetic(find, e.ActorId) ?? new BattleShowGroup { Actor = target }
                                 : new BattleShowGroup { Actor = actor ?? target };
                         if (current == null) break;
+                        NoteSkill(current, actor, e.Message);
 
                         var subject = (intercepted ? actor : target) ?? actor ?? target;
                         if (subject == null) break;
@@ -247,6 +253,7 @@ namespace Ruin.Runtime
                         if (current == null) current = Synthetic(find, e.ActorId);
                         if (current == null) current = new BattleShowGroup { Actor = target };
                         if (current == null) break;
+                        NoteSkill(current, Find(find, e.ActorId), e.Message);
                         var result = ResultFor(current, target);
                         result.Buffed = true;
                         AppendBuff(result, string.IsNullOrEmpty(e.Detail) ? "增益" : e.Detail);
@@ -368,6 +375,16 @@ namespace Ruin.Runtime
             return Contains(message, "暴击");
         }
 
+        // Skill art and skill sounds hang off BattleShowGroup.SkillId, but only the action event has
+        // always carried it. Heal / protect / buff / miss / dodge beats are synthesized from their own
+        // result events, so they need the same hint or the cut-in falls back to the base portrait.
+        private static void NoteSkill(BattleShowGroup group, ActorState actor, string message)
+        {
+            if (group == null || !string.IsNullOrEmpty(group.SkillId)) return;
+            string id = SkillIdFor(actor, message);
+            if (!string.IsNullOrEmpty(id)) group.SkillId = id;
+        }
+
         // Action events read "<actor> · <skill name>" with optional critical / target suffixes. The
         // engine does not carry the skill Id on the event, so the name is matched against the actor's
         // own skill lists — those are the only skills it can be casting, and matching per actor avoids
@@ -375,20 +392,57 @@ namespace Ruin.Runtime
         private static string SkillIdFor(ActorState actor, string message)
         {
             if (actor == null || actor.Definition == null || string.IsNullOrEmpty(message)) return null;
+            string name = ExtractSkillName(message);
+            if (string.IsNullOrEmpty(name)) return null;
+
+            var spec = actor.Definition;
+            // The actor's current form wins: the two prosthetic guard replacements share the display
+            // name "双线守护" but only one of them belongs to the form actually being used.
+            var current = spec.SkillsFor(actor.Form);
+            string id = MatchSkill(current, name)
+                ?? MatchSkill(spec.BasicSkills, name)
+                ?? MatchSkill(spec.PrimalSkills, name)
+                ?? MatchSkill(spec.TechnicalSkills, name);
+            if (!string.IsNullOrEmpty(id)) return id;
+
+            // Prosthetic replacements are new Ids created at battle start and are not in the asset's
+            // three lists. Decorate each form so "贯体锚枪" / "锅炉震荡" still resolve to their cut-in.
+            return MatchSkill(ProstheticSystem.DecorateSkills(actor, current), name)
+                ?? MatchSkill(ProstheticSystem.DecorateSkills(actor, spec.BasicSkills), name)
+                ?? MatchSkill(ProstheticSystem.DecorateSkills(actor, spec.PrimalSkills), name)
+                ?? MatchSkill(ProstheticSystem.DecorateSkills(actor, spec.TechnicalSkills), name);
+        }
+
+        // "角色 · 技能 → 目标 …" is the common shape. ChangeSanity instead logs
+        // "角色 技能：理智 50 → 60。" with no separator, so the colon form is handled too.
+        private static string ExtractSkillName(string message)
+        {
             int mark = message.IndexOf(" · ", StringComparison.Ordinal);
-            if (mark < 0) return null;
-            string name = message.Substring(mark + 3);
+            string name;
+            if (mark >= 0)
+            {
+                name = message.Substring(mark + 3);
+            }
+            else
+            {
+                int colon = message.IndexOf('：');
+                if (colon <= 0) return null;
+                string prefix = message.Substring(0, colon);
+                int space = prefix.IndexOf(' ');
+                if (space <= 0) return null;
+                name = prefix.Substring(space + 1);
+            }
+
             int crit = name.IndexOf(" 暴击", StringComparison.Ordinal);
             if (crit >= 0) name = name.Substring(0, crit);
+            // A miss logs "<actor> · <skill> 未命中。" with no arrow, so the suffix would otherwise be
+            // read as part of the skill name and no portrait would match.
+            int miss = name.IndexOf(" 未命中", StringComparison.Ordinal);
+            if (miss >= 0) name = name.Substring(0, miss);
             int arrow = name.IndexOf(" → ", StringComparison.Ordinal);
             if (arrow >= 0) name = name.Substring(0, arrow);
             name = name.Trim();
-            if (name.Length == 0) return null;
-
-            var spec = actor.Definition;
-            return MatchSkill(spec.BasicSkills, name)
-                ?? MatchSkill(spec.PrimalSkills, name)
-                ?? MatchSkill(spec.TechnicalSkills, name);
+            return name.Length == 0 ? null : name;
         }
 
         private static string MatchSkill(SkillSpec[] skills, string name)

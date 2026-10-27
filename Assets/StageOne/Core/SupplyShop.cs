@@ -30,7 +30,8 @@ namespace Ruin.Core
             var products=new List<ShopProduct>();
             foreach(var item in LimbSystem.Resolve(rules).Prosthetics)
                 products.Add(new ShopProduct {Id=item.Id,Name=item.Name,
-                    Description=item.Description+Restriction(item)+" 仅断肢可安装；在补给站安装需 "+InstallPrice+" 矿石，也可以消耗手术包在角色面板安装。",
+                    Description=item.Description+Restriction(item)+" 任意未装义体的部位都可安装；补给站安装需 "+InstallPrice+" 矿石且不扣生命，"
+                        +"角色面板优先消耗手术包，没有手术包时自由装载并失去 "+LimbSystem.FreeInstallHpCost+" 点生命。",
                     Category=ShopCategory.Prosthetic,Price=ProstheticPrice,Prosthetic=item});
             foreach(var item in AccessorySystem.Defaults)
                 products.Add(new ShopProduct {Id=item.Id,Name=item.Name,Description=item.Description+Restriction(item),Category=ShopCategory.Accessory,Price=AccessoryPrice,Accessory=item});
@@ -71,7 +72,11 @@ namespace Ruin.Core
             if(run==null || run.Map==null || run.Map.Finished) return false;
             var product=Products(rules).FirstOrDefault(p=>p.Id==id);
             if(product==null) { note="商品不存在。"; return false; }
-            if(run.Map.Supplies<product.Price) { note="矿石不足。"; return false; }
+            if(run.Map.Supplies<product.Price)
+            {
+                note="矿石不足：需要 "+product.Price+" 矿石，当前 "+run.Map.Supplies+" 矿石。";
+                return false;
+            }
             if(product.Prosthetic!=null)
             {
                 run.Prosthetics.Add(LimbSystem.Clone(product.Prosthetic));
@@ -79,7 +84,7 @@ namespace Ruin.Core
             else if(product.Accessory!=null) run.AccessoryStock.Add(AccessorySystem.Clone(product.Accessory));
             else run.Consumables.Add(ConsumableSystem.Clone(product.Consumable));
             run.Map.Supplies-=product.Price;
-            note="已购买「"+product.Name+"」，放入库存。";
+            note="已购买「"+product.Name+"」，消耗 "+product.Price+" 矿石，剩余 "+run.Map.Supplies+" 矿石，已放入库存。";
             return true;
         }
     }

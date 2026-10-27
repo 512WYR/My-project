@@ -73,7 +73,7 @@ namespace GameMake.CharacterUI
             FullBodyName.text=hero.Name;
             if(opening) BeginEntrance();
             Vitals.text="生命  "+hero.Hp+" / "+hero.MaxHp+"       理智  "+hero.Sanity.ToString("0")+" / 100"+(hero.Dead?"       已阵亡":"");
-            Notice.text=Source.CanManageCharacter ? (Source.AwaitingNode?"消耗手术包可安装义体 · 点击药品使用 · 点击空框装备饰品":"我方行动中 · 使用药品或手术包装载消耗本次行动") : "当前仅可查看，等待我方行动后可操作";
+            Notice.text=Source.CanManageCharacter ? (Source.AwaitingNode?"手术包装载义体免费；无手术包则自由装载，生命 -"+LimbSystem.FreeInstallHpCost+" · 点击药品使用 · 点击空框装备饰品":"我方行动中 · 装载义体或使用药品会消耗本次行动") : "当前仅可查看，等待我方行动后可操作";
             for(int i=0;i<4;i++)
             {
                 var limb=LimbSystem.Get(hero,(LimbPart)i);
@@ -82,6 +82,8 @@ namespace GameMake.CharacterUI
                 string state=limb.ProstheticFitted?"义体已装载":condition==LimbCondition.Severed?"断肢":condition==LimbCondition.Injured?"重伤":"完好";
                 LimbLabels[i].text=LimbSystem.PartName((LimbPart)i)+" · "+state+"\n"+limb.Hp+" / "+limb.MaxHp;
                 LimbLabels[i].color=condition==LimbCondition.Intact?muted:new Color32(215,115,92,255);
+                var hover=LimbButtons[i].GetComponent<LimbInstallHover>();
+                if(hover) hover.enabled=!limb.ProstheticFitted;
             }
             for(int i=0;i<2;i++)
             {
@@ -155,20 +157,35 @@ namespace GameMake.CharacterUI
             if(mode<0)
             {
                 PickerTitle.text="装备仓库";
-                Label(PickerItems,"Help","悬停肢体图标显示加号\n点击选择对应义体\n\n装载义体需要手术包\n（补给站安装除外）\n随行手术包 ×"+ConsumableSystem.Count(Source.Run,ConsumableKind.SurgeryKit)+"\n\n下方药品点击即可使用\n\n点击空饰品框打开仓库\n装载后会追加新的空框",8,8,242,356,19,muted,TextAnchor.UpperLeft);
+                Label(PickerItems,"Help","悬停肢体图标显示加号\n点击选择对应义体\n\n任意未装义体的部位都可装载\n有手术包时优先消耗手术包\n无手术包则自由装载：生命 -"+LimbSystem.FreeInstallHpCost+"\n（补给站安装不扣生命）\n随行手术包 ×"+ConsumableSystem.Count(Source.Run,ConsumableKind.SurgeryKit)+"\n\n下方药品点击即可使用\n\n点击空饰品框打开仓库\n装载后会追加新的空框",8,8,242,356,19,muted,TextAnchor.UpperLeft);
             }
             else if(mode<4)
             {
                 var part=(LimbPart)mode; PickerTitle.text=LimbSystem.PartName(part)+" / 义体";
-                foreach(var item in Source.Run.Prosthetics.Where(p=>p!=null && p.Part==part).GroupBy(p=>p.Id).Select(g=>g.First()))
+                var limb=LimbSystem.Get(hero,part);
+                if(limb!=null && limb.ProstheticFitted)
                 {
-                    string id=item.Id;
-                    string restriction=ProstheticSystem.RestrictionText(item);
-                    string description=item.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction);
-                    string blocked=Source.CharacterInstallBlockedReason(item);
-                    PickerRow(rows++,item.Name,description,blocked??"消耗手术包装载",blocked==null,()=>Source.CharacterInstallProsthetic(id));
+                    // The fitted piece has left the warehouse stock, so show that one piece alone.
+                    var equipped=LimbSystem.FindProsthetic(limb.Prosthetic);
+                    if(equipped!=null)
+                    {
+                        string restriction=ProstheticSystem.RestrictionText(equipped);
+                        EquippedRow(rows++,equipped.Name,equipped.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction));
+                    }
+                    else Empty("该部位已装载义体。");
                 }
-                if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n只有断肢可安装义体。\n装载消耗一个手术包；补给站可直接安装。");
+                else
+                {
+                    foreach(var item in Source.Run.Prosthetics.Where(p=>p!=null && p.Part==part).GroupBy(p=>p.Id).Select(g=>g.First()))
+                    {
+                        string id=item.Id;
+                        string restriction=ProstheticSystem.RestrictionText(item);
+                        string description=item.Description+(string.IsNullOrEmpty(restriction)?"":"\n"+restriction);
+                        string blocked=Source.CharacterInstallBlockedReason(item);
+                        PickerRow(rows++,item.Name,description,blocked??Source.CharacterInstallActionText,blocked==null,()=>Source.CharacterInstallProsthetic(id));
+                    }
+                    if(rows==0) Empty("没有该部位的义体库存\n\n取得对应义体后可在这里装载。\n任意未装义体的部位都可装载。\n有手术包时优先消耗手术包，无手术包则自由装载并失去 "+LimbSystem.FreeInstallHpCost+" 点生命；补给站安装不扣生命。");
+                }
             }
             else if(mode==4)
             {
@@ -201,6 +218,16 @@ namespace GameMake.CharacterUI
             Label(art.transform,"Label",enabled?action:"不可操作",10,4,230,42,15,cream,TextAnchor.MiddleCenter);
             pickerHeight+=height+116; row.sizeDelta=new Vector2(260,height+106);
         }
+        void EquippedRow(int index,string name,string description)
+        {
+            var row=Group(PickerItems,"Equipped Row "+index,0,pickerHeight,260,170);
+            Label(row,"Name",name,4,4,250,30,22,cream);
+            var detail=Label(row,"Description",description,4,40,250,66,16,muted,TextAnchor.UpperLeft);
+            float height=Mathf.Max(66,detail.preferredHeight+20); detail.rectTransform.sizeDelta=new Vector2(250,height);
+            var plate=Art(row,"Equipped",ItemSprite,4,48+height,250,50);
+            Label(plate.transform,"Label","已装备",10,4,230,42,15,cream,TextAnchor.MiddleCenter);
+            pickerHeight+=height+116; row.sizeDelta=new Vector2(260,height+106);
+        }
 
         public void BuildLayout()
         {
@@ -222,6 +249,11 @@ namespace GameMake.CharacterUI
             Label(WindowContent,"Full Body Heading","角色立绘",52,42,240,38,26,cream);
             var portrait=Group(WindowContent,"Full Body Art - 完整立绘",56,146,232,550);
             FullBodyImage=Solid(portrait,"Full Body Image",0,0,232,550,Color.white); FullBodyImage.preserveAspect=true; FullBodyImage.enabled=false;
+            // Image.preserveAspect aligns the scaled art to the image's own pivot, and Group() gives
+            // every node a top-left pivot. A 2:3 portrait fits the width, so it was pinned to the top
+            // of the slot; centering the rect makes the leftover space split evenly above and below.
+            FullBodyImage.rectTransform.pivot=new Vector2(.5f,.5f);
+            FullBodyImage.rectTransform.anchoredPosition=new Vector2(116,-275);
             FullBodyPlaceholder=Label(portrait,"Art Space","立绘预留",0,0,232,550,23,new Color32(94,97,86,255),TextAnchor.MiddleCenter);
             FullBodyName=Label(WindowContent,"Full Body Name","",56,719,232,37,27,cream,TextAnchor.MiddleCenter);
             var window=Group(WindowContent,"Equipment Content",280,0,1160,860);
